@@ -1,0 +1,81 @@
+# ---- Node / Vue ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnp.*
+.yarn/
+dist/
+dist-ssr/
+.vite/
+*.local
+.eslintcache
+coverage/
+.nyc_output/
+
+# ---- .NET ----
+bin/
+obj/
+out/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.userprefs
+*.userosscache
+*.sln.docstates
+project.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+TestResults/
+
+# ---- Azure Functions / local secrets ----
+local.settings.json
+.azure/
+azurite__*/
+__azurite_db*__.json
+__blobstorage__/
+__queuestorage__/
+
+# ---- IaC ----
+.terraform/
+*.tfstate
+*.tfstate.backup
+.bicep/
+
+# ---- IDEs ----
+.idea/
+*.iml
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---- env / secrets ----
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets.*
+
+# ---- logs / temp ----
+*.log
+logs/
+tmp/
+.cache/
