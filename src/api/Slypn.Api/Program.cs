@@ -13,9 +13,13 @@ var host = new HostBuilder()
         services
             .AddOptions<CosmosOptions>()
             .Bind(context.Configuration.GetSection(CosmosOptions.SectionName));
-
         services.AddSingleton<ICosmosService, CosmosService>();
         services.AddHostedService<CosmosBootstrapper>();
+
+        services
+            .AddOptions<StorageOptions>()
+            .Bind(context.Configuration.GetSection(StorageOptions.SectionName));
+        services.AddSingleton<IBlobService, BlobService>();
     })
     .Build();
 
