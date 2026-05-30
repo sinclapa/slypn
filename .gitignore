@@ -79,3 +79,6 @@ secrets.*
 logs/
 tmp/
 .cache/
+
+# ---- dev scripts ----
+scripts/.runtime/
