@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Azure.Core.Serialization;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -8,7 +11,14 @@ var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices((context, services) =>
     {
+        // camelCase + lowercase enum names on every HttpResponseData.WriteAsJsonAsync.
+        services.Configure<WorkerOptions>(options =>
+        {
+            options.Serializer = new JsonObjectSerializer(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        });
+
         services.AddSingleton<IMockDataService, MockDataService>();
+        services.AddSingleton<IContentRepository, ContentRepository>();
 
         services
             .AddOptions<CosmosOptions>()

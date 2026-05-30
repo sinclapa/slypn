@@ -8,4 +8,8 @@ public sealed record CommunityEvent(
     DateTimeOffset EndsAt,
     string Location,
     string Description,
-    string? SignupUrl);
+    string? SignupUrl)
+{
+    /// <summary>Partition key for the events container — "yyyy-MM" of StartsAt (UTC).</summary>
+    public string YearMonth => StartsAt.UtcDateTime.ToString("yyyy-MM");
+}

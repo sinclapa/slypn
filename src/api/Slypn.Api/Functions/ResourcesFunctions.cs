@@ -5,14 +5,16 @@ using Slypn.Api.Services;
 
 namespace Slypn.Api.Functions;
 
-public sealed class ResourcesFunctions(IMockDataService data)
+public sealed class ResourcesFunctions(IContentRepository repo)
 {
     [Function("GetResources")]
     public async Task<HttpResponseData> GetResources(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "resources")] HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "resources")] HttpRequestData req,
+        CancellationToken ct)
     {
+        var items = await repo.ListResourcesAsync(ct);
         var resp = req.CreateResponse(HttpStatusCode.OK);
-        await resp.WriteAsJsonAsync(data.Resources);
+        await resp.WriteAsJsonAsync(items);
         return resp;
     }
 }

@@ -10,4 +10,5 @@ public sealed record Article(
     DateTime PublishedAt,
     int ReadingMinutes,
     string Category,
-    IReadOnlyList<string> Tags);
+    IReadOnlyList<string> Tags,
+    string Status = "published");
