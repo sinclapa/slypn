@@ -1,12 +1,20 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Slypn.Api.Infrastructure;
 using Slypn.Api.Services;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
-    .ConfigureServices(services =>
+    .ConfigureServices((context, services) =>
     {
         services.AddSingleton<IMockDataService, MockDataService>();
+
+        services
+            .AddOptions<CosmosOptions>()
+            .Bind(context.Configuration.GetSection(CosmosOptions.SectionName));
+
+        services.AddHostedService<CosmosBootstrapper>();
     })
     .Build();
 
