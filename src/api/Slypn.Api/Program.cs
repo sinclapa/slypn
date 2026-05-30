@@ -14,6 +14,7 @@ var host = new HostBuilder()
             .AddOptions<CosmosOptions>()
             .Bind(context.Configuration.GetSection(CosmosOptions.SectionName));
 
+        services.AddSingleton<ICosmosService, CosmosService>();
         services.AddHostedService<CosmosBootstrapper>();
     })
     .Build();

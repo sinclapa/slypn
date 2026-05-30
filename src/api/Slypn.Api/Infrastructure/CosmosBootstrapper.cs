@@ -1,17 +1,17 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using Slypn.Api.Services;
 
 namespace Slypn.Api.Infrastructure;
 
 /// <summary>
-/// Creates the SLYPN database and the six content containers on startup
-/// if Cosmos is configured. No-op when Endpoint/Key are absent so the API
-/// keeps starting on a fresh checkout (still serves mock data until #14).
+/// Creates the SLYPN database and the six content containers on startup.
+/// Uses the singleton <see cref="ICosmosService"/> so we don't open a second
+/// client. No-op when Cosmos is not configured.
 /// </summary>
 public sealed class CosmosBootstrapper(
-    IOptions<CosmosOptions> options,
+    ICosmosService cosmos,
     ILogger<CosmosBootstrapper> logger) : IHostedService
 {
     // Partition keys per docs/data-model.md.
@@ -27,36 +27,16 @@ public sealed class CosmosBootstrapper(
 
     public async Task StartAsync(CancellationToken ct)
     {
-        var opts = options.Value;
-        if (string.IsNullOrWhiteSpace(opts.Endpoint) || string.IsNullOrWhiteSpace(opts.Key))
+        if (!cosmos.IsConfigured)
         {
             logger.LogInformation(
-                "Cosmos endpoint/key not configured; skipping bootstrap. The API will continue with mock data.");
+                "Cosmos not configured; skipping container bootstrap. The API continues with mock data.");
             return;
         }
 
-        var isLocalEmulator =
-            opts.Endpoint.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
-            opts.Endpoint.Contains("127.0.0.1", StringComparison.Ordinal);
-
-        var clientOptions = new CosmosClientOptions
-        {
-            ConnectionMode = ConnectionMode.Gateway,
-            ApplicationName = "Slypn.Api",
-        };
-        if (isLocalEmulator)
-        {
-            // Cosmos DB Linux Emulator uses a self-signed cert in dev.
-            clientOptions.HttpClientFactory = () => new HttpClient(new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-            });
-        }
-
-        using var client = new CosmosClient(opts.Endpoint, opts.Key, clientOptions);
-
-        var dbResponse = await client.CreateDatabaseIfNotExistsAsync(opts.Database, cancellationToken: ct);
-        logger.LogInformation("Cosmos database ready: {Database}", opts.Database);
+        var dbResponse = await cosmos.Client.CreateDatabaseIfNotExistsAsync(
+            cosmos.Database.Id, cancellationToken: ct);
+        logger.LogInformation("Cosmos database ready: {Database}", cosmos.Database.Id);
 
         foreach (var (container, partitionKey) in Containers)
         {
