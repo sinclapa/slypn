@@ -90,8 +90,84 @@ CSS overrides are not necessary for v1; revisit if the default layout looks off 
 - **Google OAuth client id + secret** (in the Entra UI; do not commit).
 - **Facebook app id + secret** (in the Entra UI; do not commit).
 
-The next sub-issue (#20) creates two app registrations against this tenant — one for the Vue SPA, one for the .NET API — and exposes the API scope + app roles (Admin / Contributor / Member). Those values flow into the SWA app settings; nothing goes into source control.
+---
 
-## Local dev against External ID
+## 6. App registrations
 
-Local sign-in can talk to the real External ID tenant via MSAL — there's no offline emulator for External ID, but the free tier handles dev traffic comfortably. The Cosmos emulator (#17) still serves the data layer offline, so local dev only needs internet access for the OAuth dance.
+Two registrations live in the SLYPN External ID tenant: one for the Vue SPA (public client, no secret), one for the API (token audience, with app roles). The SPA requests an access token for the API scope; the API validates it.
+
+### 6.1 Register the API — `slypn-api`
+
+1. **Identity → Applications → App registrations → New registration**.
+2. Name: `slypn-api`.
+3. Supported account types: **Accounts in this organizational directory only**.
+4. Redirect URI: leave empty.
+5. **Register**.
+
+After registration:
+
+1. **Overview** — note the **Application (client) ID**. Call it `apiClientId`.
+2. **Expose an API → Application ID URI → Add** → accept the default `api://<apiClientId>` (or set a custom URI such as `api://slypn-api`). Save.
+3. **Expose an API → Add a scope**:
+   - Scope name: `access_as_user`.
+   - Who can consent: **Admins and users**.
+   - Admin consent display name: *"Access SLYPN on behalf of the signed-in user"*.
+   - User consent display name: same.
+   - State: **Enabled**. Add scope.
+4. **App roles → Create app role** — repeat for each role:
+   | Display name | Value | Allowed members |
+   |---|---|---|
+   | Administrator | `Admin` | Users/Groups |
+   | Contributor | `Contributor` | Users/Groups |
+   | Member | `Member` | Users/Groups |
+
+   The **value** is the literal string our JWT validator looks for in the `roles` claim — it's case-sensitive.
+
+### 6.2 Register the SPA — `slypn-spa`
+
+1. **Identity → Applications → App registrations → New registration**.
+2. Name: `slypn-spa`.
+3. Supported account types: **Accounts in this organizational directory only**.
+4. Redirect URI: **Single-page application (SPA)** → `http://localhost:5173/auth/callback`.
+5. **Register**.
+
+After registration:
+
+1. **Overview** — note the **Application (client) ID**. Call it `spaClientId`.
+2. **Authentication**:
+   - Add the production redirect URI once the SWA is up: `https://<swa-default-hostname>/auth/callback`. (Placeholder until Phase 6.)
+   - Add a logout redirect URI: `http://localhost:5173/` and the production equivalent.
+   - **Implicit grant** — both checkboxes (Access tokens / ID tokens) **off**. PKCE is used instead.
+   - **Allow public client flows** — off.
+3. **API permissions → Add a permission → My APIs → slypn-api → Delegated permissions → access_as_user → Add**.
+4. **Grant admin consent for SLYPN**. Confirm.
+
+### 6.3 Assign roles to your first users
+
+1. In the External ID tenant, **Identity → Applications → Enterprise applications → slypn-api → Users and groups → Add user/group**.
+2. Pick yourself and assign the **Administrator** role.
+3. Repeat for any additional admins / contributors. New customers who self-sign-up via the user flow start with no app role; the **Invite Member** flow in #24 grants them `Member` automatically.
+
+---
+
+## 7. Values to capture for code wiring
+
+After steps 1–6 you should have the following — none go in source control, all go into app settings:
+
+| Where it lives | Setting name | Source |
+|---|---|---|
+| Vue SPA (`VITE_*`) | `VITE_MSAL_AUTHORITY` | `https://slypn.ciamlogin.com/<tenantId>/v2.0` |
+| Vue SPA | `VITE_MSAL_CLIENT_ID` | `spaClientId` |
+| Vue SPA | `VITE_API_SCOPE` | `api://<apiClientId>/access_as_user` |
+| Functions API | `AzureAd__Authority` | `https://slypn.ciamlogin.com/<tenantId>/v2.0` |
+| Functions API | `AzureAd__Audience` | `api://<apiClientId>` |
+| Functions API | `AzureAd__ValidIssuers__0` | `https://slypn.ciamlogin.com/<tenantId>/v2.0` |
+| Functions API | `AzureAd__TenantId` | `<tenantId>` |
+
+Sample placeholder values land in `src/web/.env.example` and `src/api/Slypn.Api/local.settings.sample.json` alongside the MSAL.js wiring in #21 and the JWT middleware in #22.
+
+---
+
+## 8. Local dev against External ID
+
+Local sign-in talks to the real External ID tenant via MSAL — there's no offline emulator for External ID, but the free tier handles dev traffic comfortably. The Cosmos emulator (#17) still serves the data layer offline, so local dev only needs internet access for the OAuth dance.
