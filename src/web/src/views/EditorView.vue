@@ -4,6 +4,7 @@ import HeroBanner from '@/components/common/HeroBanner.vue'
 import RichTextEditor from '@/components/editor/RichTextEditor.vue'
 import SaveIndicator from '@/components/editor/SaveIndicator.vue'
 import { useAutoSave } from '@/composables/useAutoSave'
+import { useBeforeUnload } from '@/composables/useBeforeUnload'
 import { apiFetch } from '@/lib/api'
 
 interface DraftPayload {
@@ -18,6 +19,16 @@ interface DraftPayload {
 }
 
 const DRAFT_ID_KEY = 'slypn:editor:draft-id'
+const EMPTY_DRAFT: DraftPayload = {
+  type: 'article',
+  title: '',
+  slug: '',
+  summary: '',
+  body: '<p>Start writing&hellip;</p>',
+  category: '',
+  tags: [],
+  readingMinutes: 0,
+}
 
 function makeId() {
   if ('randomUUID' in crypto) return crypto.randomUUID().replace(/-/g, '')
@@ -27,20 +38,19 @@ function makeId() {
 const draftId = ref<string>(localStorage.getItem(DRAFT_ID_KEY) ?? makeId())
 localStorage.setItem(DRAFT_ID_KEY, draftId.value)
 
-const draft = ref<DraftPayload>({
-  type: 'article',
-  title: '',
-  slug: '',
-  summary: '',
-  body: '<p>Start writing&hellip;</p>',
-  category: '',
-  tags: [],
-  readingMinutes: 0,
-})
-const uploadError = ref<string | null>(null)
-const submitting = ref(false)
-const submitMessage = ref<string | null>(null)
-const submitError   = ref<string | null>(null)
+const draft = ref<DraftPayload>({ ...EMPTY_DRAFT })
+const currentEtag = ref<string | null>(null)
+
+const uploadError    = ref<string | null>(null)
+const submitting     = ref(false)
+const submitMessage  = ref<string | null>(null)
+const submitError    = ref<string | null>(null)
+
+interface ConflictState {
+  serverDraft: DraftPayload
+  serverEtag: string | null
+}
+const conflict = ref<ConflictState | null>(null)
 
 async function loadExisting() {
   try {
@@ -48,21 +58,38 @@ async function loadExisting() {
     if (resp.status === 404) return
     if (!resp.ok) return
     const fetched = await resp.json() as DraftPayload
-    draft.value = { ...draft.value, ...fetched }
+    draft.value = { ...EMPTY_DRAFT, ...fetched }
+    currentEtag.value = resp.headers.get('ETag')
   } catch {
     // Network errors are fine on first load — we'll create on first autosave.
   }
 }
 
 async function save(value: DraftPayload) {
+  const headers: Record<string, string> = {}
+  if (currentEtag.value) headers['If-Match'] = currentEtag.value
   const resp = await apiFetch(`/drafts/${draftId.value}`, {
     method: 'PUT',
+    headers,
     body: JSON.stringify(value),
   })
+  if (resp.status === 412) {
+    // Someone else (another tab / session) updated this draft. Fetch the
+    // server version so the user can decide.
+    const reload = await apiFetch(`/drafts/${draftId.value}`)
+    const serverDraft = reload.ok ? await reload.json() as DraftPayload : { ...EMPTY_DRAFT }
+    conflict.value = {
+      serverDraft,
+      serverEtag: reload.ok ? reload.headers.get('ETag') : null,
+    }
+    throw new Error('412 — another tab updated this draft. Resolve the conflict before saving again.')
+  }
   if (!resp.ok) {
     const body = await resp.text().catch(() => '')
     throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
   }
+  // Capture the new etag so the next PUT sends a matching If-Match.
+  currentEtag.value = resp.headers.get('ETag') ?? currentEtag.value
 }
 
 async function submitForReview() {
@@ -71,7 +98,6 @@ async function submitForReview() {
   submitError.value = null
   submitting.value = true
   try {
-    // Force a save first so the in-review article has the latest body.
     await save(draft.value)
     const resp = await apiFetch(`/drafts/${draftId.value}/submit`, { method: 'POST' })
     if (!resp.ok) {
@@ -90,21 +116,40 @@ async function submitForReview() {
 function startFresh() {
   draftId.value = makeId()
   localStorage.setItem(DRAFT_ID_KEY, draftId.value)
-  draft.value = {
-    type: 'article',
-    title: '',
-    slug: '',
-    summary: '',
-    body: '<p>Start writing&hellip;</p>',
-    category: '',
-    tags: [],
-    readingMinutes: 0,
+  draft.value = { ...EMPTY_DRAFT }
+  currentEtag.value = null
+  conflict.value = null
+}
+
+// Conflict resolution -------------------------------------------------------
+function resolveByDiscardingLocal() {
+  if (!conflict.value) return
+  draft.value = { ...EMPTY_DRAFT, ...conflict.value.serverDraft }
+  currentEtag.value = conflict.value.serverEtag
+  conflict.value = null
+}
+
+async function resolveByForcingLocal() {
+  if (!conflict.value) return
+  // Clear our etag so the next PUT goes through without If-Match — the
+  // upsert path overwrites whatever's in Cosmos.
+  currentEtag.value = null
+  const localValue = draft.value
+  conflict.value = null
+  try {
+    await save(localValue)
+  } catch (err) {
+    submitError.value = err instanceof Error ? err.message : String(err)
   }
 }
 
 onMounted(loadExisting)
 
 const { status, lastSavedAt, errorMessage } = useAutoSave(draft, save, { debounce: 1500 })
+
+useBeforeUnload(computed(() =>
+  status.value === 'pending' || status.value === 'saving' || status.value === 'error',
+))
 
 const tagsCsv = computed({
   get: () => draft.value.tags.join(', '),
@@ -143,6 +188,40 @@ const tagsCsv = computed({
         Draft <code class="text-slypn-700">{{ draftId }}</code>
       </p>
       <SaveIndicator :status="status" :last-saved-at="lastSavedAt" :error="errorMessage" />
+    </div>
+
+    <div
+      v-if="conflict"
+      class="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900"
+    >
+      <p class="font-display font-bold text-amber-900">
+        This draft was updated elsewhere
+      </p>
+      <p class="mt-1">
+        Another tab or session saved a newer version while you were writing. Pick how to resolve:
+      </p>
+      <details class="mt-3 rounded-md bg-amber-100/60 p-3">
+        <summary class="cursor-pointer text-xs font-semibold">Preview the server version</summary>
+        <p class="mt-2 text-xs">Title: <strong>{{ conflict.serverDraft.title || '(empty)' }}</strong></p>
+        <p class="text-xs">Summary: {{ conflict.serverDraft.summary || '(empty)' }}</p>
+        <p class="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap text-xs" v-html="conflict.serverDraft.body" />
+      </details>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          class="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+          @click="resolveByDiscardingLocal"
+        >
+          Discard my changes, use server version
+        </button>
+        <button
+          type="button"
+          class="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
+          @click="resolveByForcingLocal"
+        >
+          Overwrite server with my version
+        </button>
+      </div>
     </div>
 
     <div class="space-y-4 rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
