@@ -8,6 +8,7 @@ import EventsView from '@/views/EventsView.vue'
 import ResourcesView from '@/views/ResourcesView.vue'
 import NewsletterView from '@/views/NewsletterView.vue'
 import LoginView from '@/views/LoginView.vue'
+import AuthCallbackView from '@/views/AuthCallbackView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 
 export default createRouter({
@@ -23,6 +24,7 @@ export default createRouter({
     { path: '/resources',         name: 'resources',       component: ResourcesView },
     { path: '/newsletter',        name: 'newsletter',      component: NewsletterView },
     { path: '/login',             name: 'login',           component: LoginView },
+    { path: '/auth/callback',     name: 'auth-callback',   component: AuthCallbackView },
     { path: '/:pathMatch(.*)*',   name: 'not-found',       component: NotFoundView },
   ],
 })
