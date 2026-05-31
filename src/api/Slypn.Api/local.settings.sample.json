@@ -16,7 +16,11 @@
     "Graph__TenantId": "",
     "Graph__ClientId": "",
     "Graph__ClientSecret": "",
-    "Graph__InviteRedirectUrl": "http://localhost:5173/"
+    "Graph__InviteRedirectUrl": "http://localhost:5173/",
+    "Otel__Endpoint": "",
+    "Otel__Headers": "",
+    "Otel__ServiceName": "slypn-api",
+    "Otel__Env": "dev"
   },
   "Host": {
     "CORS": "http://localhost:5173",
