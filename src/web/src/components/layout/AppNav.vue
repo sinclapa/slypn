@@ -99,6 +99,9 @@ async function onSignOut() {
             <p class="mt-0.5 truncate font-medium text-slypn-900">{{ auth.account?.username }}</p>
           </div>
           <ul class="text-sm text-slypn-700">
+            <li>
+              <RouterLink to="/dashboard" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Dashboard</RouterLink>
+            </li>
             <li v-if="auth.isContributor || auth.isAdmin">
               <RouterLink to="/editor" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Editor</RouterLink>
             </li>
