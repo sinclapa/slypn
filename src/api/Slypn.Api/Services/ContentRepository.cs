@@ -10,19 +10,34 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
 
     // ---- Reads ----------------------------------------------------------------
     public async Task<IReadOnlyList<Article>> ListArticlesAsync(string? status, CancellationToken ct)
+        => await ListArticlesAsync(status, type: "article", ct);
+
+    public async Task<IReadOnlyList<Article>> ListBlogPostsAsync(string? status, CancellationToken ct)
+        => await ListArticlesAsync(status, type: "blog", ct);
+
+    private async Task<IReadOnlyList<Article>> ListArticlesAsync(string? status, string type, CancellationToken ct)
     {
+        // Rows that predate the Type field deserialise with Type="article" (record default),
+        // so we treat IS_DEFINED missing-or-equals-"article" as the article bucket.
+        var typeClause = type == "article"
+            ? "(c.type = @type OR NOT IS_DEFINED(c.type))"
+            : "c.type = @type";
+
         if (!cosmos.IsConfigured)
         {
-            IEnumerable<Article> source = mock.Articles;
+            IEnumerable<Article> source = mock.Articles.Where(a =>
+                string.Equals(a.Type, type, StringComparison.OrdinalIgnoreCase));
             if (status is not null)
                 source = source.Where(a => string.Equals(a.Status, status, StringComparison.OrdinalIgnoreCase));
             return source.OrderByDescending(a => a.PublishedAt).ToList();
         }
 
-        var query = status is null
-            ? new QueryDefinition("SELECT * FROM c ORDER BY c.publishedAt DESC")
-            : new QueryDefinition("SELECT * FROM c WHERE c.status = @status ORDER BY c.publishedAt DESC")
-                .WithParameter("@status", status);
+        var sql = status is null
+            ? $"SELECT * FROM c WHERE {typeClause} ORDER BY c.publishedAt DESC"
+            : $"SELECT * FROM c WHERE c.status = @status AND {typeClause} ORDER BY c.publishedAt DESC";
+        var query = new QueryDefinition(sql).WithParameter("@type", type);
+        if (status is not null) query = query.WithParameter("@status", status);
+
         var options = new QueryRequestOptions
         {
             PartitionKey = status is null ? null : new PartitionKey(status),
@@ -326,6 +341,7 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             Tags:           draft.Tags,
             Status:         "in-review")
         {
+            Type = string.Equals(draft.Type, "blog", StringComparison.OrdinalIgnoreCase) ? "blog" : "article",
             AuthorId = draft.AuthorId,
         };
 

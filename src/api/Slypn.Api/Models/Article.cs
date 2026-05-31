@@ -15,6 +15,9 @@ public sealed record Article(
     IReadOnlyList<string> Tags,
     string Status = "published")
 {
+    /// <summary>"article" or "blog". Defaults to "article" for rows that predate the field.</summary>
+    public string Type { get; init; } = "article";
+
     /// <summary>Author's Entra oid — set on submit; carries through workflow transitions.</summary>
     public string? AuthorId { get; init; }
 
