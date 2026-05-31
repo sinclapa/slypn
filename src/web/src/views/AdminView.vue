@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import ApprovalsQueue from '@/components/common/ApprovalsQueue.vue'
 import { apiFetch } from '@/lib/api'
 
 type Role = 'Admin' | 'Contributor' | 'Member'
@@ -135,11 +136,6 @@ async function submit() {
       </form>
     </article>
 
-    <article class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm">
-      <h2 class="font-display text-lg font-bold text-slypn-700">Approvals (coming in #29)</h2>
-      <p class="mt-2 text-sm text-slypn-900/75">
-        Pending articles + blog posts grouped by author with inline publish / reject.
-      </p>
-    </article>
+    <ApprovalsQueue />
   </section>
 </template>
