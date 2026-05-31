@@ -60,6 +60,10 @@ jobs:
           # and `dotnet build` for the Functions, so no preceding steps are
           # required.
           deployment_environment: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || '' }}
+          # Until the first Bicep deploy provisions the SWA + the secret is
+          # set in repo secrets, the action build-only and skips the upload
+          # instead of erroring. Remove this flag once the token is in place.
+          skip_deploy_on_missing_secrets: true
 
   close_pr_environment:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
@@ -71,3 +75,4 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: close
+          skip_deploy_on_missing_secrets: true
