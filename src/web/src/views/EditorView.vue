@@ -225,6 +225,35 @@ const tagsCsv = computed({
     </div>
 
     <div class="space-y-4 rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
+      <fieldset>
+        <legend class="text-sm font-medium text-slypn-800">Type</legend>
+        <div class="mt-2 inline-flex rounded-md border border-slypn-200 bg-white p-1">
+          <button
+            type="button"
+            :class="[
+              'rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
+              draft.type === 'article' ? 'bg-slypn-600 text-white' : 'text-slypn-700 hover:bg-slypn-50',
+            ]"
+            @click="draft.type = 'article'"
+          >
+            Article
+          </button>
+          <button
+            type="button"
+            :class="[
+              'rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
+              draft.type === 'blog' ? 'bg-slypn-600 text-white' : 'text-slypn-700 hover:bg-slypn-50',
+            ]"
+            @click="draft.type = 'blog'"
+          >
+            Blog post
+          </button>
+        </div>
+        <p class="mt-1 text-xs text-slypn-900/60">
+          Articles are longer, considered pieces. Blog posts are shorter updates.
+        </p>
+      </fieldset>
+
       <div>
         <label class="block text-sm font-medium text-slypn-800">Title</label>
         <input
