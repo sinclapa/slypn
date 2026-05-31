@@ -10,7 +10,7 @@ using static Slypn.Api.Functions.FunctionHelpers;
 
 namespace Slypn.Api.Functions;
 
-public sealed class DraftsFunctions(IContentRepository repo, ILogger<DraftsFunctions> log)
+public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sanitizer, ILogger<DraftsFunctions> log)
 {
     [Function("ListMyDrafts")]
     [RequireRole("Admin", "Contributor")]
@@ -86,7 +86,7 @@ public sealed class DraftsFunctions(IContentRepository repo, ILogger<DraftsFunct
             Title:          input.Title,
             Slug:           input.Slug,
             Summary:        input.Summary,
-            Body:           input.Body,
+            Body:           sanitizer.Sanitize(input.Body),
             Category:       input.Category,
             Tags:           input.Tags,
             ReadingMinutes: input.ReadingMinutes,

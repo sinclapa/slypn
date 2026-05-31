@@ -22,6 +22,7 @@ var host = new HostBuilder()
 
         services.AddSingleton<IMockDataService, MockDataService>();
         services.AddSingleton<IContentRepository, ContentRepository>();
+        services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>();
 
         services
             .AddOptions<CosmosOptions>()
