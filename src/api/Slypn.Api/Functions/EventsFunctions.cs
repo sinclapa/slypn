@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Slypn.Api.Infrastructure;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
@@ -21,6 +22,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     }
 
     [Function("CreateEvent")]
+    [RequireRole("Admin")]
     public async Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "events")] HttpRequestData req,
         CancellationToken ct)
@@ -37,6 +39,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     }
 
     [Function("ReplaceEvent")]
+    [RequireRole("Admin")]
     public async Task<HttpResponseData> Replace(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "events/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -53,6 +56,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     }
 
     [Function("DeleteEvent")]
+    [RequireRole("Admin")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "events/{id}")] HttpRequestData req,
         string id, CancellationToken ct)

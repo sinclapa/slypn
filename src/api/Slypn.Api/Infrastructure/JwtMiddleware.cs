@@ -1,0 +1,151 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Reflection;
+using System.Security.Claims;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.Functions.Worker.Middleware;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+
+namespace Slypn.Api.Infrastructure;
+
+public sealed class JwtMiddleware(
+    IJwtValidator validator,
+    IOptions<EntraOptions> options,
+    ILogger<JwtMiddleware> logger) : IFunctionsWorkerMiddleware
+{
+    private static readonly ConcurrentDictionary<string, RequireRoleAttribute?> AttrCache = new();
+
+    public const string PrincipalContextKey = "Slypn.Principal";
+
+    public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
+    {
+        var attr = GetRoleAttribute(context);
+
+        // No auth requirement on this Function — proceed unauthenticated.
+        if (attr is null)
+        {
+            await next(context);
+            return;
+        }
+
+        // Need HTTP context to short-circuit with a 401/403.
+        var httpReq = await context.GetHttpRequestDataAsync();
+        if (httpReq is null)
+        {
+            // Non-HTTP trigger with [RequireRole] is a misconfiguration; refuse loudly.
+            logger.LogError("[RequireRole] is only supported on HTTP-triggered functions.");
+            throw new InvalidOperationException("[RequireRole] is only supported on HTTP-triggered functions.");
+        }
+
+        // Local-dev escape hatch — synthesise an Admin principal when SkipAuth=true.
+        if (options.Value.SkipAuth)
+        {
+            logger.LogWarning("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
+            var identity = new ClaimsIdentity("dev", "name", "roles");
+            identity.AddClaim(new Claim("name", "dev-admin"));
+            identity.AddClaim(new Claim("oid",  "00000000-0000-0000-0000-000000000000"));
+            foreach (var role in new[] { "Admin", "Contributor", "Member" })
+                identity.AddClaim(new Claim("roles", role));
+            context.Items[PrincipalContextKey] = new ClaimsPrincipal(identity);
+            await next(context);
+            return;
+        }
+
+        if (!validator.IsConfigured)
+        {
+            await ShortCircuit(context, httpReq, HttpStatusCode.ServiceUnavailable,
+                "Auth is not configured. Set AzureAd__Authority / AzureAd__Audience or AzureAd__SkipAuth=true.");
+            return;
+        }
+
+        var token = ExtractBearer(httpReq);
+        if (token is null)
+        {
+            await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, "Missing Bearer token.");
+            return;
+        }
+
+        ClaimsPrincipal principal;
+        try
+        {
+            principal = await validator.ValidateAsync(token, context.CancellationToken);
+        }
+        catch (SecurityTokenException ex)
+        {
+            logger.LogInformation(ex, "JWT validation failed: {Message}", ex.Message);
+            await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, $"Invalid token: {ex.Message}");
+            return;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error validating JWT");
+            await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, "Token validation error.");
+            return;
+        }
+
+        if (attr.Roles.Length > 0 && !attr.Roles.Any(r => principal.IsInRole(r)))
+        {
+            await ShortCircuit(context, httpReq, HttpStatusCode.Forbidden,
+                $"Required role: {string.Join(" or ", attr.Roles)}.");
+            return;
+        }
+
+        context.Items[PrincipalContextKey] = principal;
+        await next(context);
+    }
+
+    private static RequireRoleAttribute? GetRoleAttribute(FunctionContext context)
+    {
+        return AttrCache.GetOrAdd(context.FunctionDefinition.EntryPoint, entryPoint =>
+        {
+            // EntryPoint is "Namespace.Type.Method".
+            var lastDot = entryPoint.LastIndexOf('.');
+            if (lastDot < 0) return null;
+            var typeName   = entryPoint[..lastDot];
+            var methodName = entryPoint[(lastDot + 1)..];
+
+            var type = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(SafeGetTypes)
+                .FirstOrDefault(t => t.FullName == typeName);
+            if (type is null) return null;
+
+            var method = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+                .FirstOrDefault(m => m.Name == methodName);
+            return method?.GetCustomAttribute<RequireRoleAttribute>();
+        });
+    }
+
+    private static IEnumerable<Type> SafeGetTypes(Assembly a)
+    {
+        try { return a.GetTypes(); }
+        catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t is not null)!; }
+    }
+
+    private static string? ExtractBearer(HttpRequestData req)
+    {
+        if (!req.Headers.TryGetValues("Authorization", out var vals)) return null;
+        var raw = vals.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        const string prefix = "Bearer ";
+        return raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? raw[prefix.Length..].Trim() : null;
+    }
+
+    private static async Task ShortCircuit(FunctionContext context, HttpRequestData req, HttpStatusCode code, string message)
+    {
+        var resp = req.CreateResponse(code);
+        await resp.WriteStringAsync(message);
+        context.GetInvocationResult().Value = resp;
+    }
+}
+
+public static class FunctionContextExtensions
+{
+    public static ClaimsPrincipal? GetPrincipal(this FunctionContext context) =>
+        context.Items.TryGetValue(JwtMiddleware.PrincipalContextKey, out var v) ? v as ClaimsPrincipal : null;
+
+    public static string? GetUserOid(this FunctionContext context) =>
+        context.GetPrincipal()?.FindFirst("oid")?.Value;
+}

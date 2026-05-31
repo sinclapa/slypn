@@ -3,6 +3,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Slypn.Api.Infrastructure;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
@@ -31,6 +32,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, ILogger<ArticlesF
     }
 
     [Function("CreateArticle")]
+    [RequireRole("Admin", "Contributor")]
     public async Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles")] HttpRequestData req,
         CancellationToken ct)
@@ -47,6 +49,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, ILogger<ArticlesF
     }
 
     [Function("ReplaceArticle")]
+    [RequireRole("Admin", "Contributor")]
     public async Task<HttpResponseData> Replace(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "articles/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -63,6 +66,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, ILogger<ArticlesF
     }
 
     [Function("DeleteArticle")]
+    [RequireRole("Admin")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "articles/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
