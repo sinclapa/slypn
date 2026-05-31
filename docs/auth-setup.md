@@ -15,8 +15,13 @@ External ID lives in its own tenant — you can't mix customers with workforce u
 3. Choose **External**. (The other option, *Workforce*, is for employees and is not what we want.)
 4. **Basics** — Organization name: `SLYPN`. Initial domain: `slypn` (yields `slypn.onmicrosoft.com`). Country: United Kingdom.
 5. **Configuration** — choose **Customer**. Pick the closest Azure region (UK South).
-6. **Review + create**. The tenant takes a couple of minutes to provision.
-7. Switch to the new tenant from the top-right tenant picker — the rest of this document happens **inside the SLYPN tenant**.
+6. **Subscription + resource group** — External ID tenants are billed against an Azure subscription, so the portal asks for both:
+   - **Subscription**: the same one you'll deploy SLYPN to so the billing consolidates.
+   - **Resource group**: create a new one called **`rg-slypn-identity`**. Keeping identity in its own RG is a convention — the SWA / Cosmos / Storage RG (`rg-slypn-dev`, `rg-slypn-prod`) can be torn down and re-deployed without losing the tenant. Reusing `rg-slypn-dev` also works but is harder to reason about later.
+
+   The tenant itself doesn't consume RG resources; the RG just anchors the billing line item.
+7. **Review + create**. The tenant takes a couple of minutes to provision.
+8. Switch to the new tenant from the top-right tenant picker — the rest of this document happens **inside the SLYPN tenant**.
 
 Note the tenant id — you'll need it for app settings later. **Identity → Overview → Properties → Tenant ID**.
 
