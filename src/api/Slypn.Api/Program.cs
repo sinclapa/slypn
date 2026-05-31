@@ -8,10 +8,12 @@ using Slypn.Api.Infrastructure;
 using Slypn.Api.Services;
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureFunctionsWorkerDefaults(builder =>
+    {
+        builder.UseMiddleware<JwtMiddleware>();
+    })
     .ConfigureServices((context, services) =>
     {
-        // camelCase + lowercase enum names on every HttpResponseData.WriteAsJsonAsync.
         services.Configure<WorkerOptions>(options =>
         {
             options.Serializer = new JsonObjectSerializer(new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -30,6 +32,11 @@ var host = new HostBuilder()
             .AddOptions<StorageOptions>()
             .Bind(context.Configuration.GetSection(StorageOptions.SectionName));
         services.AddSingleton<IBlobService, BlobService>();
+
+        services
+            .AddOptions<EntraOptions>()
+            .Bind(context.Configuration.GetSection(EntraOptions.SectionName));
+        services.AddSingleton<IJwtValidator, EntraJwtValidator>();
     })
     .Build();
 
