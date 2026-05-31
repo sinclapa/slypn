@@ -39,9 +39,6 @@ jobs:
   api:
     name: API (.NET Functions)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/api/Slypn.Api
     steps:
       - uses: actions/checkout@v4
 
@@ -58,8 +55,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Restore
-        run: dotnet restore
+      - name: Restore (API)
+        run: dotnet restore src/api/Slypn.Api/Slypn.Api.csproj
 
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
+      - name: Build (API)
+        run: dotnet build src/api/Slypn.Api/Slypn.Api.csproj --no-restore --configuration Release
+
+      - name: Build (Seed CLI)
+        run: dotnet build src/api/Slypn.Seed/Slypn.Seed.csproj --configuration Release
