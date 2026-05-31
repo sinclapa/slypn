@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Slypn.Api.Models;
 
 public sealed record Article(
@@ -11,4 +13,9 @@ public sealed record Article(
     int ReadingMinutes,
     string Category,
     IReadOnlyList<string> Tags,
-    string Status = "published");
+    string Status = "published")
+{
+    /// <summary>Cosmos optimistic-concurrency token. Echoed in the ETag HTTP header for clients.</summary>
+    [JsonPropertyName("_etag")]
+    public string? Etag { get; init; }
+}
