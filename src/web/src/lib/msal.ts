@@ -17,6 +17,14 @@ export const apiScope = import.meta.env.VITE_API_SCOPE ?? ''
  */
 export const isAuthConfigured = Boolean(clientId && authority && apiScope)
 
+/**
+ * Local-dev escape hatch — pairs with the API's `AzureAd__SkipAuth=true`.
+ * When set, the auth store auto-signs in as a synthetic Admin/Contributor/
+ * Member, route guards open up, and `acquireToken()` returns null (the API
+ * won't check it in SkipAuth mode). MUST be false in any deployed env.
+ */
+export const isDevSkipAuth = import.meta.env.VITE_DEV_SKIP_AUTH === 'true'
+
 const msalConfig: Configuration = {
   auth: {
     clientId,
