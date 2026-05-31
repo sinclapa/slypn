@@ -297,6 +297,92 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             ct);
     }
 
+    // ---- Workflow ------------------------------------------------------------
+    public async Task<Article> SubmitDraftAsync(string draftId, string authorId, CancellationToken ct)
+    {
+        EnsureWrites();
+
+        Draft draft;
+        try
+        {
+            var read = await cosmos.Drafts.ReadItemAsync<Draft>(draftId, new PartitionKey(authorId), cancellationToken: ct);
+            draft = read.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new InvalidOperationException($"Draft {draftId} not found for author {authorId}.");
+        }
+
+        var article = new Article(
+            Id:             draft.Id,
+            Slug:           draft.Slug,
+            Title:          draft.Title,
+            Summary:        draft.Summary,
+            Body:           draft.Body,
+            Author:         draft.AuthorName,
+            PublishedAt:    DateTime.UtcNow, // submission time; updated on publish
+            ReadingMinutes: draft.ReadingMinutes,
+            Category:       draft.Category,
+            Tags:           draft.Tags,
+            Status:         "in-review")
+        {
+            AuthorId = draft.AuthorId,
+        };
+
+        var upserted = await cosmos.Articles.UpsertItemAsync(article, new PartitionKey("in-review"), cancellationToken: ct);
+        await cosmos.Drafts.DeleteItemAsync<Draft>(draft.Id, new PartitionKey(authorId), cancellationToken: ct);
+        return upserted.Resource with { Etag = upserted.ETag };
+    }
+
+    public async Task<Article?> GetArticleAsync(string id, string status, CancellationToken ct)
+    {
+        EnsureWrites();
+        try
+        {
+            var resp = await cosmos.Articles.ReadItemAsync<Article>(id, new PartitionKey(status), cancellationToken: ct);
+            return resp.Resource with { Etag = resp.ETag };
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task<Article> PublishArticleAsync(string id, CancellationToken ct)
+        => await TransitionAsync(id, fromStatus: "in-review", toStatus: "published",
+            update: a => a with { PublishedAt = DateTime.UtcNow, RejectionReason = null }, ct);
+
+    public async Task<Article> RejectArticleAsync(string id, string feedback, CancellationToken ct)
+        => await TransitionAsync(id, fromStatus: "in-review", toStatus: "rejected",
+            update: a => a with { RejectionReason = feedback }, ct);
+
+    private async Task<Article> TransitionAsync(
+        string id, string fromStatus, string toStatus, Func<Article, Article> update, CancellationToken ct)
+    {
+        EnsureWrites();
+        // Cosmos doesn't permit changing a document's partition-key value, so
+        // we read from the source partition, create in the target, then delete
+        // the source. Not atomic; admin actions are rare and re-runs are
+        // idempotent (re-doing publish on an already-published article is a
+        // no-op because the source is gone — the 404 surfaces as a clean error).
+        Article source;
+        try
+        {
+            var read = await cosmos.Articles.ReadItemAsync<Article>(id, new PartitionKey(fromStatus), cancellationToken: ct);
+            source = read.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new InvalidOperationException($"Article {id} is not in '{fromStatus}'.");
+        }
+
+        var transitioned = update(source with { Status = toStatus, Etag = null });
+
+        var created = await cosmos.Articles.UpsertItemAsync(transitioned, new PartitionKey(toStatus), cancellationToken: ct);
+        await cosmos.Articles.DeleteItemAsync<Article>(id, new PartitionKey(fromStatus), cancellationToken: ct);
+        return created.Resource with { Etag = created.ETag };
+    }
+
     // ---- helpers --------------------------------------------------------------
     private void EnsureWrites()
     {

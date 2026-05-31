@@ -82,4 +82,54 @@ public sealed class ArticlesFunctions(IContentRepository repo, ILogger<ArticlesF
         }
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
     }
+
+    /// <summary>
+    /// Admin approves an in-review article. Moves it to status=published
+    /// and stamps PublishedAt with the approval time.
+    /// </summary>
+    [Function("PublishArticle")]
+    [RequireRole("Admin")]
+    public async Task<HttpResponseData> Publish(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/publish")] HttpRequestData req,
+        string id, CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+        try
+        {
+            var article = await repo.PublishArticleAsync(id, ct);
+            return await Ok(req, article, article.Etag);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return await BadRequest(req, ex.Message);
+        }
+        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+    }
+
+    /// <summary>
+    /// Admin rejects an in-review article with required feedback. Moves it to
+    /// status=rejected so the author can see the feedback alongside their draft.
+    /// </summary>
+    [Function("RejectArticle")]
+    [RequireRole("Admin")]
+    public async Task<HttpResponseData> Reject(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/reject")] HttpRequestData req,
+        string id, CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+
+        var (input, err) = await ReadValidatedAsync<RejectionInput>(req, ct);
+        if (err is not null) return err;
+
+        try
+        {
+            var article = await repo.RejectArticleAsync(id, input!.Feedback.Trim(), ct);
+            return await Ok(req, article, article.Etag);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return await BadRequest(req, ex.Message);
+        }
+        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+    }
 }

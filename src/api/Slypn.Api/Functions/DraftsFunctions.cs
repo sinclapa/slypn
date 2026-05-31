@@ -121,4 +121,33 @@ public sealed class DraftsFunctions(IContentRepository repo, ILogger<DraftsFunct
         }
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
     }
+
+    /// <summary>
+    /// Submit the author's own draft for admin review. Promotes it to an
+    /// in-review article with the draft's id (so re-submits are idempotent)
+    /// and removes the draft.
+    /// </summary>
+    [Function("SubmitDraft")]
+    [RequireRole("Admin", "Contributor")]
+    public async Task<HttpResponseData> Submit(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "drafts/{id}/submit")] HttpRequestData req,
+        FunctionContext context,
+        string id,
+        CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+        var authorId = context.GetUserOid();
+        if (authorId is null) return await BadRequest(req, "Token missing oid claim.");
+
+        try
+        {
+            var article = await repo.SubmitDraftAsync(id, authorId, ct);
+            return await Created(req, article, article.Etag);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return await BadRequest(req, ex.Message);
+        }
+        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+    }
 }

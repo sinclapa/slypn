@@ -48,4 +48,17 @@ public interface IContentRepository
     Task<IReadOnlyList<Draft>> ListDraftsByAuthorAsync(string authorId, CancellationToken ct);
     Task<Draft>               UpsertDraftAsync(Draft draft, string? ifMatch, CancellationToken ct);
     Task                      DeleteDraftAsync(string id, string authorId, string? ifMatch, CancellationToken ct);
+
+    // Workflow -------------------------------------------------------------
+    /// <summary>Promote a draft to an in-review article and remove the draft.</summary>
+    Task<Article>             SubmitDraftAsync(string draftId, string authorId, CancellationToken ct);
+
+    /// <summary>Read an article addressed by id + current status (partition key).</summary>
+    Task<Article?>            GetArticleAsync(string id, string status, CancellationToken ct);
+
+    /// <summary>Move an article from in-review to published. Sets PublishedAt to now.</summary>
+    Task<Article>             PublishArticleAsync(string id, CancellationToken ct);
+
+    /// <summary>Move an article from in-review to rejected and store the admin's feedback.</summary>
+    Task<Article>             RejectArticleAsync(string id, string feedback, CancellationToken ct);
 }
