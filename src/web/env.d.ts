@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_FARO_URL?: string
   readonly VITE_FARO_APP_NAME?: string
   readonly VITE_FARO_ENV?: string
+  readonly VITE_DEV_SKIP_AUTH?: string
 }
 
 interface ImportMeta {

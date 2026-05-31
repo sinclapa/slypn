@@ -9,10 +9,27 @@ import {
   buildSilentRequest,
   ensureMsalInitialized,
   isAuthConfigured,
+  isDevSkipAuth,
   msalInstance,
 } from '@/lib/msal'
 
 type IdTokenClaims = Record<string, unknown> & { roles?: string[] }
+
+function makeDevAccount(): AccountInfo {
+  return {
+    homeAccountId:  'dev-skip-auth',
+    environment:    'localhost',
+    tenantId:       '00000000-0000-0000-0000-000000000000',
+    username:       'dev@slypn.local',
+    localAccountId: 'dev-skip-auth',
+    name:           'Dev Admin',
+    idTokenClaims: {
+      name:  'Dev Admin',
+      oid:   '00000000-0000-0000-0000-000000000000',
+      roles: ['Admin', 'Contributor', 'Member'],
+    } as Record<string, unknown>,
+  } as AccountInfo
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const account = ref<AccountInfo | null>(null)
@@ -20,7 +37,8 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
 
   const isAuthenticated = computed(() => account.value !== null)
-  const isConfigured = computed(() => isAuthConfigured)
+  /** UI is "configured" if either real Entra or the dev-skip flag is wired. */
+  const isConfigured = computed(() => isAuthConfigured || isDevSkipAuth)
 
   const roles = computed<string[]>(() => {
     const claims = account.value?.idTokenClaims as IdTokenClaims | undefined
@@ -35,12 +53,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * Drive MSAL through initialize + handleRedirectPromise and pick up an
-   * already-cached account if any. Safe to call multiple times.
+   * already-cached account if any. In dev-skip mode, synthesises an Admin
+   * principal so route guards open up immediately. Safe to call multiple times.
    */
   async function initialize() {
     if (initialized.value || initializing.value) return
     initializing.value = true
     try {
+      if (isDevSkipAuth) {
+        account.value = makeDevAccount()
+        initialized.value = true
+        return
+      }
       const redirectResult = await ensureMsalInitialized()
       if (redirectResult?.account) {
         msalInstance!.setActiveAccount(redirectResult.account)
@@ -59,8 +83,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(returnTo?: string) {
+    if (isDevSkipAuth) {
+      account.value = makeDevAccount()
+      if (returnTo && returnTo !== window.location.href) {
+        window.location.href = returnTo
+      }
+      return
+    }
     if (!msalInstance) {
-      throw new Error('Auth not configured — set VITE_MSAL_* env vars.')
+      throw new Error('Auth not configured — set VITE_MSAL_* env vars or VITE_DEV_SKIP_AUTH=true.')
     }
     await ensureMsalInitialized()
     await msalInstance.loginRedirect({
@@ -70,6 +101,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    if (isDevSkipAuth) {
+      account.value = null
+      window.location.href = window.location.origin
+      return
+    }
     if (!msalInstance || !account.value) {
       account.value = null
       return
@@ -81,8 +117,10 @@ export const useAuthStore = defineStore('auth', () => {
    * Returns a bearer access token for the SLYPN API, or null if the user
    * isn't signed in / MSAL isn't configured. Falls back to interactive
    * sign-in if silent acquisition fails for an interaction-required reason.
+   * In dev-skip mode returns null — the API ignores the missing token.
    */
   async function acquireToken(): Promise<string | null> {
+    if (isDevSkipAuth) return null
     if (!msalInstance || !account.value) return null
     await ensureMsalInitialized()
     try {
