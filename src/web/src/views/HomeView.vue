@@ -4,22 +4,28 @@ import { RouterLink } from 'vue-router'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import ArticleCard from '@/components/common/ArticleCard.vue'
 import EventCard from '@/components/common/EventCard.vue'
-import { mockArticles } from '@/mock/articles'
-import { mockEvents } from '@/mock/events'
+import { apiJson } from '@/lib/api'
+import { useAsyncData } from '@/composables/useAsyncData'
+import type { Article, CommunityEvent } from '@/types/content'
+
+const { data: articles } = useAsyncData(
+  () => apiJson<Article[]>('/articles?status=published'),
+)
+const { data: events } = useAsyncData(
+  () => apiJson<CommunityEvent[]>('/events?upcoming=true'),
+)
 
 const featuredArticles = computed(() =>
-  [...mockArticles]
+  [...(articles.value ?? [])]
     .sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt))
     .slice(0, 3),
 )
 
-const upcomingEvents = computed(() => {
-  const now = Date.now()
-  return [...mockEvents]
-    .filter(e => +new Date(e.startsAt) >= now)
+const upcomingEvents = computed(() =>
+  [...(events.value ?? [])]
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt))
-    .slice(0, 3)
-})
+    .slice(0, 3),
+)
 </script>
 
 <template>
@@ -44,7 +50,7 @@ const upcomingEvents = computed(() => {
     </template>
   </HeroBanner>
 
-  <section class="mx-auto max-w-6xl px-6 py-16">
+  <section v-if="featuredArticles.length" class="mx-auto max-w-6xl px-6 py-16">
     <div class="flex items-end justify-between gap-4">
       <div>
         <p class="font-display text-sm font-semibold uppercase tracking-[0.2em] text-slypn-500">Latest</p>
@@ -59,7 +65,7 @@ const upcomingEvents = computed(() => {
     </div>
   </section>
 
-  <section class="mx-auto max-w-4xl px-6 py-16">
+  <section v-if="upcomingEvents.length" class="mx-auto max-w-4xl px-6 py-16">
     <div class="flex items-end justify-between gap-4">
       <div>
         <p class="font-display text-sm font-semibold uppercase tracking-[0.2em] text-slypn-500">Coming up</p>

@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import ResourceCard from '@/components/common/ResourceCard.vue'
-import { mockResources } from '@/mock/resources'
-import type { ResourceCategory } from '@/types/content'
+import { apiJson } from '@/lib/api'
+import { useAsyncData } from '@/composables/useAsyncData'
+import type { Resource, ResourceCategory } from '@/types/content'
 
 const categories: Array<'All' | ResourceCategory> = [
   'All',
@@ -16,11 +17,16 @@ const categories: Array<'All' | ResourceCategory> = [
 ]
 const selected = ref<typeof categories[number]>('All')
 
-const visible = computed(() =>
-  selected.value === 'All'
-    ? mockResources
-    : mockResources.filter(r => r.category === selected.value),
+const { data: resources, loading, error, refresh } = useAsyncData(
+  () => apiJson<Resource[]>('/resources'),
 )
+
+const visible = computed(() => {
+  const list = resources.value ?? []
+  return selected.value === 'All'
+    ? list
+    : list.filter(r => r.category === selected.value)
+})
 </script>
 
 <template>
@@ -48,8 +54,21 @@ const visible = computed(() =>
       </button>
     </div>
 
-    <div class="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+    <p v-if="loading && !resources" class="mt-12 text-center text-slypn-900/70">
+      Loading resources&hellip;
+    </p>
+
+    <div v-else-if="error" class="mt-12 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      Couldn&rsquo;t load resources: {{ error }}.
+      <button class="ml-2 underline" @click="refresh">Retry</button>
+    </div>
+
+    <div v-else class="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       <ResourceCard v-for="resource in visible" :key="resource.id" :resource="resource" />
     </div>
+
+    <p v-if="!loading && !error && !visible.length" class="mt-12 text-center text-slypn-900/70">
+      No resources in this category yet.
+    </p>
   </section>
 </template>
