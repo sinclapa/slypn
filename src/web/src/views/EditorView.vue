@@ -1,23 +1,32 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import RichTextEditor from '@/components/editor/RichTextEditor.vue'
+
+const body = ref('<p>Start writing&hellip;</p>')
+const uploadError = ref<string | null>(null)
 </script>
 
 <template>
   <HeroBanner
     eyebrow="Editor"
     title="Write something for the community"
-    subtitle="The rich-text editor with autosave and draft management lands with #26-#30. This page is the shell that the guard protects."
+    subtitle="Rich-text editor with images, links, headings, and lists. Autosave + draft workflow + admin approval land in #27-#30."
   />
 
-  <section class="mx-auto max-w-3xl px-6 py-16">
-    <p class="text-slypn-900/80">
-      For now: see
-      <a
-        href="https://github.com/users/sinclapa/projects/2"
-        class="text-slypn-600 underline underline-offset-4 hover:text-slypn-700"
-        rel="noopener"
-        target="_blank"
-      >Phase 4</a> on the project board for the editor build plan.
+  <section class="mx-auto max-w-3xl px-6 py-12">
+    <RichTextEditor
+      v-model="body"
+      @upload-error="(msg) => uploadError = msg"
+    />
+
+    <p v-if="uploadError" class="mt-3 rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
+      Image upload failed: {{ uploadError }}
     </p>
+
+    <details class="mt-8 rounded-md border border-slypn-100 bg-slypn-50 p-4">
+      <summary class="cursor-pointer text-sm font-semibold text-slypn-700">Preview the HTML the API will store</summary>
+      <pre class="mt-3 overflow-x-auto whitespace-pre-wrap break-words text-xs text-slypn-900/80">{{ body }}</pre>
+    </details>
   </section>
 </template>
