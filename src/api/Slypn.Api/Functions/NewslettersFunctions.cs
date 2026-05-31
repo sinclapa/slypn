@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using Slypn.Api.Infrastructure;
+using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
@@ -68,6 +69,58 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
         {
             await repo.DeleteNewsletterAsync(id, year, IfMatch(req), ct);
             return NoContent(req);
+        }
+        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+    }
+
+    /// <summary>
+    /// Public anonymous newsletter subscribe. Stores the email as a Member row
+    /// with Status="subscribed" so we get free dedupe (UpsertMemberAsync is
+    /// idempotent on a given id). No role assignment — subscribers aren't
+    /// SLYPN members in the auth sense.
+    /// </summary>
+    [Function("SubscribeToNewsletter")]
+    public async Task<HttpResponseData> Subscribe(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "newsletter/subscribe")] HttpRequestData req,
+        CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+
+        var (input, err) = await ReadValidatedAsync<SubscribeInput>(req, ct);
+        if (err is not null) return err;
+
+        var email = input!.Email.Trim().ToLowerInvariant();
+
+        Member? existing;
+        try { existing = await repo.GetMemberByEmailAsync(email, ct); }
+        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+
+        var now = DateTime.UtcNow;
+        var displayName = input.DisplayName?.Trim();
+
+        var record = existing is null
+            ? new Member(
+                Id:          Guid.NewGuid().ToString("N"),
+                Email:       email,
+                DisplayName: string.IsNullOrWhiteSpace(displayName) ? email : displayName!,
+                Roles:       Array.Empty<string>(),
+                Status:      "subscribed",
+                InvitedAt:   now)
+            : existing with
+            {
+                // Promote any earlier "invited" -> still "subscribed" but keep
+                // their roles + oid if they're an actual member. For pure
+                // subscribers (no roles, no oid), we just refresh the timestamp.
+                Status      = existing.Roles.Count > 0 || existing.Oid is not null
+                                ? existing.Status
+                                : "subscribed",
+                DisplayName = string.IsNullOrWhiteSpace(displayName) ? existing.DisplayName : displayName!,
+            };
+
+        try
+        {
+            var saved = await repo.UpsertMemberAsync(record, existing?.Etag, ct);
+            return await Created(req, new { saved.Email, saved.Status });
         }
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
     }
