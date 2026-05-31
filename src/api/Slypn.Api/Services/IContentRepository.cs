@@ -42,4 +42,10 @@ public interface IContentRepository
     Task<Member?>             GetMemberByEmailAsync(string email, CancellationToken ct);
     Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct);
     Task<Member>              UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct);
+
+    // Drafts ---------------------------------------------------------------
+    Task<Draft?>              GetDraftAsync(string id, string authorId, CancellationToken ct);
+    Task<IReadOnlyList<Draft>> ListDraftsByAuthorAsync(string authorId, CancellationToken ct);
+    Task<Draft>               UpsertDraftAsync(Draft draft, string? ifMatch, CancellationToken ct);
+    Task                      DeleteDraftAsync(string id, string authorId, string? ifMatch, CancellationToken ct);
 }
