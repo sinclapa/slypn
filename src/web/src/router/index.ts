@@ -8,12 +8,16 @@ import EventsView from '@/views/EventsView.vue'
 import ResourcesView from '@/views/ResourcesView.vue'
 import NewsletterView from '@/views/NewsletterView.vue'
 import LoginView from '@/views/LoginView.vue'
-import AuthCallbackView from '@/views/AuthCallbackView.vue'
-import DashboardView from '@/views/DashboardView.vue'
-import EditorView from '@/views/EditorView.vue'
-import AdminView from '@/views/AdminView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import { useAuthStore } from '@/stores/auth'
+
+// Auth-gated views are dynamically imported so TipTap (used only by EditorView),
+// the Approvals queue (AdminView), and the dashboard never ship to anonymous
+// public visitors. Each import becomes its own chunk via Vite's code-splitting.
+const AuthCallbackView = () => import('@/views/AuthCallbackView.vue')
+const DashboardView    = () => import('@/views/DashboardView.vue')
+const EditorView       = () => import('@/views/EditorView.vue')
+const AdminView        = () => import('@/views/AdminView.vue')
 
 declare module 'vue-router' {
   interface RouteMeta {
