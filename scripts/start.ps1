@@ -1,24 +1,29 @@
 #requires -Version 7
 <#
 .SYNOPSIS
-  Boots the Vue dev server and the .NET Functions host side-by-side.
+  Boots Azurite + Cosmos emulator + Vue dev server + .NET Functions host.
 
 .DESCRIPTION
   Starts:
-    - vite (web)        on http://localhost:5173/
-    - func (API)        on http://localhost:7071/
-  Both are launched as background jobs whose logs stream to
-  scripts/.runtime/<web|api>.log. PIDs are written to scripts/.runtime/pids.json
-  so stop.ps1 can shut them down cleanly. The script waits until both ports
-  respond, then prints URLs and returns control. Ctrl+C does NOT stop the
-  servers — use stop.ps1.
+    - slypn-azurite (Docker)    blob/queue/table emulator on :10000-10002
+    - slypn-cosmos  (Docker)    Cosmos DB emulator (vnext-preview) on :8081
+    - vite (npm)                Vue dev server on http://localhost:5173/
+    - func (Functions Core)     .NET API host on http://localhost:7071/
+
+  Emulator containers persist between start/stop cycles so seeded data
+  survives. Use scripts/clean.ps1 to wipe them. Vite + func PIDs are
+  written to scripts/.runtime/pids.json for stop.ps1.
+
+  Ctrl+C does NOT stop anything — use scripts/stop.ps1.
 
 .EXAMPLE
   .\scripts\start.ps1
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [switch] $NoEmulators   # skip starting Docker containers (e.g. when running against a real Cosmos / Storage account)
+)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
@@ -29,7 +34,8 @@ $webLog  = Join-Path $runtimeDir 'web.log'
 $apiLog  = Join-Path $runtimeDir 'api.log'
 $pidFile = Join-Path $runtimeDir 'pids.json'
 
-# Refuse to start if anything is already on the ports.
+# Refuse to start if the app ports are already taken (emulator port collisions
+# are handled below — those map onto existing containers).
 foreach ($p in @($WebPort, $ApiPort)) {
     if (Test-Port $p) {
         Write-Err "Port $p is already in use. Run .\scripts\stop.ps1 first."
@@ -47,9 +53,55 @@ if (-not (Test-Path $localSettings)) {
     }
 }
 
-# Resolve a real Win32 executable (Start-Process can't launch .ps1 shims).
+# --- emulators --------------------------------------------------------------
+if (-not $NoEmulators) {
+    if (-not (Test-DockerRunning)) {
+        Write-Err 'Docker daemon is not running. Start Docker Desktop (or pass -NoEmulators).'
+        exit 1
+    }
+
+    Write-Step 'Ensuring Azurite container'
+    if (Test-ContainerRunning $AzuriteContainer) {
+        Write-Ok "$AzuriteContainer already running"
+    } elseif (Test-ContainerExists $AzuriteContainer) {
+        docker start $AzuriteContainer | Out-Null
+        Write-Ok "$AzuriteContainer started"
+    } else {
+        docker run -d --name $AzuriteContainer `
+            -p "${AzuriteBlobPort}:10000" `
+            -p "${AzuriteQueuePort}:10001" `
+            -p "${AzuriteTablePort}:10002" `
+            $AzuriteImage | Out-Null
+        Write-Ok "$AzuriteContainer created"
+    }
+    if (-not (Wait-Port $AzuriteBlobPort 30)) {
+        Write-Err "Azurite blob port $AzuriteBlobPort did not come up in 30s. See: docker logs $AzuriteContainer"
+        exit 1
+    }
+    Write-Ok "Azurite ready on http://127.0.0.1:$AzuriteBlobPort/"
+
+    Write-Step 'Ensuring Cosmos DB emulator container (vnext-preview)'
+    if (Test-ContainerRunning $CosmosContainer) {
+        Write-Ok "$CosmosContainer already running"
+    } elseif (Test-ContainerExists $CosmosContainer) {
+        docker start $CosmosContainer | Out-Null
+        Write-Ok "$CosmosContainer started"
+    } else {
+        docker run -d --name $CosmosContainer `
+            -p "${CosmosPort}:8081" `
+            $CosmosImage | Out-Null
+        Write-Ok "$CosmosContainer created (first start downloads the image; can take a few minutes)"
+    }
+    Write-Step 'Waiting for Cosmos emulator (~30-90s)'
+    if (-not (Wait-Port $CosmosPort 180)) {
+        Write-Err "Cosmos emulator port $CosmosPort did not come up in 180s. See: docker logs $CosmosContainer"
+        exit 1
+    }
+    Write-Ok "Cosmos emulator ready on https://localhost:$CosmosPort/"
+}
+
+# --- web --------------------------------------------------------------------
 function Resolve-WinExe($name) {
-    # Prefer .cmd / .exe forms over PowerShell .ps1 shims that npm/Functions install.
     foreach ($suffix in @('.exe', '.cmd', '.bat', '')) {
         $cmd = Get-Command "$name$suffix" -ErrorAction SilentlyContinue |
                Where-Object { $_.Source -match '\.(exe|cmd|bat)$' } |
@@ -59,7 +111,6 @@ function Resolve-WinExe($name) {
     return $null
 }
 
-# --- web --------------------------------------------------------------------
 Write-Step 'Starting Vite (web)'
 $npmExe = Resolve-WinExe 'npm'
 if (-not $npmExe) { Write-Err 'npm.cmd not on PATH'; exit 1 }
@@ -74,7 +125,6 @@ Write-Ok "vite PID $($webProc.Id), logging to $webLog"
 Write-Step 'Starting Functions host (API)'
 $funcExe = Resolve-WinExe 'func'
 if (-not $funcExe) {
-    # Fall back to our standard install location used by setup.ps1.
     $funcHome = Join-Path $env:LOCALAPPDATA 'AzureFunctionsCoreTools'
     $candidate = Join-Path $funcHome 'func.exe'
     if (Test-Path $candidate) { $funcExe = $candidate }
@@ -91,20 +141,10 @@ $apiProc = Start-Process -FilePath $funcExe -ArgumentList 'start' `
     -WindowStyle Hidden -PassThru
 Write-Ok "func PID $($apiProc.Id), logging to $apiLog"
 
-# Persist PIDs so stop.ps1 has something to kill.
 @{ web = $webProc.Id; api = $apiProc.Id } | ConvertTo-Json | Out-File -FilePath $pidFile -Encoding UTF8
 
-# --- wait until both ports respond -----------------------------------------
-function Wait-Port($port, $timeoutSec) {
-    $start = Get-Date
-    while (((Get-Date) - $start).TotalSeconds -lt $timeoutSec) {
-        if (Test-Port $port) { return $true }
-        Start-Sleep -Milliseconds 500
-    }
-    return $false
-}
-
-Write-Step 'Waiting for ports to come up'
+# --- wait for app ports -----------------------------------------------------
+Write-Step 'Waiting for vite + func to come up'
 if (-not (Wait-Port $WebPort 30)) {
     Write-Err "vite did not start on $WebPort within 30s. See $webLog."
     exit 1
@@ -118,9 +158,14 @@ if (-not (Wait-Port $ApiPort 90)) {
 Write-Ok "func ready on http://localhost:$ApiPort/"
 
 Write-Host ''
-Write-Host 'Both servers are up.' -ForegroundColor Green
-Write-Host "  Web:  http://localhost:$WebPort/" -ForegroundColor Green
-Write-Host "  API:  http://localhost:$ApiPort/api/articles" -ForegroundColor Green
+Write-Host 'Dev stack is up.' -ForegroundColor Green
+Write-Host "  Web:    http://localhost:$WebPort/"           -ForegroundColor Green
+Write-Host "  API:    http://localhost:$ApiPort/api/articles" -ForegroundColor Green
+if (-not $NoEmulators) {
+    Write-Host "  Cosmos: https://localhost:$CosmosPort/ (self-signed cert)" -ForegroundColor Green
+    Write-Host "  Blob:   http://127.0.0.1:$AzuriteBlobPort/devstoreaccount1" -ForegroundColor Green
+}
 Write-Host ''
-Write-Host "Logs:  $runtimeDir" -ForegroundColor DarkGray
-Write-Host "Stop:  .\scripts\stop.ps1" -ForegroundColor DarkGray
+Write-Host "Logs:  $runtimeDir"           -ForegroundColor DarkGray
+Write-Host "Seed:  .\scripts\seed.ps1"    -ForegroundColor DarkGray
+Write-Host "Stop:  .\scripts\stop.ps1"    -ForegroundColor DarkGray

@@ -1,19 +1,26 @@
 #requires -Version 7
 <#
 .SYNOPSIS
-  Stops the local Vue + Functions dev stack started by start.ps1.
+  Stops the local dev stack: vite + func + Azurite + Cosmos emulator.
 
 .DESCRIPTION
-  First tries the PIDs persisted by start.ps1 in scripts/.runtime/pids.json.
-  Falls back to killing whatever is listening on ports 5173 and 7071. Safe
-  to run repeatedly.
+  - Kills the vite + func process trees recorded in scripts/.runtime/pids.json
+    and sweeps ports 5173 + 7071 as a safety net.
+  - Stops the slypn-azurite and slypn-cosmos Docker containers (they remain
+    so data persists across start/stop cycles — use scripts/clean.ps1 to
+    remove them).
+  - Pass -KeepEmulators to leave the Docker containers running (useful when
+    you want to seed or run the API on its own).
 
 .EXAMPLE
   .\scripts\stop.ps1
+  .\scripts\stop.ps1 -KeepEmulators
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [switch] $KeepEmulators
+)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
@@ -22,7 +29,7 @@ $runtimeDir = Join-Path $PSScriptRoot '.runtime'
 $pidFile    = Join-Path $runtimeDir 'pids.json'
 
 if (Test-Path $pidFile) {
-    Write-Step 'Stopping by recorded PIDs'
+    Write-Step 'Stopping vite + func by recorded PIDs'
     $procIds = Get-Content $pidFile -Raw | ConvertFrom-Json
     foreach ($key in @('web', 'api')) {
         $procId = $procIds.$key
@@ -30,7 +37,6 @@ if (Test-Path $pidFile) {
             $name = (Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName
             if ($name) {
                 Write-Host "    killing PID $procId ($name) [$key]" -ForegroundColor DarkGray
-                # Kill the whole process tree (Start-Process spawns npm.cmd which spawns node).
                 Get-CimInstance Win32_Process |
                     Where-Object { $_.ParentProcessId -eq $procId } |
                     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -41,16 +47,25 @@ if (Test-Path $pidFile) {
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
 }
 
-# Sweep ports as a safety net (catches orphaned children).
-Write-Step "Sweeping ports $WebPort and $ApiPort"
+Write-Step "Sweeping app ports $WebPort, $ApiPort"
 Stop-Port $WebPort
 Stop-Port $ApiPort
 
+if (-not $KeepEmulators) {
+    if (Test-DockerRunning) {
+        Write-Step 'Stopping emulator containers'
+        foreach ($name in @($AzuriteContainer, $CosmosContainer)) {
+            if (Test-ContainerRunning $name) {
+                Write-Host "    stopping $name" -ForegroundColor DarkGray
+                docker stop $name | Out-Null
+            }
+        }
+    } else {
+        Write-Warn 'Docker not reachable; skipping emulator stop.'
+    }
+}
+
 Start-Sleep -Milliseconds 500
 foreach ($p in @($WebPort, $ApiPort)) {
-    if (Test-Port $p) {
-        Write-Warn "Port $p still in use."
-    } else {
-        Write-Ok "Port $p free"
-    }
+    if (Test-Port $p) { Write-Warn "Port $p still in use." } else { Write-Ok "Port $p free" }
 }

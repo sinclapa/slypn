@@ -34,16 +34,27 @@ internal static class FunctionHelpers
         return (body, null);
     }
 
-    public static string? IfMatch(HttpRequestData req) =>
-        req.Headers.TryGetValues("If-Match", out var vals) ? vals.FirstOrDefault() : null;
+    public static string? IfMatch(HttpRequestData req)
+    {
+        if (!req.Headers.TryGetValues("If-Match", out var vals)) return null;
+        // Strip the RFC 7232 surrounding quotes before handing to Cosmos.
+        return vals.FirstOrDefault()?.Trim().Trim('"');
+    }
 
     public static string? QueryParam(HttpRequestData req, string name) =>
         HttpUtility.ParseQueryString(req.Url.Query)[name];
 
+    /// <summary>RFC 7232: ETag values must be wrapped in double quotes.</summary>
+    private static string QuoteEtag(string etag)
+    {
+        var clean = etag.Trim().Trim('"');
+        return $"\"{clean}\"";
+    }
+
     public static async Task<HttpResponseData> Ok<T>(HttpRequestData req, T value, string? etag = null)
     {
         var resp = req.CreateResponse(HttpStatusCode.OK);
-        if (etag is not null) resp.Headers.Add("ETag", etag);
+        if (!string.IsNullOrEmpty(etag)) resp.Headers.Add("ETag", QuoteEtag(etag));
         await resp.WriteAsJsonAsync(value);
         return resp;
     }
@@ -51,7 +62,7 @@ internal static class FunctionHelpers
     public static async Task<HttpResponseData> Created<T>(HttpRequestData req, T value, string? etag = null)
     {
         var resp = req.CreateResponse(HttpStatusCode.Created);
-        if (etag is not null) resp.Headers.Add("ETag", etag);
+        if (!string.IsNullOrEmpty(etag)) resp.Headers.Add("ETag", QuoteEtag(etag));
         await resp.WriteAsJsonAsync(value);
         return resp;
     }

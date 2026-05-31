@@ -13,5 +13,6 @@ public sealed record Newsletter(
     public string Year => IssueDate.Year.ToString("D4");
 
     [JsonPropertyName("_etag")]
+    [Newtonsoft.Json.JsonProperty("_etag")]
     public string? Etag { get; init; }
 }

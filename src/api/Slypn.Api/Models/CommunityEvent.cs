@@ -16,5 +16,6 @@ public sealed record CommunityEvent(
     public string YearMonth => StartsAt.UtcDateTime.ToString("yyyy-MM");
 
     [JsonPropertyName("_etag")]
+    [Newtonsoft.Json.JsonProperty("_etag")]
     public string? Etag { get; init; }
 }

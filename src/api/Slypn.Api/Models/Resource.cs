@@ -10,5 +10,6 @@ public sealed record Resource(
     string Category)
 {
     [JsonPropertyName("_etag")]
+    [Newtonsoft.Json.JsonProperty("_etag")]
     public string? Etag { get; init; }
 }
