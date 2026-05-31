@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import ApprovalsQueue from '@/components/common/ApprovalsQueue.vue'
+import PublishedContent from '@/components/common/PublishedContent.vue'
 import { apiFetch } from '@/lib/api'
 
 type Role = 'Admin' | 'Contributor' | 'Member'
@@ -137,5 +138,7 @@ async function submit() {
     </article>
 
     <ApprovalsQueue />
+
+    <PublishedContent />
   </section>
 </template>
