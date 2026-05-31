@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import TulipIcon from '@/components/common/TulipIcon.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const navItems = [
   { to: '/',           label: 'Home' },
@@ -13,7 +14,32 @@ const navItems = [
   { to: '/newsletter', label: 'Newsletter' },
 ]
 
+const auth = useAuthStore()
+const router = useRouter()
 const mobileOpen = ref(false)
+const userMenuOpen = ref(false)
+
+async function onSignIn() {
+  if (!auth.isConfigured) {
+    router.push({ name: 'login' })
+    return
+  }
+  try {
+    await auth.login()
+  } catch (err) {
+    console.error('login failed', err)
+    router.push({ name: 'login' })
+  }
+}
+
+async function onSignOut() {
+  userMenuOpen.value = false
+  try {
+    await auth.logout()
+  } catch (err) {
+    console.error('logout failed', err)
+  }
+}
 </script>
 
 <template>
@@ -41,13 +67,49 @@ const mobileOpen = ref(false)
         </RouterLink>
       </nav>
 
-      <div class="hidden md:block">
-        <RouterLink
-          to="/login"
+      <div class="relative hidden md:block">
+        <button
+          v-if="auth.isAuthenticated"
+          type="button"
+          class="flex items-center gap-2 rounded-full bg-slypn-50 px-3 py-1.5 text-sm font-semibold text-slypn-700 hover:bg-slypn-100"
+          :aria-expanded="userMenuOpen"
+          @click="userMenuOpen = !userMenuOpen"
+        >
+          <span class="grid h-7 w-7 place-items-center rounded-full bg-slypn-600 text-xs font-bold text-white">
+            {{ auth.displayName.charAt(0).toUpperCase() }}
+          </span>
+          <span class="max-w-[10rem] truncate">{{ auth.displayName }}</span>
+        </button>
+        <button
+          v-else
+          type="button"
           class="rounded-md bg-slypn-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slypn-700"
+          @click="onSignIn"
         >
           Sign in
-        </RouterLink>
+        </button>
+
+        <div
+          v-if="auth.isAuthenticated && userMenuOpen"
+          class="absolute right-0 mt-2 w-56 overflow-hidden rounded-md border border-slypn-100 bg-white shadow-lg"
+          @mouseleave="userMenuOpen = false"
+        >
+          <div class="border-b border-slypn-100 px-4 py-2 text-xs text-slypn-900/60">
+            Signed in as
+            <p class="mt-0.5 truncate font-medium text-slypn-900">{{ auth.account?.username }}</p>
+          </div>
+          <ul class="text-sm text-slypn-700">
+            <li v-if="auth.isContributor || auth.isAdmin">
+              <RouterLink to="/editor" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Editor</RouterLink>
+            </li>
+            <li v-if="auth.isAdmin">
+              <RouterLink to="/admin" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Admin</RouterLink>
+            </li>
+            <li>
+              <button class="block w-full px-4 py-2 text-left hover:bg-slypn-50" @click="onSignOut">Sign out</button>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <button
@@ -84,13 +146,20 @@ const mobileOpen = ref(false)
         >
           {{ item.label }}
         </RouterLink>
-        <RouterLink
-          to="/login"
+        <button
+          v-if="!auth.isAuthenticated"
           class="mt-1 rounded-md bg-slypn-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-slypn-700"
-          @click="mobileOpen = false"
+          @click="mobileOpen = false; onSignIn()"
         >
           Sign in
-        </RouterLink>
+        </button>
+        <button
+          v-else
+          class="mt-1 rounded-md border border-slypn-200 bg-white px-3 py-2 text-center text-base font-semibold text-slypn-700 hover:bg-slypn-50"
+          @click="mobileOpen = false; onSignOut()"
+        >
+          Sign out
+        </button>
       </div>
     </nav>
   </header>

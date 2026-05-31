@@ -1,30 +1,60 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+const error = ref<string | null>(null)
+
+async function signIn() {
+  error.value = null
+  try {
+    await auth.login()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
 </script>
 
 <template>
   <HeroBanner
     eyebrow="Sign in"
-    title="Member sign-in is coming soon"
-    subtitle="We're wiring up sign-in via Entra External ID — with Google and Facebook as social options — as part of Phase 3 of the build. Until then, all public content is available without signing in."
+    title="Sign in to SLYPN"
+    subtitle="Sign-in uses Entra External ID with Google or Facebook as social options. Public content is available without signing in; signing in unlocks members-only features, drafts, and admin."
   />
 
-  <section class="mx-auto max-w-3xl px-6 py-16">
-    <h2 class="font-display text-2xl font-bold text-slypn-700">What sign-in will unlock</h2>
-    <ul class="mt-4 space-y-3 text-slypn-900/85">
-      <li><strong>Members</strong> — a private dashboard, RSVP for events, comment on articles.</li>
-      <li><strong>Contributors</strong> — write articles and blog posts in the browser with autosave; admin approves before publication.</li>
-      <li><strong>Admins</strong> — manage members, articles, events, resources, and the newsletter.</li>
-    </ul>
+  <section class="mx-auto max-w-2xl px-6 py-16">
+    <div v-if="auth.isAuthenticated" class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
+      <p class="font-display text-lg font-semibold text-slypn-700">
+        You&rsquo;re already signed in as {{ auth.displayName }}.
+      </p>
+      <p class="mt-2 text-sm text-slypn-900/75">
+        Use the menu in the top right to view your editor or admin tools, or to sign out.
+      </p>
+    </div>
 
-    <p class="mt-8 text-sm text-slypn-900/70">
-      The detailed plan is on
-      <a
-        href="https://github.com/sinclapa/slypn/issues/18"
-        class="text-slypn-600 underline underline-offset-4 hover:text-slypn-700"
-        rel="noopener"
-        target="_blank"
-      >issue #18 (Phase 3 &mdash; Auth + RBAC)</a>.
-    </p>
+    <div v-else-if="auth.isConfigured">
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded-md bg-slypn-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-slypn-700"
+        @click="signIn"
+      >
+        Continue with Entra External ID
+      </button>
+      <p class="mt-3 text-sm text-slypn-900/65">
+        You&rsquo;ll be redirected to the SLYPN sign-in page where you can use email + password, Google, or Facebook.
+      </p>
+      <p v-if="error" class="mt-4 rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ error }}</p>
+    </div>
+
+    <div v-else class="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+      <p class="font-display font-semibold">Sign-in is not configured in this environment.</p>
+      <p class="mt-2">
+        Set <code class="rounded bg-amber-100 px-1.5 py-0.5">VITE_MSAL_CLIENT_ID</code>,
+        <code class="rounded bg-amber-100 px-1.5 py-0.5">VITE_MSAL_AUTHORITY</code>, and
+        <code class="rounded bg-amber-100 px-1.5 py-0.5">VITE_API_SCOPE</code> in <code>src/web/.env.local</code>.
+        See <a class="underline" href="https://github.com/sinclapa/slypn/blob/main/docs/auth-setup.md" rel="noopener" target="_blank">docs/auth-setup.md</a>.
+      </p>
+    </div>
   </section>
 </template>
