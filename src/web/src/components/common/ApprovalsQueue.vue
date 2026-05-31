@@ -15,6 +15,7 @@ interface PendingArticle {
   tags: string[]
   status: string
   readingMinutes: number
+  type?: 'article' | 'blog'  // missing on legacy rows; treat as 'article'
 }
 
 const articles  = ref<PendingArticle[]>([])
@@ -38,9 +39,21 @@ async function load() {
   loading.value = true
   loadError.value = null
   try {
-    const resp = await apiFetch('/articles?status=in-review')
-    if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`)
-    articles.value = await resp.json() as PendingArticle[]
+    // /api/articles is type-filtered to "article", so blog submissions never
+    // appear there. Pull both endpoints in parallel and merge.
+    const [articlesResp, blogResp] = await Promise.all([
+      apiFetch('/articles?status=in-review'),
+      apiFetch('/blog?status=in-review'),
+    ])
+    if (!articlesResp.ok) throw new Error(`/articles: ${articlesResp.status} ${articlesResp.statusText}`)
+    if (!blogResp.ok)     throw new Error(`/blog: ${blogResp.status} ${blogResp.statusText}`)
+    const [a, b] = await Promise.all([
+      articlesResp.json() as Promise<PendingArticle[]>,
+      blogResp.json()     as Promise<PendingArticle[]>,
+    ])
+    articles.value = [...a, ...b].sort(
+      (x, y) => +new Date(y.publishedAt) - +new Date(x.publishedAt),
+    )
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -150,13 +163,25 @@ onMounted(load)
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
-                <button
-                  type="button"
-                  class="text-left font-display text-lg font-bold text-slypn-700 hover:text-slypn-600"
-                  @click="toggle(article.id)"
-                >
-                  {{ article.title || '(untitled)' }}
-                </button>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span
+                    :class="[
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                      article.type === 'blog'
+                        ? 'bg-violet-100 text-violet-800'
+                        : 'bg-slypn-100 text-slypn-700',
+                    ]"
+                  >
+                    {{ article.type === 'blog' ? 'Blog' : 'Article' }}
+                  </span>
+                  <button
+                    type="button"
+                    class="text-left font-display text-lg font-bold text-slypn-700 hover:text-slypn-600"
+                    @click="toggle(article.id)"
+                  >
+                    {{ article.title || '(untitled)' }}
+                  </button>
+                </div>
                 <p class="mt-1 text-xs text-slypn-900/60">
                   Submitted {{ formatDateTime(article.publishedAt) }}
                   &middot; {{ article.category || 'uncategorised' }}
