@@ -33,15 +33,17 @@ A user flow is the policy that drives the hosted sign-up + sign-in pages.
 
 1. **Identity → External Identities → User flows → New user flow**.
 2. Name: `B2C_1_SLYPN_SignInSignUp`. (The portal forces the `B2C_1_` prefix for historical reasons; we'll refer to it as `slypn-signin-signup` everywhere else.)
-3. **Identity providers** — leave **Email with password** selected. Google + Facebook are added in step 3.
-4. **User attributes and token claims**:
-   - Collect on sign-up: **Display Name**, **Email Address**.
-   - Return in token: **Display Name**, **Email Address**, **User's Object ID**, **Identity Provider**.
-   The Object ID is what our API uses as the canonical SLYPN member id.
-5. **Application claims** — make sure `oid`, `email`, and `name` are returned. (Roles come from app-role assignments on the API app registration — that lands in #20.)
-6. **Create**.
+3. **Identity providers** — leave **Email with password** selected. Google + Facebook are added in section 3.
+4. **Create** the flow.
+5. Open the flow and choose **User attributes**: tick **Display Name** and **Email Address**. Skip everything else — we don't need address / job title / etc.
 
-After creation, **Run user flow** (top of the policy blade) is the quickest smoke test once an app registration exists in #20.
+> **Note on claims**
+>
+> In the modern Entra External ID portal there is **no separate "Application claims" tab**. Ticking attributes on the User attributes screen drives both what's collected on sign-up *and* what flows into the id token. `oid` is always returned without any setting, and the `roles` claim comes from app-role assignments on the API app registration in section 6.
+>
+> If you later notice that `email` or `name` isn't appearing in tokens, the fallback is **Identity → Applications → App registrations → `slypn-api` → Token configuration → + Add optional claim** (Token type: ID), and tick the missing claims there.
+
+After saving, **Run user flow** (top of the policy blade) is the quickest smoke test once an app registration exists in section 6.
 
 ---
 
