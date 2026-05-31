@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Slypn.Api.Models;
 
 public sealed record CommunityEvent(
@@ -12,4 +14,7 @@ public sealed record CommunityEvent(
 {
     /// <summary>Partition key for the events container — "yyyy-MM" of StartsAt (UTC).</summary>
     public string YearMonth => StartsAt.UtcDateTime.ToString("yyyy-MM");
+
+    [JsonPropertyName("_etag")]
+    public string? Etag { get; init; }
 }

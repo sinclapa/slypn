@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Slypn.Api.Models;
 
 public sealed record Resource(
@@ -5,4 +7,8 @@ public sealed record Resource(
     string Title,
     string Description,
     string Url,
-    string Category);
+    string Category)
+{
+    [JsonPropertyName("_etag")]
+    public string? Etag { get; init; }
+}
