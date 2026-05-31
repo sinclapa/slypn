@@ -15,6 +15,12 @@ public sealed record Article(
     IReadOnlyList<string> Tags,
     string Status = "published")
 {
+    /// <summary>Author's Entra oid — set on submit; carries through workflow transitions.</summary>
+    public string? AuthorId { get; init; }
+
+    /// <summary>Set when an admin rejects an in-review article. Null otherwise.</summary>
+    public string? RejectionReason { get; init; }
+
     /// <summary>Cosmos optimistic-concurrency token. Echoed in the ETag HTTP header for clients.</summary>
     [JsonPropertyName("_etag")]
     [Newtonsoft.Json.JsonProperty("_etag")]

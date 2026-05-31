@@ -38,6 +38,9 @@ const draft = ref<DraftPayload>({
   readingMinutes: 0,
 })
 const uploadError = ref<string | null>(null)
+const submitting = ref(false)
+const submitMessage = ref<string | null>(null)
+const submitError   = ref<string | null>(null)
 
 async function loadExisting() {
   try {
@@ -59,6 +62,28 @@ async function save(value: DraftPayload) {
   if (!resp.ok) {
     const body = await resp.text().catch(() => '')
     throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
+  }
+}
+
+async function submitForReview() {
+  if (submitting.value) return
+  submitMessage.value = null
+  submitError.value = null
+  submitting.value = true
+  try {
+    // Force a save first so the in-review article has the latest body.
+    await save(draft.value)
+    const resp = await apiFetch(`/drafts/${draftId.value}/submit`, { method: 'POST' })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
+    }
+    submitMessage.value = 'Submitted for admin review. You can start a new draft now.'
+    localStorage.removeItem(DRAFT_ID_KEY)
+  } catch (err) {
+    submitError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -91,9 +116,17 @@ const tagsCsv = computed({
   <HeroBanner
     eyebrow="Editor"
     title="Write something for the community"
-    subtitle="Edits autosave 1.5s after you stop typing. Submitting for admin review lands in #28."
+    subtitle="Edits autosave 1.5s after you stop typing. Hit Submit when you're ready for an admin to review."
   >
     <template #actions>
+      <button
+        type="button"
+        class="rounded-md bg-slypn-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700 disabled:opacity-50"
+        :disabled="submitting || !draft.title || !draft.summary || !draft.body"
+        @click="submitForReview"
+      >
+        {{ submitting ? 'Submitting…' : 'Submit for review' }}
+      </button>
       <button
         type="button"
         class="rounded-md border border-slypn-200 bg-white px-4 py-2 text-sm font-semibold text-slypn-700 hover:bg-slypn-50"
@@ -181,6 +214,12 @@ const tagsCsv = computed({
 
     <p v-if="uploadError" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
       Image upload failed: {{ uploadError }}
+    </p>
+    <p v-if="submitError" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
+      Submit failed: {{ submitError }}
+    </p>
+    <p v-if="submitMessage" class="rounded-md bg-emerald-50 px-4 py-2 text-sm text-emerald-900">
+      {{ submitMessage }}
     </p>
   </section>
 </template>
