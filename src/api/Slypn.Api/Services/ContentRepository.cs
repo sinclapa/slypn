@@ -255,6 +255,48 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         return resp.Resource with { Etag = resp.ETag };
     }
 
+    // ---- Drafts --------------------------------------------------------------
+    public async Task<Draft?> GetDraftAsync(string id, string authorId, CancellationToken ct)
+    {
+        EnsureWrites();
+        try
+        {
+            var resp = await cosmos.Drafts.ReadItemAsync<Draft>(id, new PartitionKey(authorId), cancellationToken: ct);
+            return resp.Resource with { Etag = resp.ETag };
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task<IReadOnlyList<Draft>> ListDraftsByAuthorAsync(string authorId, CancellationToken ct)
+    {
+        EnsureWrites();
+        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.updatedAt DESC");
+        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(authorId) };
+        return await CollectAsync<Draft>(cosmos.Drafts, query, options, ct);
+    }
+
+    public async Task<Draft> UpsertDraftAsync(Draft draft, string? ifMatch, CancellationToken ct)
+    {
+        EnsureWrites();
+        var resp = await cosmos.Drafts.UpsertItemAsync(draft,
+            new PartitionKey(draft.AuthorId),
+            new ItemRequestOptions { IfMatchEtag = ifMatch },
+            ct);
+        return resp.Resource with { Etag = resp.ETag };
+    }
+
+    public async Task DeleteDraftAsync(string id, string authorId, string? ifMatch, CancellationToken ct)
+    {
+        EnsureWrites();
+        await cosmos.Drafts.DeleteItemAsync<Draft>(id,
+            new PartitionKey(authorId),
+            new ItemRequestOptions { IfMatchEtag = ifMatch },
+            ct);
+    }
+
     // ---- helpers --------------------------------------------------------------
     private void EnsureWrites()
     {

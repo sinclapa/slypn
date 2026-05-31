@@ -1,0 +1,23 @@
+using System.Text.Json.Serialization;
+
+namespace Slypn.Api.Models;
+
+public sealed record Draft(
+    string Id,
+    string AuthorId,
+    string AuthorName,
+    string Type,        // "article" | "blog"
+    string Title,
+    string Slug,
+    string Summary,
+    string Body,
+    string Category,
+    IReadOnlyList<string> Tags,
+    int ReadingMinutes,
+    DateTime CreatedAt,
+    DateTime UpdatedAt)
+{
+    [JsonPropertyName("_etag")]
+    [Newtonsoft.Json.JsonProperty("_etag")]
+    public string? Etag { get; init; }
+}
