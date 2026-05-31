@@ -63,3 +63,6 @@ jobs:
 
       - name: Build (Seed CLI)
         run: dotnet build src/api/Slypn.Seed/Slypn.Seed.csproj --configuration Release
+
+      - name: Test (API)
+        run: dotnet test src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj --configuration Release --logger "trx;LogFileName=test-results.trx" --verbosity normal

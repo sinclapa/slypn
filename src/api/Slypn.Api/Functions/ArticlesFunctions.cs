@@ -10,7 +10,7 @@ using static Slypn.Api.Functions.FunctionHelpers;
 
 namespace Slypn.Api.Functions;
 
-public sealed class ArticlesFunctions(IContentRepository repo, ILogger<ArticlesFunctions> log)
+public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sanitizer, ILogger<ArticlesFunctions> log)
 {
     [Function("GetArticles")]
     public async Task<HttpResponseData> GetArticles(
@@ -40,9 +40,10 @@ public sealed class ArticlesFunctions(IContentRepository repo, ILogger<ArticlesF
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var (input, err) = await ReadValidatedAsync<ArticleInput>(req, ct);
         if (err is not null) return err;
+        input!.Body = sanitizer.Sanitize(input.Body);
         try
         {
-            var article = await repo.CreateArticleAsync(input!, ct);
+            var article = await repo.CreateArticleAsync(input, ct);
             return await Created(req, article, article.Etag);
         }
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
@@ -57,9 +58,10 @@ public sealed class ArticlesFunctions(IContentRepository repo, ILogger<ArticlesF
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var (input, err) = await ReadValidatedAsync<ArticleInput>(req, ct);
         if (err is not null) return err;
+        input!.Body = sanitizer.Sanitize(input.Body);
         try
         {
-            var article = await repo.ReplaceArticleAsync(id, input!, IfMatch(req), ct);
+            var article = await repo.ReplaceArticleAsync(id, input, IfMatch(req), ct);
             return await Ok(req, article, article.Etag);
         }
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
