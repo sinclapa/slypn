@@ -16,6 +16,7 @@ public interface IContentRepository
 
     // Reads ------------------------------------------------------------------
     Task<IReadOnlyList<Article>>        ListArticlesAsync(string? status, CancellationToken ct);
+    Task<IReadOnlyList<Article>>        ListBlogPostsAsync(string? status, CancellationToken ct);
     Task<Article?>                      GetArticleBySlugAsync(string slug, CancellationToken ct);
     Task<IReadOnlyList<CommunityEvent>> ListEventsAsync(bool upcomingOnly, CancellationToken ct);
     Task<IReadOnlyList<Resource>>       ListResourcesAsync(CancellationToken ct);
