@@ -5,7 +5,8 @@ import { useAuthStore } from '@/stores/auth'
  *
  * - Prepends `/api` so callers pass the relative path (e.g. `/articles`).
  * - Attaches `Authorization: Bearer <token>` when the user is signed in.
- * - Defaults Content-Type to application/json for requests with a body.
+ * - Defaults Content-Type to application/json for requests with a body
+ *   UNLESS the body is FormData (browsers set the multipart boundary).
  *
  * Public endpoints work unauthenticated; the bearer header is just absent.
  */
@@ -17,7 +18,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     const token = await auth.acquireToken()
     if (token) headers.set('Authorization', `Bearer ${token}`)
   }
-  if (init.body && !headers.has('Content-Type')) {
+  if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
 
