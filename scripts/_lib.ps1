@@ -10,6 +10,17 @@ $script:ApiDir   = Join-Path $RepoRoot 'src/api/Slypn.Api'
 $script:WebPort = 5173
 $script:ApiPort = 7071
 
+# Emulators (Docker).
+$script:AzuriteContainer = 'slypn-azurite'
+$script:AzuriteImage     = 'mcr.microsoft.com/azure-storage/azurite:latest'
+$script:AzuriteBlobPort  = 10000
+$script:AzuriteQueuePort = 10001
+$script:AzuriteTablePort = 10002
+
+$script:CosmosContainer  = 'slypn-cosmos'
+$script:CosmosImage      = 'mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview'
+$script:CosmosPort       = 8081
+
 function Write-Step($msg) {
     Write-Host "==> $msg" -ForegroundColor Cyan
 }
@@ -36,4 +47,30 @@ function Stop-Port($port) {
             Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
         }
     }
+}
+
+# -- Docker helpers ---------------------------------------------------------
+function Test-DockerRunning {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
+    docker info --format '{{.ServerVersion}}' 2>$null | Out-Null
+    return $LASTEXITCODE -eq 0
+}
+
+function Test-ContainerRunning($name) {
+    $found = docker ps --filter "name=^/$name$" --format '{{.Names}}' 2>$null
+    return [bool]($found -and $found.Trim() -eq $name)
+}
+
+function Test-ContainerExists($name) {
+    $found = docker ps -a --filter "name=^/$name$" --format '{{.Names}}' 2>$null
+    return [bool]($found -and $found.Trim() -eq $name)
+}
+
+function Wait-Port($port, $timeoutSec) {
+    $start = Get-Date
+    while (((Get-Date) - $start).TotalSeconds -lt $timeoutSec) {
+        if (Test-Port $port) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
 }

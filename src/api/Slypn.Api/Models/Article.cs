@@ -17,5 +17,6 @@ public sealed record Article(
 {
     /// <summary>Cosmos optimistic-concurrency token. Echoed in the ETag HTTP header for clients.</summary>
     [JsonPropertyName("_etag")]
+    [Newtonsoft.Json.JsonProperty("_etag")]
     public string? Etag { get; init; }
 }
