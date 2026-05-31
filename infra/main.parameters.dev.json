@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "env":                  { "value": "dev" },
+    "location":             { "value": "uksouth" },
+    "enableCosmosFreeTier": { "value": true },
+    "repositoryUrl":        { "value": "https://github.com/sinclapa/slypn" },
+    "repositoryBranch":     { "value": "main" }
+  }
+}

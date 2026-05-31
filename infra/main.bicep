@@ -1,12 +1,15 @@
-// Phase 1 skeleton — resources only, no managed identity / role assignments yet.
-// Full IaC (managed identity on SWA → Cosmos Data Contributor + Blob Data Contributor,
-// per-env parameter files, custom domain) lands in #38 (Phase 6).
+// SLYPN infra — full resource-group deployment.
+// Phase 6.1 — adds managed identity on SWA + role assignments to Cosmos
+// (built-in Data Contributor) and Storage (Blob Data Contributor) so the
+// API can drop the connection-string fallback in prod.
 //
-// One-time RG bootstrap (not in this file; do manually for now):
-//   az group create -n rg-slypn-dev -l uksouth
+// One-time RG bootstrap (manual):
+//   az group create -n rg-slypn-dev  -l uksouth
+//   az group create -n rg-slypn-prod -l uksouth
 //
-// Deploy when ready (Phase 6):
-//   az deployment group create -g rg-slypn-dev -f infra/main.bicep -p env=dev
+// Deploy:
+//   az deployment group create -g rg-slypn-dev  -f infra/main.bicep -p @infra/main.parameters.dev.json
+//   az deployment group create -g rg-slypn-prod -f infra/main.bicep -p @infra/main.parameters.prod.json
 
 targetScope = 'resourceGroup'
 
@@ -21,16 +24,27 @@ param location string = resourceGroup().location
 @description('Set to false if this subscription already has a free-tier Cosmos account (only one allowed).')
 param enableCosmosFreeTier bool = true
 
-@description('GitHub repo to associate with the Static Web App. Empty disables CI/CD wiring at deploy time.')
+@description('GitHub repo to associate with the Static Web App.')
 param repositoryUrl string = 'https://github.com/sinclapa/slypn'
 
 @description('Branch to track for the Static Web App.')
 param repositoryBranch string = 'main'
 
+@description('Tags applied to every resource.')
+param tags object = {
+  app: 'slypn'
+  env: env
+  managedBy: 'bicep'
+}
+
 // Short prefixes derived from env. Storage account names cannot have hyphens.
 var prefixDash = 'slypn-${env}'
 var prefixFlat = 'slypn${env}'
 var nameSuffix = uniqueString(resourceGroup().id)
+
+// Built-in role ids
+var cosmosDataContributorRoleId = '00000000-0000-0000-0000-000000000002'                       // Cosmos DB Built-in Data Contributor (data plane)
+var blobDataContributorRoleId   = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'                       // Storage Blob Data Contributor (Azure RBAC)
 
 // ---------------------------------------------------------------------------
 // Storage account + media container
@@ -38,11 +52,12 @@ var nameSuffix = uniqueString(resourceGroup().id)
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: take('${prefixFlat}st${nameSuffix}', 24)
   location: location
+  tags: tags
   sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
   properties: {
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true
+    allowSharedKeyAccess: true        // SWA / dev still uses connection strings; tightened to false post-rollout.
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
   }
@@ -68,6 +83,7 @@ resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containe
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   name: 'cosmos-${prefixDash}-${nameSuffix}'
   location: location
+  tags: tags
   kind: 'GlobalDocumentDB'
   properties: {
     databaseAccountOfferType: 'Standard'
@@ -86,12 +102,17 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
 }
 
 // ---------------------------------------------------------------------------
-// Azure Static Web Apps (Standard SKU — includes custom domain + auth)
+// Azure Static Web Apps (Standard SKU) — system-assigned managed identity
+// for outbound calls to Cosmos + Blob without storing secrets.
 // SWA is region-pinned to a small set; we use westeurope for UK proximity.
 // ---------------------------------------------------------------------------
 resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
   name: 'swa-${prefixDash}'
   location: 'westeurope'
+  tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
   sku: {
     name: 'Standard'
     tier: 'Standard'
@@ -109,9 +130,39 @@ resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Outputs — consumed by the deploy workflow in #41 (Phase 6).
+// Role assignments — let the SWA managed identity reach Cosmos + Blob.
 // ---------------------------------------------------------------------------
-output swaUrl string = 'https://${swa.properties.defaultHostname}'
-output cosmosEndpoint string = cosmos.properties.documentEndpoint
-output storageAccountName string = storage.name
-output mediaContainerName string = mediaContainer.name
+
+// Cosmos DB Built-in Data Contributor (data-plane RBAC, not the control plane).
+// The role is referenced via the Cosmos account's sqlRoleDefinitions namespace.
+resource cosmosDataAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
+  parent: cosmos
+  name: guid(cosmos.id, swa.id, cosmosDataContributorRoleId)
+  properties: {
+    roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosDataContributorRoleId}'
+    principalId: swa.identity.principalId
+    scope: cosmos.id
+  }
+}
+
+// Storage Blob Data Contributor at the storage account scope.
+resource blobDataAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storage
+  name: guid(storage.id, swa.id, blobDataContributorRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobDataContributorRoleId)
+    principalId: swa.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Outputs — consumed by the deploy workflow in #41.
+// ---------------------------------------------------------------------------
+output swaUrl              string = 'https://${swa.properties.defaultHostname}'
+output swaName             string = swa.name
+output cosmosEndpoint      string = cosmos.properties.documentEndpoint
+output cosmosAccountName   string = cosmos.name
+output storageAccountName  string = storage.name
+output mediaContainerName  string = mediaContainer.name
+output swaPrincipalId      string = swa.identity.principalId
