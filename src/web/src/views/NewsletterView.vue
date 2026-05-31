@@ -2,10 +2,16 @@
 import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import NewsletterCard from '@/components/common/NewsletterCard.vue'
-import { mockNewsletters } from '@/mock/newsletters'
+import { apiJson } from '@/lib/api'
+import { useAsyncData } from '@/composables/useAsyncData'
+import type { Newsletter } from '@/types/content'
 
 const email = ref('')
 const submitted = ref(false)
+
+const { data: newsletters, loading, error, refresh } = useAsyncData(
+  () => apiJson<Newsletter[]>('/newsletters'),
+)
 
 function subscribe() {
   if (!email.value) return
@@ -48,12 +54,24 @@ function subscribe() {
 
   <section class="mx-auto max-w-4xl px-6 py-16">
     <h2 class="font-display text-2xl font-bold text-slypn-700">Past issues</h2>
-    <div class="mt-6 grid gap-5 sm:grid-cols-2">
+
+    <p v-if="loading && !newsletters" class="mt-6 text-slypn-900/70">Loading&hellip;</p>
+
+    <div v-else-if="error" class="mt-6 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      Couldn&rsquo;t load newsletters: {{ error }}.
+      <button class="ml-2 underline" @click="refresh">Retry</button>
+    </div>
+
+    <div v-else class="mt-6 grid gap-5 sm:grid-cols-2">
       <NewsletterCard
-        v-for="n in mockNewsletters"
+        v-for="n in newsletters ?? []"
         :key="n.id"
         :newsletter="n"
       />
     </div>
+
+    <p v-if="!loading && !error && !newsletters?.length" class="mt-6 text-slypn-900/70">
+      No newsletters yet.
+    </p>
   </section>
 </template>

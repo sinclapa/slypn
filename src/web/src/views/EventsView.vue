@@ -3,13 +3,20 @@ import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import EventCard from '@/components/common/EventCard.vue'
 import EventCalendar from '@/components/common/EventCalendar.vue'
-import { mockEvents } from '@/mock/events'
+import { apiJson } from '@/lib/api'
+import { useAsyncData } from '@/composables/useAsyncData'
+import type { CommunityEvent } from '@/types/content'
 
 const view = ref<'list' | 'calendar'>('list')
 
+const { data: events, loading, error, refresh } = useAsyncData(
+  () => apiJson<CommunityEvent[]>('/events'),
+)
+
 const upcoming = computed(() => {
+  const list = events.value ?? []
   const now = Date.now()
-  return [...mockEvents]
+  return [...list]
     .filter(e => +new Date(e.startsAt) >= now)
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt))
 })
@@ -48,13 +55,22 @@ const upcoming = computed(() => {
   </HeroBanner>
 
   <section class="mx-auto max-w-4xl px-6 py-16">
-    <div v-if="view === 'list'" class="space-y-4">
+    <p v-if="loading && !events" class="text-center text-slypn-900/70">
+      Loading events&hellip;
+    </p>
+
+    <div v-else-if="error" class="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      Couldn&rsquo;t load events: {{ error }}.
+      <button class="ml-2 underline" @click="refresh">Retry</button>
+    </div>
+
+    <div v-else-if="view === 'list'" class="space-y-4">
       <EventCard v-for="event in upcoming" :key="event.id" :event="event" />
       <p v-if="!upcoming.length" class="text-center text-slypn-900/70">
         No upcoming events listed.
       </p>
     </div>
 
-    <EventCalendar v-else :events="mockEvents" />
+    <EventCalendar v-else :events="events ?? []" />
   </section>
 </template>
