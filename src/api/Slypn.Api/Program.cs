@@ -4,6 +4,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Services;
 
@@ -37,6 +38,18 @@ var host = new HostBuilder()
             .AddOptions<EntraOptions>()
             .Bind(context.Configuration.GetSection(EntraOptions.SectionName));
         services.AddSingleton<IJwtValidator, EntraJwtValidator>();
+
+        services
+            .AddOptions<GraphOptions>()
+            .Bind(context.Configuration.GetSection(GraphOptions.SectionName));
+        services.AddHttpClient();
+        services.AddSingleton<IInviteService>(sp =>
+        {
+            var graphOpts = sp.GetRequiredService<IOptions<GraphOptions>>().Value;
+            return graphOpts.IsConfigured
+                ? ActivatorUtilities.CreateInstance<GraphInviteService>(sp)
+                : ActivatorUtilities.CreateInstance<LoggingInviteService>(sp);
+        });
     })
     .Build();
 

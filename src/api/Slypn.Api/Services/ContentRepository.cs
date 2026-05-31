@@ -227,6 +227,34 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             ct);
     }
 
+    // ---- Members -------------------------------------------------------------
+    public async Task<Member?> GetMemberByEmailAsync(string email, CancellationToken ct)
+    {
+        EnsureWrites();
+        var normalized = email.Trim().ToLowerInvariant();
+        var query = new QueryDefinition("SELECT * FROM c WHERE LOWER(c.email) = @email")
+            .WithParameter("@email", normalized);
+        var results = await CollectAsync<Member>(cosmos.Members, query, new QueryRequestOptions(), ct);
+        return results.FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct)
+    {
+        EnsureWrites();
+        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.invitedAt DESC");
+        return await CollectAsync<Member>(cosmos.Members, query, new QueryRequestOptions(), ct);
+    }
+
+    public async Task<Member> UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct)
+    {
+        EnsureWrites();
+        var resp = await cosmos.Members.UpsertItemAsync(member,
+            new PartitionKey(member.Id),
+            new ItemRequestOptions { IfMatchEtag = ifMatch },
+            ct);
+        return resp.Resource with { Etag = resp.ETag };
+    }
+
     // ---- helpers --------------------------------------------------------------
     private void EnsureWrites()
     {
