@@ -2,6 +2,8 @@ using System.Net;
 using HttpMultipartParser;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.OpenApi.Models;
 using Slypn.Api.Services;
 
 namespace Slypn.Api.Functions;
@@ -13,6 +15,8 @@ public sealed class MediaFunctions(IBlobService blob)
     /// Returns { name, url } where `url` is a 15-minute read SAS.
     /// </summary>
     [Function("UploadMedia")]
+    [OpenApiOperation(operationId: "media.upload", tags: new[] { "media" }, Summary = "Upload media", Description = "Uploads a media file and returns its blob name and read URL.")]
+    [OpenApiRequestBody(contentType: "multipart/form-data", bodyType: typeof(object), Required = true, Description = "Multipart form body with a single file part named file.")]
     public async Task<HttpResponseData> Upload(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "media")] HttpRequestData req)
     {

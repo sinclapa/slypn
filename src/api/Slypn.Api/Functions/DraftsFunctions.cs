@@ -2,6 +2,9 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
@@ -14,6 +17,8 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
 {
     [Function("ListMyDrafts")]
     [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "drafts.listMine", tags: new[] { "drafts" }, Summary = "List my drafts", Description = "Returns drafts for the authenticated author.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     public async Task<HttpResponseData> List(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "drafts")] HttpRequestData req,
         FunctionContext context,
@@ -32,6 +37,9 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
 
     [Function("GetDraft")]
     [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "drafts.get", tags: new[] { "drafts" }, Summary = "Get draft", Description = "Returns a draft owned by the authenticated author.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
     public async Task<HttpResponseData> Get(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "drafts/{id}")] HttpRequestData req,
         FunctionContext context,
@@ -56,6 +64,10 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     /// </summary>
     [Function("UpsertDraft")]
     [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "drafts.upsert", tags: new[] { "drafts" }, Summary = "Upsert draft", Description = "Creates or replaces a draft for the authenticated author.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(DraftInput), Required = true, Description = "Draft payload.")]
     public async Task<HttpResponseData> Upsert(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "drafts/{id}")] HttpRequestData req,
         FunctionContext context,
@@ -105,6 +117,9 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
 
     [Function("DeleteDraft")]
     [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "drafts.delete", tags: new[] { "drafts" }, Summary = "Delete draft", Description = "Deletes a draft owned by the authenticated author.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "drafts/{id}")] HttpRequestData req,
         FunctionContext context,
@@ -129,6 +144,9 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     /// </summary>
     [Function("SubmitDraft")]
     [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "drafts.submit", tags: new[] { "drafts" }, Summary = "Submit draft", Description = "Submits a draft for review and promotes it to an article.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
     public async Task<HttpResponseData> Submit(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "drafts/{id}/submit")] HttpRequestData req,
         FunctionContext context,

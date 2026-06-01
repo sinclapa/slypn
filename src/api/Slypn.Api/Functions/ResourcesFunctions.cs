@@ -2,6 +2,9 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
@@ -12,6 +15,7 @@ namespace Slypn.Api.Functions;
 public sealed class ResourcesFunctions(IContentRepository repo, ILogger<ResourcesFunctions> log)
 {
     [Function("GetResources")]
+    [OpenApiOperation(operationId: "resources.list", tags: new[] { "resources" }, Summary = "List resources", Description = "Returns all resources.")]
     public async Task<HttpResponseData> GetResources(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "resources")] HttpRequestData req,
         CancellationToken ct)
@@ -22,6 +26,9 @@ public sealed class ResourcesFunctions(IContentRepository repo, ILogger<Resource
 
     [Function("CreateResource")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "resources.create", tags: new[] { "resources" }, Summary = "Create resource", Description = "Creates a new resource.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ResourceInput), Required = true, Description = "Resource payload.")]
     public async Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "resources")] HttpRequestData req,
         CancellationToken ct)
@@ -39,6 +46,10 @@ public sealed class ResourcesFunctions(IContentRepository repo, ILogger<Resource
 
     [Function("ReplaceResource")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "resources.replace", tags: new[] { "resources" }, Summary = "Replace resource", Description = "Replaces an existing resource.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Resource id.")]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ResourceInput), Required = true, Description = "Resource payload.")]
     public async Task<HttpResponseData> Replace(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "resources/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -56,6 +67,10 @@ public sealed class ResourcesFunctions(IContentRepository repo, ILogger<Resource
 
     [Function("DeleteResource")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "resources.delete", tags: new[] { "resources" }, Summary = "Delete resource", Description = "Deletes a resource using its id and partition key category.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Resource id.")]
+    [OpenApiParameter(name: "category", In = ParameterLocation.Query, Required = true, Type = typeof(string), Description = "Resource partition key category.")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "resources/{id}")] HttpRequestData req,
         string id, CancellationToken ct)

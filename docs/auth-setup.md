@@ -17,7 +17,7 @@ External ID lives in its own tenant — you can't mix customers with workforce u
 5. **Configuration** — choose **Customer**. Pick the closest Azure region (UK South).
 6. **Subscription + resource group** — External ID tenants are billed against an Azure subscription, so the portal asks for both:
    - **Subscription**: the same one you'll deploy SLYPN to so the billing consolidates.
-   - **Resource group**: create a new one called **`rg-slypn-identity`**. Keeping identity in its own RG is a convention — the SWA / Cosmos / Storage RG (`rg-slypn-dev`, `rg-slypn-prod`) can be torn down and re-deployed without losing the tenant. Reusing `rg-slypn-dev` also works but is harder to reason about later.
+   - **Resource group**: create a new one called **`rg-slypn-identity`**. Keeping identity in its own RG is a convention — the SWA / Cosmos / Storage RG (`rg-slypn-prod`) can be torn down and re-deployed without losing the tenant. Reusing `rg-slypn-prod` also works but is harder to reason about later.
 
    The tenant itself doesn't consume RG resources; the RG just anchors the billing line item.
 7. **Review + create**. The tenant takes a couple of minutes to provision.

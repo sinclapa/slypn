@@ -1,5 +1,8 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.OpenApi.Models;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
 
@@ -13,6 +16,8 @@ public sealed class BlogFunctions(IContentRepository repo)
     /// distinguishes by Type if it needs to.
     /// </summary>
     [Function("GetBlogPosts")]
+    [OpenApiOperation(operationId: "blog.list", tags: new[] { "blog" }, Summary = "List blog posts", Description = "Returns published blog posts, optionally filtered by status.")]
+    [OpenApiParameter(name: "status", In = ParameterLocation.Query, Required = false, Type = typeof(string), Description = "Optional status filter.")]
     public async Task<HttpResponseData> GetBlogPosts(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "blog")] HttpRequestData req,
         CancellationToken ct)
