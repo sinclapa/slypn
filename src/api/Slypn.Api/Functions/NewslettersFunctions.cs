@@ -2,6 +2,9 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
@@ -13,6 +16,7 @@ namespace Slypn.Api.Functions;
 public sealed class NewslettersFunctions(IContentRepository repo, ILogger<NewslettersFunctions> log)
 {
     [Function("GetNewsletters")]
+    [OpenApiOperation(operationId: "newsletters.list", tags: new[] { "newsletters" }, Summary = "List newsletters", Description = "Returns all newsletters.")]
     public async Task<HttpResponseData> GetNewsletters(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "newsletters")] HttpRequestData req,
         CancellationToken ct)
@@ -23,6 +27,9 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
 
     [Function("CreateNewsletter")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "newsletters.create", tags: new[] { "newsletters" }, Summary = "Create newsletter", Description = "Creates a newsletter issue.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(NewsletterInput), Required = true, Description = "Newsletter payload.")]
     public async Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "newsletters")] HttpRequestData req,
         CancellationToken ct)
@@ -40,6 +47,10 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
 
     [Function("ReplaceNewsletter")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "newsletters.replace", tags: new[] { "newsletters" }, Summary = "Replace newsletter", Description = "Replaces an existing newsletter.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Newsletter id.")]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(NewsletterInput), Required = true, Description = "Newsletter payload.")]
     public async Task<HttpResponseData> Replace(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "newsletters/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -57,6 +68,10 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
 
     [Function("DeleteNewsletter")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "newsletters.delete", tags: new[] { "newsletters" }, Summary = "Delete newsletter", Description = "Deletes a newsletter using its id and partition key year.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Newsletter id.")]
+    [OpenApiParameter(name: "year", In = ParameterLocation.Query, Required = true, Type = typeof(string), Description = "Newsletter partition key year.")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "newsletters/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -80,6 +95,8 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
     /// SLYPN members in the auth sense.
     /// </summary>
     [Function("SubscribeToNewsletter")]
+    [OpenApiOperation(operationId: "newsletter.subscribe", tags: new[] { "newsletters" }, Summary = "Subscribe to newsletter", Description = "Subscribes an email address to the newsletter.")]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(SubscribeInput), Required = true, Description = "Subscription payload.")]
     public async Task<HttpResponseData> Subscribe(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "newsletter/subscribe")] HttpRequestData req,
         CancellationToken ct)

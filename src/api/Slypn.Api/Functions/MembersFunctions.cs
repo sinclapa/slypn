@@ -2,6 +2,9 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
@@ -20,6 +23,8 @@ public sealed class MembersFunctions(
 
     [Function("ListMembers")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "members.list", tags: new[] { "members" }, Summary = "List members", Description = "Returns all members.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     public async Task<HttpResponseData> List(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "members")] HttpRequestData req,
         CancellationToken ct)
@@ -35,6 +40,9 @@ public sealed class MembersFunctions(
 
     [Function("InviteMember")]
     [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "members.invite", tags: new[] { "members" }, Summary = "Invite member", Description = "Creates or updates a member invitation.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(MemberInviteInput), Required = true, Description = "Invitation payload.")]
     public async Task<HttpResponseData> Invite(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "members/invite")] HttpRequestData req,
         FunctionContext context,
