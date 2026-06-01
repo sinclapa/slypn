@@ -3,12 +3,13 @@
 // (built-in Data Contributor) and Storage (Blob Data Contributor) so the
 // API can drop the connection-string fallback in prod.
 //
+// We run a single production environment; PR previews are handled by the
+// SWA action, not by a second resource group.
+//
 // One-time RG bootstrap (manual):
-//   az group create -n rg-slypn-dev  -l uksouth
 //   az group create -n rg-slypn-prod -l uksouth
 //
 // Deploy:
-//   az deployment group create -g rg-slypn-dev  -f infra/main.bicep -p @infra/main.parameters.dev.json
 //   az deployment group create -g rg-slypn-prod -f infra/main.bicep -p @infra/main.parameters.prod.json
 
 targetScope = 'resourceGroup'

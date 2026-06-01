@@ -21,39 +21,17 @@ Sequenced checklist for taking the repo from "everything green in CI" to a worki
 
 ---
 
-## Phase B — Provision Azure (15 min)
+## Phase B — Provision Azure (10 min)
 
-### B.1 Resource groups
+> We run a single production environment. Per-branch testing happens through SWA's built-in PR preview environments, so there's no separate `dev` resource group to provision.
+
+### B.1 Resource group
 
 ```bash
-az group create -n rg-slypn-dev  -l uksouth
 az group create -n rg-slypn-prod -l uksouth
 ```
 
-### B.2 Deploy Bicep — dev first
-
-```bash
-az deployment group create \
-  -g rg-slypn-dev \
-  -f infra/main.bicep \
-  -p @infra/main.parameters.dev.json
-```
-
-Expected resources after ~5 min:
-
-- `swa-slypn-dev` (Static Web App)
-- `cosmos-slypn-dev-<suffix>` (Cosmos DB account, free tier)
-- `slypndevst<suffix>` (Storage account, with `media` container)
-- Two role assignments: SWA managed identity → Cosmos Data Contributor + Storage Blob Data Contributor.
-
-Capture the outputs:
-
-```bash
-DEV_OUTPUTS=$(az deployment group show -g rg-slypn-dev -n main --query properties.outputs)
-echo "$DEV_OUTPUTS" | jq .
-```
-
-### B.3 Deploy Bicep — prod
+### B.2 Deploy Bicep
 
 ```bash
 az deployment group create \
@@ -62,7 +40,19 @@ az deployment group create \
   -p @infra/main.parameters.prod.json
 ```
 
-> Cosmos free-tier is **one per subscription**. The `prod` parameter file sets `enableCosmosFreeTier: false`. Dev keeps the free tier.
+Expected resources after ~5 min:
+
+- `swa-slypn-prod` (Static Web App)
+- `cosmos-slypn-prod-<suffix>` (Cosmos DB account, free tier — one free tier per subscription, this consumes it)
+- `slypnprodst<suffix>` (Storage account, with `media` container)
+- Two role assignments: SWA managed identity → Cosmos Data Contributor + Storage Blob Data Contributor.
+
+Capture the outputs:
+
+```bash
+PROD_OUTPUTS=$(az deployment group show -g rg-slypn-prod -n main --query properties.outputs)
+echo "$PROD_OUTPUTS" | jq .
+```
 
 ---
 
@@ -78,7 +68,7 @@ gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --body "$PROD_TOKEN"
 
 ### C.2 SWA app settings
 
-Pull the values from outputs + your captured Entra/Grafana details, then paste into the `az staticwebapp appsettings set` command in `docs/deployment-secrets.md` §2. Run it twice — once for `-n swa-slypn-prod -g rg-slypn-prod`, once for `-n swa-slypn-dev -g rg-slypn-dev`.
+Pull the values from outputs + your captured Entra/Grafana details, then paste into the `az staticwebapp appsettings set` command in `docs/deployment-secrets.md` §2 — once, for `-n swa-slypn-prod -g rg-slypn-prod`.
 
 Critical settings to double-check:
 
