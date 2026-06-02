@@ -11,7 +11,10 @@ public sealed class EntraJwtValidator : IJwtValidator
 {
     private readonly EntraOptions _opts;
     private readonly ConfigurationManager<OpenIdConnectConfiguration>? _configManager;
-    private readonly JwtSecurityTokenHandler _handler = new();
+    // MapInboundClaims=false keeps JWT claim names verbatim (e.g. "roles")
+    // so RoleClaimType="roles" resolves correctly. The default true remaps
+    // "roles" to the long-form ClaimTypes.Role URI, breaking IsInRole checks.
+    private readonly JwtSecurityTokenHandler _handler = new() { MapInboundClaims = false };
 
     public EntraJwtValidator(IOptions<EntraOptions> options)
     {

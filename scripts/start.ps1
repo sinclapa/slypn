@@ -114,6 +114,20 @@ function Resolve-WinExe($name) {
 Write-Step 'Starting Vite (web)'
 $npmExe = Resolve-WinExe 'npm'
 if (-not $npmExe) { Write-Err 'npm.cmd not on PATH'; exit 1 }
+
+$viteBinary = Join-Path $WebDir 'node_modules/.bin/vite.cmd'
+if (-not (Test-Path $viteBinary)) {
+    Write-Step 'Installing web dependencies (npm ci)'
+    Push-Location $WebDir
+    & $npmExe ci --no-audit --no-fund
+    $npmExit = $LASTEXITCODE
+    Pop-Location
+    if ($npmExit -ne 0) {
+        Write-Err 'npm ci failed. See the output above for details.'
+        exit 1
+    }
+}
+
 $webProc = Start-Process -FilePath $npmExe -ArgumentList 'run', 'dev' `
     -WorkingDirectory $WebDir `
     -RedirectStandardOutput $webLog `
