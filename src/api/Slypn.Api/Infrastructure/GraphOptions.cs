@@ -13,11 +13,8 @@ public sealed class GraphOptions
     /// <summary>Client secret for client-credentials auth against Microsoft Graph.</summary>
     public string? ClientSecret { get; set; }
 
-    /// <summary>Where invitees land after accepting. Should be the production SWA URL in prod.</summary>
-    public string InviteRedirectUrl { get; set; } = "http://localhost:5173/";
+    /// <summary>Where invitees land after accepting. Must be an HTTPS URL — Graph rejects http://localhost.</summary>
+    public string InviteRedirectUrl { get; set; } = "https://thankful-tree-090006c03.7.azurestaticapps.net/";
 
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(TenantId)     &&
-        !string.IsNullOrWhiteSpace(ClientId)     &&
-        !string.IsNullOrWhiteSpace(ClientSecret);
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientSecret);
 }

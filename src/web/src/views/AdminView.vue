@@ -18,16 +18,10 @@ const allRoles: Role[] = ['Admin', 'Contributor', 'Member']
 
 const email = ref('')
 const displayName = ref('')
-const roles = ref<Role[]>(['Member'])
+const role = ref<Role>('Member')
 const submitting = ref(false)
 const error = ref<string | null>(null)
 const success = ref<InviteResponseOk | null>(null)
-
-function toggleRole(r: Role) {
-  const i = roles.value.indexOf(r)
-  if (i >= 0) roles.value.splice(i, 1)
-  else roles.value.push(r)
-}
 
 async function submit() {
   if (submitting.value) return
@@ -40,7 +34,7 @@ async function submit() {
       body: JSON.stringify({
         email: email.value.trim(),
         displayName: displayName.value.trim(),
-        roles: roles.value,
+        roles: [role.value],
       }),
     })
     if (!resp.ok) {
@@ -50,7 +44,7 @@ async function submit() {
     success.value = await resp.json() as InviteResponseOk
     email.value = ''
     displayName.value = ''
-    roles.value = ['Member']
+    role.value = 'Member'
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -71,7 +65,7 @@ async function submit() {
       <h2 class="font-display text-xl font-bold text-slypn-700">Invite a member</h2>
       <p class="mt-2 text-sm text-slypn-900/75">
         Sends an Entra External ID invitation. The recipient gets an email with a link
-        to sign up; when they accept they&rsquo;ll be granted the role(s) you choose.
+        to sign up; when they accept they&rsquo;ll be granted the role you choose.
       </p>
 
       <form class="mt-6 space-y-4" @submit.prevent="submit">
@@ -94,19 +88,19 @@ async function submit() {
           />
         </div>
         <fieldset>
-          <legend class="text-sm font-medium text-slypn-800">Roles</legend>
-          <div class="mt-2 flex flex-wrap gap-2">
+          <legend class="text-sm font-medium text-slypn-800">Role</legend>
+          <div class="mt-2 inline-flex rounded-md border border-slypn-200 bg-white p-1">
             <button
               v-for="r in allRoles"
               :key="r"
               type="button"
               :class="[
-                'rounded-full border px-4 py-1.5 text-sm font-medium transition-colors',
-                roles.includes(r)
-                  ? 'border-slypn-600 bg-slypn-600 text-white'
-                  : 'border-slypn-200 bg-white text-slypn-700 hover:bg-slypn-50',
+                'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+                role === r
+                  ? 'bg-slypn-600 text-white'
+                  : 'text-slypn-700 hover:bg-slypn-50',
               ]"
-              @click="toggleRole(r)"
+              @click="role = r"
             >
               {{ r }}
             </button>
@@ -116,7 +110,7 @@ async function submit() {
         <button
           type="submit"
           class="rounded-md bg-slypn-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700 disabled:opacity-50"
-          :disabled="submitting || !email || !displayName || roles.length === 0"
+          :disabled="submitting || !email || !displayName"
         >
           {{ submitting ? 'Inviting…' : 'Send invitation' }}
         </button>

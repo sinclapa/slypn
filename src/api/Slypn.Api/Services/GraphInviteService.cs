@@ -12,10 +12,12 @@ namespace Slypn.Api.Services;
 /// </summary>
 public sealed class GraphInviteService(
     IOptions<GraphOptions> options,
+    IOptions<EntraOptions> entraOptions,
     IHttpClientFactory httpFactory,
     ILogger<GraphInviteService> logger) : IInviteService
 {
     private readonly GraphOptions _opts = options.Value;
+    private readonly EntraOptions _entra = entraOptions.Value;
 
     public bool IsConfigured => _opts.IsConfigured;
 
@@ -57,14 +59,16 @@ public sealed class GraphInviteService(
 
     private async Task<string?> AcquireTokenAsync(HttpClient http, CancellationToken ct)
     {
+        var tenantId = string.IsNullOrWhiteSpace(_opts.TenantId) ? _entra.TenantId : _opts.TenantId;
+        var clientId = string.IsNullOrWhiteSpace(_opts.ClientId) ? _entra.Audience  : _opts.ClientId;
         var form = new FormUrlEncodedContent(new[]
         {
-            KeyValuePair.Create("client_id",     _opts.ClientId!),
+            KeyValuePair.Create("client_id",     clientId!),
             KeyValuePair.Create("client_secret", _opts.ClientSecret!),
             KeyValuePair.Create("scope",         "https://graph.microsoft.com/.default"),
             KeyValuePair.Create("grant_type",    "client_credentials"),
         });
-        var tokenUrl = $"https://login.microsoftonline.com/{_opts.TenantId}/oauth2/v2.0/token";
+        var tokenUrl = $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
         using var resp = await http.PostAsync(tokenUrl, form, ct);
         var body = await resp.Content.ReadAsStringAsync(ct);
         if (!resp.IsSuccessStatusCode)

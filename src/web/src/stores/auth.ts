@@ -15,6 +15,27 @@ import {
 
 type IdTokenClaims = Record<string, unknown> & { roles?: string[] }
 
+/**
+ * App roles live on the slypn-api app registration, so the `roles` claim only
+ * appears in the access token issued for that audience — not in the SPA's ID
+ * token. Decode the JWT payload (no signature check — verification happens at
+ * the API) to pull roles out for UI gating.
+ */
+function decodeJwtRoles(token: string): string[] {
+  try {
+    const segment = token.split('.')[1]
+    if (!segment) return []
+    const padded = segment.replace(/-/g, '+').replace(/_/g, '/')
+    const padding = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
+    const payload = JSON.parse(atob(padded + padding)) as { roles?: unknown }
+    return Array.isArray(payload.roles)
+      ? payload.roles.filter((r): r is string => typeof r === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
 function makeDevAccount(): AccountInfo {
   return {
     homeAccountId:  'dev-skip-auth',
@@ -33,6 +54,7 @@ function makeDevAccount(): AccountInfo {
 
 export const useAuthStore = defineStore('auth', () => {
   const account = ref<AccountInfo | null>(null)
+  const apiRoles = ref<string[]>([])
   const initializing = ref(false)
   const initialized = ref(false)
 
@@ -41,6 +63,9 @@ export const useAuthStore = defineStore('auth', () => {
   const isConfigured = computed(() => isAuthConfigured || isDevSkipAuth)
 
   const roles = computed<string[]>(() => {
+    if (apiRoles.value.length > 0) return apiRoles.value
+    // Dev-skip mode parks roles on the synthetic account's idTokenClaims since
+    // there's no real access token to decode.
     const claims = account.value?.idTokenClaims as IdTokenClaims | undefined
     return Array.isArray(claims?.roles) ? claims!.roles! : []
   })
@@ -76,6 +101,9 @@ export const useAuthStore = defineStore('auth', () => {
           account.value = cached
         }
       }
+      if (account.value) {
+        await refreshApiRoles()
+      }
       initialized.value = true
     } finally {
       initializing.value = false
@@ -103,14 +131,35 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     if (isDevSkipAuth) {
       account.value = null
+      apiRoles.value = []
       window.location.href = window.location.origin
       return
     }
     if (!msalInstance || !account.value) {
       account.value = null
+      apiRoles.value = []
       return
     }
     await msalInstance.logoutRedirect({ account: account.value })
+  }
+
+  /**
+   * Silently fetch an access token for the SLYPN API and harvest its `roles`
+   * claim. Failures (no cached account, interaction required, etc.) leave
+   * apiRoles empty rather than throw — the UI just degrades to no-role view.
+   */
+  async function refreshApiRoles() {
+    if (isDevSkipAuth) return
+    if (!msalInstance || !account.value) {
+      apiRoles.value = []
+      return
+    }
+    try {
+      const result = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
+      apiRoles.value = decodeJwtRoles(result.accessToken)
+    } catch {
+      apiRoles.value = []
+    }
   }
 
   /**
@@ -125,6 +174,7 @@ export const useAuthStore = defineStore('auth', () => {
     await ensureMsalInitialized()
     try {
       const result = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
+      apiRoles.value = decodeJwtRoles(result.accessToken)
       return result.accessToken
     } catch (err) {
       if (err instanceof InteractionRequiredAuthError) {

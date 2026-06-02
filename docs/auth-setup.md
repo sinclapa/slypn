@@ -107,7 +107,7 @@ Two registrations live in the SLYPN External ID tenant: one for the Vue SPA (pub
 
 1. **Identity → Applications → App registrations → New registration**.
 2. Name: `slypn-api`.
-3. Supported account types: **Accounts in this organizational directory only**.
+3. Supported account types: **Single tenant only - slypn** (this is the current label for "Accounts in this organizational directory only").
 4. Redirect URI: leave empty.
 5. **Register**.
 
@@ -134,7 +134,7 @@ After registration:
 
 1. **Identity → Applications → App registrations → New registration**.
 2. Name: `slypn-spa`.
-3. Supported account types: **Accounts in this organizational directory only**.
+3. Supported account types: **Single tenant only - slypn** (this is the current label for "Accounts in this organizational directory only").
 4. Redirect URI: **Single-page application (SPA)** → `http://localhost:5173/auth/callback`.
 5. **Register**.
 
@@ -155,6 +155,21 @@ After registration:
 2. Pick yourself and assign the **Administrator** role.
 3. Repeat for any additional admins / contributors. New customers who self-sign-up via the user flow start with no app role; the **Invite Member** flow in #24 grants them `Member` automatically.
 
+### 6.4 Grant Microsoft Graph invitation permission
+
+The `slypn-api` app calls the Graph `POST /v1.0/invitations` endpoint to send B2B invitation emails to new members. It needs `User.Invite.All` and a client secret.
+
+1. In the SLYPN External ID tenant: **Identity → Applications → App registrations → `slypn-api` → API permissions → Add a permission → Microsoft Graph → Application permissions**.
+2. Search for and tick **`User.Invite.All`**. Add permissions.
+3. Click **Grant admin consent for SLYPN** (the yellow warning banner). Confirm.
+4. **Certificates & secrets → Client secrets → New client secret** — description: `graph-invitations`, expiry: 24 months.
+5. Copy the secret **Value** immediately — it's hidden once you leave the page.
+6. Add it to your local settings:
+   ```
+   "Graph__ClientSecret": "<value>"
+   ```
+   Tenant ID and client ID come from the `AzureAd__TenantId` and `AzureAd__Audience` settings already in `local.settings.json`; you don't need to set separate `Graph__TenantId` / `Graph__ClientId` values.
+
 ---
 
 ## 7. Values to capture for code wiring
@@ -167,8 +182,9 @@ After steps 1–6 you should have the following — none go in source control, a
 | Vue SPA | `VITE_MSAL_CLIENT_ID` | `spaClientId` |
 | Vue SPA | `VITE_API_SCOPE` | `api://<apiClientId>/access_as_user` |
 | Functions API | `AzureAd__Authority` | `https://slypn.ciamlogin.com/<tenantId>/v2.0` |
-| Functions API | `AzureAd__Audience` | `api://<apiClientId>` |
+| Functions API | `AzureAd__Audience` | `<apiClientId>` (bare GUID — CIAM access tokens set `aud` to the client ID, not the `api://` URI) |
 | Functions API | `AzureAd__ValidIssuers__0` | `https://slypn.ciamlogin.com/<tenantId>/v2.0` |
+| Functions API | `AzureAd__ValidIssuers__1` | `https://<tenantId>.ciamlogin.com/<tenantId>/v2.0` (CIAM also issues tokens with this tenant-ID-subdomain issuer) |
 | Functions API | `AzureAd__TenantId` | `<tenantId>` |
 
 Sample placeholder values land in `src/web/.env.example` and `src/api/Slypn.Api/local.settings.sample.json` alongside the MSAL.js wiring in #21 and the JWT middleware in #22.
