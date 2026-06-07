@@ -38,8 +38,22 @@ function ym(d: Date) { return d.getFullYear() * 12 + d.getMonth() }
 
 const searchQuery = ref('')
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+const currentYear = new Date().getFullYear()
+
+const fmtDate = (iso: string) => {
+  const d = new Date(iso)
+  const opts: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' }
+  if (d.getFullYear() !== currentYear) opts.year = 'numeric'
+  return d.toLocaleDateString('en-GB', opts)
+}
+
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+const isSameDay = (a: string, b: string) => {
+  const s = new Date(a); const e = new Date(b)
+  return s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate()
+}
 
 const filtered = computed(() => {
   const q  = searchQuery.value.trim().toLowerCase()
@@ -171,7 +185,12 @@ async function deleteEvent(event: CommunityEvent) {
               class="block truncate text-sm font-medium text-slypn-800 hover:text-slypn-600 hover:underline"
             >{{ event.title }}</RouterLink>
             <p class="mt-0.5 text-xs text-slypn-500">
-              {{ fmtDate(event.startsAt) }}
+              <template v-if="isSameDay(event.startsAt, event.endsAt)">
+                {{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}
+              </template>
+              <template v-else>
+                {{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&nbsp;&ndash;&nbsp;{{ fmtDate(event.endsAt) }}, {{ fmtTime(event.endsAt) }}
+              </template>
               <span v-if="event.createdByName" class="ml-2 text-slypn-400">· {{ event.createdByName }}</span>
             </p>
           </div>
