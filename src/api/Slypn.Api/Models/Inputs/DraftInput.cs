@@ -22,4 +22,7 @@ public sealed class DraftInput
 
     [Range(0, 60)]
     public int ReadingMinutes { get; set; }
+
+    [StringLength(1_000)]
+    public string? RevisionFeedback { get; set; }
 }

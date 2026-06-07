@@ -138,7 +138,7 @@ public sealed class MembersFunctions(
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Member id.")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "members/{id}")] HttpRequestData req,
-        string id, CancellationToken ct)
+        string id, FunctionContext context, CancellationToken ct)
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
 
@@ -146,6 +146,9 @@ public sealed class MembersFunctions(
         try { existing = await repo.GetMemberByIdAsync(id, ct); }
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
         if (existing is null) return await NotFound(req, "Member not found.");
+
+        if (existing.Oid is not null && existing.Oid == context.GetUserOid())
+            return await BadRequest(req, "You cannot remove yourself.");
 
         try
         {

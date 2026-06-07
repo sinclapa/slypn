@@ -43,6 +43,7 @@ public interface IContentRepository
     // Members --------------------------------------------------------------
     Task<Member?>              GetMemberByEmailAsync(string email, CancellationToken ct);
     Task<Member?>              GetMemberByIdAsync(string id, CancellationToken ct);
+    Task<Member?>              GetMemberByOidAsync(string oid, CancellationToken ct);
     Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct);
     Task<Member>               UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct);
     Task                       DeleteMemberAsync(string id, string? ifMatch, CancellationToken ct);
@@ -63,6 +64,6 @@ public interface IContentRepository
     /// <summary>Move an article from in-review to published. Sets PublishedAt to now.</summary>
     Task<Article>             PublishArticleAsync(string id, CancellationToken ct);
 
-    /// <summary>Move an article from in-review to rejected and store the admin's feedback.</summary>
-    Task<Article>             RejectArticleAsync(string id, string feedback, CancellationToken ct);
+    /// <summary>Send an in-review article back to the author as a draft with revision feedback.</summary>
+    Task<Draft>               ReviseArticleAsync(string id, string feedback, CancellationToken ct);
 }

@@ -91,19 +91,20 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
 
         var draft = new Draft(
-            Id:             id,
-            AuthorId:       authorId,
-            AuthorName:     authorName,
-            Type:           input!.Type,
-            Title:          input.Title,
-            Slug:           input.Slug,
-            Summary:        input.Summary,
-            Body:           sanitizer.Sanitize(input.Body),
-            Category:       input.Category,
-            Tags:           input.Tags,
-            ReadingMinutes: input.ReadingMinutes,
-            CreatedAt:      existing?.CreatedAt ?? now,
-            UpdatedAt:      now);
+            Id:               id,
+            AuthorId:         authorId,
+            AuthorName:       authorName,
+            Type:             input!.Type,
+            Title:            input.Title,
+            Slug:             input.Slug,
+            Summary:          input.Summary,
+            Body:             sanitizer.Sanitize(input.Body),
+            Category:         input.Category,
+            Tags:             input.Tags,
+            ReadingMinutes:   input.ReadingMinutes,
+            CreatedAt:        existing?.CreatedAt ?? now,
+            UpdatedAt:        now,
+            RevisionFeedback: input.RevisionFeedback?.Trim() ?? existing?.RevisionFeedback);
 
         try
         {

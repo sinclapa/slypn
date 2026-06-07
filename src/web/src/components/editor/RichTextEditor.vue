@@ -4,6 +4,7 @@ import { Editor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
+import Placeholder from '@tiptap/extension-placeholder'
 import { apiFetch } from '@/lib/api'
 
 const props = defineProps<{
@@ -30,6 +31,9 @@ const editor = new Editor({
       autolink: true,
       HTMLAttributes: { rel: 'noopener', target: '_blank' },
     }),
+    Placeholder.configure({
+      placeholder: props.placeholder ?? 'Start writing…',
+    }),
   ],
   editorProps: {
     attributes: {
@@ -55,15 +59,48 @@ function toggleBlockquote(){ editor.chain().focus().toggleBlockquote().run() }
 function toggleHeading(level: 1 | 2 | 3) {
   editor.chain().focus().toggleHeading({ level }).run()
 }
+// ── Link dialog ─────────────────────────────────────────────────────────────
+const linkDialog = ref({ show: false, text: '', url: '', hasExisting: false })
+const savedSel   = ref<{ from: number; to: number } | null>(null)
+
 function setLink() {
-  const existing = editor.getAttributes('link').href as string | undefined
-  const url = window.prompt('URL', existing ?? 'https://')
-  if (url === null) return
-  if (url === '') {
+  const { from, to, empty } = editor.state.selection
+  savedSel.value = { from, to }
+  linkDialog.value = {
+    show:        true,
+    text:        empty ? '' : editor.state.doc.textBetween(from, to),
+    url:         (editor.getAttributes('link').href as string | undefined) ?? '',
+    hasExisting: editor.isActive('link'),
+  }
+}
+
+function confirmLink() {
+  const { url, text } = linkDialog.value
+  linkDialog.value.show = false
+  if (savedSel.value) editor.commands.setTextSelection(savedSel.value)
+  savedSel.value = null
+
+  const cleanUrl  = url.trim()
+  const cleanText = text.trim()
+
+  if (!cleanUrl) {
     editor.chain().focus().extendMarkRange('link').unsetLink().run()
     return
   }
-  editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  if (cleanText) {
+    editor.chain().focus().extendMarkRange('link')
+      .insertContent({ type: 'text', text: cleanText, marks: [{ type: 'link', attrs: { href: cleanUrl } }] })
+      .run()
+  } else {
+    editor.chain().focus().extendMarkRange('link').setLink({ href: cleanUrl }).run()
+  }
+}
+
+function removeLink() {
+  linkDialog.value.show = false
+  if (savedSel.value) editor.commands.setTextSelection(savedSel.value)
+  savedSel.value = null
+  editor.chain().focus().extendMarkRange('link').unsetLink().run()
 }
 function pickImage() {
   fileInput.value?.click()
@@ -152,12 +189,77 @@ const buttons: ToolbarButton[] = [
 
     <EditorContent :editor="editor" />
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="linkDialog.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      @mousedown.self="linkDialog.show = false"
+    >
+      <div class="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+        <h3 class="font-display font-semibold text-slypn-700">
+          {{ linkDialog.hasExisting ? 'Edit link' : 'Insert link' }}
+        </h3>
+        <div class="mt-4 space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-slypn-800">Text</label>
+            <input
+              v-model="linkDialog.text"
+              type="text"
+              placeholder="Link text"
+              class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slypn-800">URL</label>
+            <input
+              v-model="linkDialog.url"
+              type="url"
+              placeholder="https://"
+              class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
+              @keydown.enter.prevent="confirmLink"
+              @keydown.esc.prevent="linkDialog.show = false"
+            />
+          </div>
+        </div>
+        <div class="mt-5 flex flex-wrap items-center gap-2">
+          <button
+            v-if="linkDialog.hasExisting"
+            type="button"
+            class="rounded-md border border-rose-200 px-3 py-1.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+            @click="removeLink"
+          >Remove</button>
+          <div class="ml-auto flex gap-2">
+            <button
+              type="button"
+              class="rounded-md px-3 py-1.5 text-sm font-medium text-slypn-700 hover:bg-slypn-50"
+              @click="linkDialog.show = false"
+            >Cancel</button>
+            <button
+              type="button"
+              :disabled="!linkDialog.url"
+              class="rounded-md bg-slypn-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-slypn-700 disabled:opacity-50"
+              @click="confirmLink"
+            >Apply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style>
-.prose-slypn { color: rgb(12 25 41 / 0.85); }
-.prose-slypn h1, .prose-slypn h2, .prose-slypn h3 { color: rgb(30 58 95); font-family: Montserrat, Inter, system-ui, sans-serif; }
-.prose-slypn a { color: rgb(21 101 192); text-decoration: underline; }
-.prose-slypn blockquote { border-left: 4px solid rgb(168 207 255); padding-left: 0.75rem; color: rgb(30 58 95); }
+/* Placeholder shown when the editor is empty */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #94a3b8;
+  pointer-events: none;
+  height: 0;
+}
+
+/* Colour overrides on top of @tailwindcss/typography */
+.prose-slypn { --tw-prose-body: rgb(12 25 41 / 0.85); --tw-prose-headings: rgb(30 58 95); --tw-prose-links: #1565C0; --tw-prose-blockquote-borders: rgb(168 207 255); }
+.prose-slypn h1, .prose-slypn h2, .prose-slypn h3 { font-family: Montserrat, Inter, system-ui, sans-serif; }
 .prose-slypn img { border-radius: 0.5rem; }
 </style>

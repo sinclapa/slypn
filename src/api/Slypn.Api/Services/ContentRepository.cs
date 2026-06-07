@@ -279,6 +279,15 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         return results.FirstOrDefault();
     }
 
+    public async Task<Member?> GetMemberByOidAsync(string oid, CancellationToken ct)
+    {
+        EnsureWrites();
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.oid = @oid")
+            .WithParameter("@oid", oid);
+        var results = await CollectAsync<Member>(cosmos.Members, query, new QueryRequestOptions(), ct);
+        return results.FirstOrDefault();
+    }
+
     public async Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct)
     {
         EnsureWrites();
@@ -415,9 +424,44 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         => await TransitionAsync(id, fromStatus: "in-review", toStatus: "published",
             update: a => a with { PublishedAt = DateTime.UtcNow, RejectionReason = null }, ct);
 
-    public async Task<Article> RejectArticleAsync(string id, string feedback, CancellationToken ct)
-        => await TransitionAsync(id, fromStatus: "in-review", toStatus: "rejected",
-            update: a => a with { RejectionReason = feedback }, ct);
+    public async Task<Draft> ReviseArticleAsync(string id, string feedback, CancellationToken ct)
+    {
+        EnsureWrites();
+        Article source;
+        try
+        {
+            var read = await cosmos.Articles.ReadItemAsync<Article>(id, new PartitionKey("in-review"), cancellationToken: ct);
+            source = read.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new InvalidOperationException($"Article {id} not found in in-review status.");
+        }
+
+        if (string.IsNullOrEmpty(source.AuthorId))
+            throw new InvalidOperationException("Article has no AuthorId — cannot create revision draft.");
+
+        var now = DateTime.UtcNow;
+        var draft = new Draft(
+            Id:               source.Id,
+            AuthorId:         source.AuthorId,
+            AuthorName:       source.Author,
+            Type:             source.Type,
+            Title:            source.Title,
+            Slug:             source.Slug,
+            Summary:          source.Summary,
+            Body:             source.Body,
+            Category:         source.Category,
+            Tags:             source.Tags,
+            ReadingMinutes:   source.ReadingMinutes,
+            CreatedAt:        now,
+            UpdatedAt:        now,
+            RevisionFeedback: feedback);
+
+        var upserted = await cosmos.Drafts.UpsertItemAsync(draft, new PartitionKey(source.AuthorId), cancellationToken: ct);
+        await cosmos.Articles.DeleteItemAsync<Article>(id, new PartitionKey("in-review"), cancellationToken: ct);
+        return upserted.Resource with { Etag = upserted.ETag };
+    }
 
     private async Task<Article> TransitionAsync(
         string id, string fromStatus, string toStatus, Func<Article, Article> update, CancellationToken ct)

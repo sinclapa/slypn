@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import { apiFetch, apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
+import { useAuthStore } from '@/stores/auth'
 
 type Role = 'Admin' | 'Contributor' | 'Member'
 
@@ -13,6 +14,7 @@ interface Member {
   roles: string[]
   status: string
   invitedAt: string
+  oid?: string | null
   _etag?: string
 }
 
@@ -23,6 +25,7 @@ interface InviteResponseOk {
   inviteReason: string | null
 }
 
+const auth = useAuthStore()
 const allRoles: Role[] = ['Admin', 'Contributor', 'Member']
 
 // ── Member list ────────────────────────────────────────────────────────────
@@ -275,7 +278,8 @@ const fmtDate = (iso: string) =>
           <!-- Delete -->
           <button
             type="button"
-            :disabled="savingId === m.id || deletingId === m.id"
+            :disabled="savingId === m.id || deletingId === m.id || m.oid === auth.oid"
+            :title="m.oid === auth.oid ? 'You cannot remove yourself' : undefined"
             class="shrink-0 rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
             @click="deleteMember(m)"
           >{{ deletingId === m.id ? 'Removing…' : 'Remove' }}</button>
