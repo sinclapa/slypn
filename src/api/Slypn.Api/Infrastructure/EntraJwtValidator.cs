@@ -36,23 +36,38 @@ public sealed class EntraJwtValidator : IJwtValidator
             throw new InvalidOperationException("EntraJwtValidator is not configured.");
 
         var config = await _configManager.GetConfigurationAsync(ct);
+        try
+        {
+            return _handler.ValidateToken(token, BuildParams(config), out _);
+        }
+        catch (SecurityTokenSignatureKeyNotFoundException)
+        {
+            // CIAM may have rotated signing keys since this instance last fetched the JWKS.
+            // Force a refresh and retry once so long-running instances self-heal.
+            _configManager.RequestRefresh();
+            var fresh = await _configManager.GetConfigurationAsync(ct);
+            return _handler.ValidateToken(token, BuildParams(fresh), out _);
+        }
+    }
 
-        // CIAM v2 tokens set `aud` to the bare application GUID, not the
-        // api:// URI. Accept both so either form works in configuration.
-        var audience  = _opts.Audience!;
-        var guidOnly  = audience.StartsWith("api://", StringComparison.OrdinalIgnoreCase)
-                            ? audience["api://".Length..]
-                            : audience;
-        var apiUri    = audience.StartsWith("api://", StringComparison.OrdinalIgnoreCase)
-                            ? audience
-                            : $"api://{audience}";
+    private TokenValidationParameters BuildParams(OpenIdConnectConfiguration config)
+    {
+        var audience = _opts.Audience!;
+        var guidOnly = audience.StartsWith("api://", StringComparison.OrdinalIgnoreCase)
+                           ? audience["api://".Length..] : audience;
+        var apiUri   = audience.StartsWith("api://", StringComparison.OrdinalIgnoreCase)
+                           ? audience : $"api://{audience}";
 
-        var validationParameters = new TokenValidationParameters
+        return new TokenValidationParameters
         {
             ValidateIssuer           = true,
-            ValidIssuers             = _opts.ValidIssuers.Length > 0 ? _opts.ValidIssuers : [ _opts.Authority!.TrimEnd('/') ],
+            // Use the issuer from the OIDC discovery doc, not the authority URL.
+            // For CIAM the discovery issuer uses the tenant-GUID subdomain
+            // (e.g. 3a825f01-....ciamlogin.com) while the configured authority
+            // uses the friendly name (slypn.ciamlogin.com) — they differ.
+            ValidIssuers             = _opts.ValidIssuers.Length > 0 ? _opts.ValidIssuers : [config.Issuer],
             ValidateAudience         = true,
-            ValidAudiences           = [ guidOnly, apiUri ],
+            ValidAudiences           = [guidOnly, apiUri],
             ValidateLifetime         = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKeys        = config.SigningKeys,
@@ -60,8 +75,5 @@ public sealed class EntraJwtValidator : IJwtValidator
             RoleClaimType            = "roles",
             NameClaimType            = "name",
         };
-
-        var principal = _handler.ValidateToken(token, validationParameters, out _);
-        return principal;
     }
 }
