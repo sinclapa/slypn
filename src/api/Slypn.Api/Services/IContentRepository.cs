@@ -41,9 +41,11 @@ public interface IContentRepository
     Task             DeleteNewsletterAsync   (string id, string year, string? ifMatch, CancellationToken ct);
 
     // Members --------------------------------------------------------------
-    Task<Member?>             GetMemberByEmailAsync(string email, CancellationToken ct);
+    Task<Member?>              GetMemberByEmailAsync(string email, CancellationToken ct);
+    Task<Member?>              GetMemberByIdAsync(string id, CancellationToken ct);
     Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct);
-    Task<Member>              UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct);
+    Task<Member>               UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct);
+    Task                       DeleteMemberAsync(string id, string? ifMatch, CancellationToken ct);
 
     // Drafts ---------------------------------------------------------------
     Task<Draft?>              GetDraftAsync(string id, string authorId, CancellationToken ct);

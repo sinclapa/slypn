@@ -109,6 +109,9 @@ async function onSignOut() {
               <RouterLink to="/admin/events" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Event management</RouterLink>
             </li>
             <li v-if="auth.isAdmin">
+              <RouterLink to="/admin/members" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Members</RouterLink>
+            </li>
+            <li v-if="auth.isAdmin">
               <RouterLink to="/admin" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Admin</RouterLink>
             </li>
             <li>
@@ -159,6 +162,13 @@ async function onSignOut() {
           active-class="bg-slypn-50"
           @click="mobileOpen = false"
         >Event management</RouterLink>
+        <RouterLink
+          v-if="auth.isAdmin"
+          to="/admin/members"
+          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+          active-class="bg-slypn-50"
+          @click="mobileOpen = false"
+        >Members</RouterLink>
         <RouterLink
           v-if="auth.isAdmin"
           to="/admin"

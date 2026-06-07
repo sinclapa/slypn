@@ -286,6 +286,20 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         return await CollectAsync<Member>(cosmos.Members, query, new QueryRequestOptions(), ct);
     }
 
+    public async Task<Member?> GetMemberByIdAsync(string id, CancellationToken ct)
+    {
+        EnsureWrites();
+        try
+        {
+            var resp = await cosmos.Members.ReadItemAsync<Member>(id, new PartitionKey(id), cancellationToken: ct);
+            return resp.Resource with { Etag = resp.ETag };
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
     public async Task<Member> UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
@@ -294,6 +308,13 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             new ItemRequestOptions { IfMatchEtag = ifMatch },
             ct);
         return resp.Resource with { Etag = resp.ETag };
+    }
+
+    public async Task DeleteMemberAsync(string id, string? ifMatch, CancellationToken ct)
+    {
+        EnsureWrites();
+        await cosmos.Members.DeleteItemAsync<Member>(id, new PartitionKey(id),
+            new ItemRequestOptions { IfMatchEtag = ifMatch }, ct);
     }
 
     // ---- Drafts --------------------------------------------------------------

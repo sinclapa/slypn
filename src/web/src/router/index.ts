@@ -52,6 +52,8 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
     { path: '/admin', name: 'admin', component: AdminView,
       meta: { requiresAuth: true, requiresRole: ['Admin'] } },
+    { path: '/admin/members', name: 'admin-members', component: () => import('@/views/MemberManagementView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['Admin'] } },
     { path: '/admin/events', name: 'admin-events', component: EventManagementView,
       meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
 
