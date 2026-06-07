@@ -105,6 +105,9 @@ async function onSignOut() {
             <li v-if="auth.isContributor || auth.isAdmin">
               <RouterLink to="/editor" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Editor</RouterLink>
             </li>
+            <li v-if="auth.isContributor || auth.isAdmin">
+              <RouterLink to="/admin/events" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Event management</RouterLink>
+            </li>
             <li v-if="auth.isAdmin">
               <RouterLink to="/admin" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Admin</RouterLink>
             </li>
@@ -149,6 +152,20 @@ async function onSignOut() {
         >
           {{ item.label }}
         </RouterLink>
+        <RouterLink
+          v-if="auth.isContributor || auth.isAdmin"
+          to="/admin/events"
+          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+          active-class="bg-slypn-50"
+          @click="mobileOpen = false"
+        >Event management</RouterLink>
+        <RouterLink
+          v-if="auth.isAdmin"
+          to="/admin"
+          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+          active-class="bg-slypn-50"
+          @click="mobileOpen = false"
+        >Admin</RouterLink>
         <button
           v-if="!auth.isAuthenticated"
           class="mt-1 rounded-md bg-slypn-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-slypn-700"

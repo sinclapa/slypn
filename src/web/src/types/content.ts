@@ -44,6 +44,9 @@ export interface CommunityEvent {
   location: string
   description: string
   signupUrl?: string
+  createdBy?: string
+  createdByName?: string
+  _etag?: string
 }
 
 export type ResourceCategory =

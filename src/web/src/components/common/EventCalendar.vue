@@ -44,13 +44,24 @@ const isToday = (d: Date) =>
 const shift = (months: number) => {
   cursor.value = new Date(cursor.value.getFullYear(), cursor.value.getMonth() + months, 1)
 }
+
+const goToToday = () => {
+  cursor.value = new Date(today.getFullYear(), today.getMonth(), 1)
+}
 </script>
 
 <template>
-  <div class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm">
+  <div class="w-full rounded-xl border border-slypn-100 bg-white p-5 shadow-sm">
     <div class="flex items-center justify-between">
       <h3 class="font-display text-xl font-bold text-slypn-700">{{ monthLabel }}</h3>
       <div class="flex gap-1">
+        <button
+          type="button"
+          class="rounded-md border border-slypn-200 px-3 py-1 text-sm text-slypn-700 hover:bg-slypn-50"
+          @click="goToToday"
+        >
+          Today
+        </button>
         <button
           type="button"
           class="rounded-md border border-slypn-200 px-3 py-1 text-sm text-slypn-700 hover:bg-slypn-50"
@@ -70,25 +81,37 @@ const shift = (months: number) => {
       </div>
     </div>
 
-    <div class="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-wider text-slypn-500">
-      <div v-for="d in weekDays" :key="d">{{ d }}</div>
-    </div>
+    <div class="mt-4 grid grid-cols-7 gap-1">
+      <!-- weekday header row shares the same grid as the cells for uniform column widths -->
+      <div
+        v-for="d in weekDays"
+        :key="d"
+        class="text-center text-xs font-semibold uppercase tracking-wider text-slypn-500"
+      >{{ d }}</div>
 
-    <div class="mt-1 grid grid-cols-7 gap-1">
       <template v-for="(row, ri) in weeks" :key="ri">
         <div
           v-for="cell in row"
           :key="cell.date.toISOString()"
           :class="[
-            'min-h-[88px] rounded-md border p-1.5 text-left text-xs',
+            'h-[88px] overflow-hidden rounded-md border p-1.5 text-left text-xs',
             cell.inMonth ? 'border-slypn-100 bg-white' : 'border-slypn-50 bg-slypn-50/40 text-slypn-900/40',
             isToday(cell.date) ? 'ring-2 ring-slypn-500' : '',
           ]"
         >
-          <div class="font-semibold">{{ cell.date.getDate() }}</div>
-          <div v-for="e in cell.events" :key="e.id" class="mt-1 truncate rounded bg-slypn-100 px-1.5 py-0.5 text-[11px] text-slypn-800" :title="e.title">
-            {{ e.title }}
-          </div>
+          <div
+            :class="[
+              'inline-flex h-5 w-5 items-center justify-center rounded-full font-semibold',
+              isToday(cell.date) ? 'bg-slypn-600 text-white' : '',
+            ]"
+          >{{ cell.date.getDate() }}</div>
+          <RouterLink
+            v-for="e in cell.events"
+            :key="e.id"
+            :to="{ name: 'event-detail', params: { id: e.id } }"
+            class="mt-1 block truncate rounded bg-slypn-100 px-1.5 py-0.5 text-[11px] text-slypn-800 hover:bg-slypn-200"
+            :title="e.title"
+          >{{ e.title }}</RouterLink>
         </div>
       </template>
     </div>

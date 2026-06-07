@@ -11,8 +11,14 @@ const formatTime = (iso: string) =>
 </script>
 
 <template>
-  <article class="flex gap-5 rounded-xl border border-slypn-100 bg-white p-5 shadow-sm">
+  <RouterLink
+    :to="{ name: 'event-detail', params: { id: event.id } }"
+    class="flex gap-5 rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+  >
     <div class="flex w-20 flex-shrink-0 flex-col items-center justify-center rounded-lg bg-slypn-50 text-center">
+      <span class="text-xs font-semibold uppercase tracking-wider text-slypn-500">
+        {{ new Date(event.startsAt).toLocaleDateString('en-GB', { weekday: 'short' }) }}
+      </span>
       <span class="font-display text-2xl font-extrabold text-slypn-700">
         {{ new Date(event.startsAt).getDate() }}
       </span>
@@ -39,5 +45,5 @@ const formatTime = (iso: string) =>
         >Sign up</a>
       </div>
     </div>
-  </article>
+  </RouterLink>
 </template>

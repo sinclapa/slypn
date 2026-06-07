@@ -74,6 +74,15 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         return await CollectAsync<CommunityEvent>(cosmos.Events, query, new QueryRequestOptions(), ct);
     }
 
+    public async Task<CommunityEvent?> GetEventByIdAsync(string id, CancellationToken ct)
+    {
+        if (!cosmos.IsConfigured) return null;
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id")
+            .WithParameter("@id", id);
+        var results = await CollectAsync<CommunityEvent>(cosmos.Events, query, new QueryRequestOptions(), ct);
+        return results.FirstOrDefault();
+    }
+
     public async Task<IReadOnlyList<Resource>> ListResourcesAsync(CancellationToken ct)
     {
         if (!cosmos.IsConfigured) return mock.Resources;
@@ -140,39 +149,56 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
     }
 
     // ---- Events writes --------------------------------------------------------
-    public async Task<CommunityEvent> CreateEventAsync(EventInput input, CancellationToken ct)
+    public async Task<CommunityEvent> CreateEventAsync(EventInput input, string? createdByOid, string? createdByName, CancellationToken ct)
     {
         EnsureWrites();
         var ev = new CommunityEvent(
-            Id:          Guid.NewGuid().ToString("N"),
-            Title:       input.Title,
-            Type:        input.Type,
-            StartsAt:    input.StartsAt,
-            EndsAt:      input.EndsAt,
-            Location:    input.Location,
-            Description: input.Description,
-            SignupUrl:   input.SignupUrl);
+            Id:            Guid.NewGuid().ToString("N"),
+            Title:         input.Title,
+            Type:          input.Type,
+            StartsAt:      input.StartsAt,
+            EndsAt:        input.EndsAt,
+            Location:      input.Location,
+            Description:   input.Description,
+            SignupUrl:     input.SignupUrl,
+            CreatedBy:     createdByOid,
+            CreatedByName: createdByName);
         var resp = await cosmos.Events.CreateItemAsync(ev, new PartitionKey(ev.YearMonth), cancellationToken: ct);
         return resp.Resource with { Etag = resp.ETag };
     }
 
-    public async Task<CommunityEvent> ReplaceEventAsync(string id, EventInput input, string? ifMatch, CancellationToken ct)
+    public async Task<CommunityEvent> ReplaceEventAsync(string id, string oldYearMonth, EventInput input, string? createdByOid, string? createdByName, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
         var ev = new CommunityEvent(
-            Id:          id,
-            Title:       input.Title,
-            Type:        input.Type,
-            StartsAt:    input.StartsAt,
-            EndsAt:      input.EndsAt,
-            Location:    input.Location,
-            Description: input.Description,
-            SignupUrl:   input.SignupUrl);
-        var resp = await cosmos.Events.ReplaceItemAsync(ev, id,
-            new PartitionKey(ev.YearMonth),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
-        return resp.Resource with { Etag = resp.ETag };
+            Id:            id,
+            Title:         input.Title,
+            Type:          input.Type,
+            StartsAt:      input.StartsAt,
+            EndsAt:        input.EndsAt,
+            Location:      input.Location,
+            Description:   input.Description,
+            SignupUrl:     input.SignupUrl,
+            CreatedBy:     createdByOid,
+            CreatedByName: createdByName);
+
+        if (ev.YearMonth == oldYearMonth)
+        {
+            // Same partition — in-place replace
+            var resp = await cosmos.Events.ReplaceItemAsync(ev, id,
+                new PartitionKey(oldYearMonth),
+                new ItemRequestOptions { IfMatchEtag = ifMatch }, ct);
+            return resp.Resource with { Etag = resp.ETag };
+        }
+        else
+        {
+            // Partition key changed — delete old doc, create new one
+            await cosmos.Events.DeleteItemAsync<CommunityEvent>(id,
+                new PartitionKey(oldYearMonth),
+                new ItemRequestOptions { IfMatchEtag = ifMatch }, ct);
+            var resp = await cosmos.Events.CreateItemAsync(ev, new PartitionKey(ev.YearMonth), cancellationToken: ct);
+            return resp.Resource with { Etag = resp.ETag };
+        }
     }
 
     public async Task DeleteEventAsync(string id, string yearMonth, string? ifMatch, CancellationToken ct)

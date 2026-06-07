@@ -1,12 +1,14 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  BrowserAuthError,
   InteractionRequiredAuthError,
   type AccountInfo,
 } from '@azure/msal-browser'
 import {
   apiScope,
   buildSilentRequest,
+  clearMsalInteractionState,
   ensureMsalInitialized,
   isAuthConfigured,
   isDevSkipAuth,
@@ -21,18 +23,21 @@ type IdTokenClaims = Record<string, unknown> & { roles?: string[] }
  * token. Decode the JWT payload (no signature check — verification happens at
  * the API) to pull roles out for UI gating.
  */
-function decodeJwtRoles(token: string): string[] {
+function decodeJwtPayload(token: string): { roles: string[]; oid: string | null } {
   try {
     const segment = token.split('.')[1]
-    if (!segment) return []
-    const padded = segment.replace(/-/g, '+').replace(/_/g, '/')
+    if (!segment) return { roles: [], oid: null }
+    const padded  = segment.replace(/-/g, '+').replace(/_/g, '/')
     const padding = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
-    const payload = JSON.parse(atob(padded + padding)) as { roles?: unknown }
-    return Array.isArray(payload.roles)
-      ? payload.roles.filter((r): r is string => typeof r === 'string')
-      : []
+    const payload = JSON.parse(atob(padded + padding)) as { roles?: unknown; oid?: unknown }
+    return {
+      roles: Array.isArray(payload.roles)
+        ? payload.roles.filter((r): r is string => typeof r === 'string')
+        : [],
+      oid: typeof payload.oid === 'string' ? payload.oid : null,
+    }
   } catch {
-    return []
+    return { roles: [], oid: null }
   }
 }
 
@@ -55,8 +60,14 @@ function makeDevAccount(): AccountInfo {
 export const useAuthStore = defineStore('auth', () => {
   const account = ref<AccountInfo | null>(null)
   const apiRoles = ref<string[]>([])
+  const apiOid   = ref<string | null>(null)
   const initializing = ref(false)
   const initialized = ref(false)
+
+  // Shared promise so concurrent callers (e.g. router guard + component mount)
+  // all await the same in-flight initialization instead of getting an instant
+  // no-op return that leaves isAuthenticated false.
+  let _initPromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => account.value !== null)
   /** UI is "configured" if either real Entra or the dev-skip flag is wired. */
@@ -76,38 +87,62 @@ export const useAuthStore = defineStore('auth', () => {
   const displayName = computed(() =>
     (account.value?.name ?? account.value?.username ?? '').trim() || 'Member')
 
+  // OID from the API access token — matches what the API stores in CreatedBy
+  const oid = computed<string | null>(() => {
+    if (isDevSkipAuth) return '00000000-0000-0000-0000-000000000000'
+    return apiOid.value ?? ((account.value?.idTokenClaims as Record<string, unknown>)?.oid as string | undefined) ?? null
+  })
+
   /**
    * Drive MSAL through initialize + handleRedirectPromise and pick up an
    * already-cached account if any. In dev-skip mode, synthesises an Admin
    * principal so route guards open up immediately. Safe to call multiple times.
    */
-  async function initialize() {
-    if (initialized.value || initializing.value) return
-    initializing.value = true
-    try {
-      if (isDevSkipAuth) {
-        account.value = makeDevAccount()
-        initialized.value = true
-        return
-      }
-      const redirectResult = await ensureMsalInitialized()
-      if (redirectResult?.account) {
-        msalInstance!.setActiveAccount(redirectResult.account)
-        account.value = redirectResult.account
-      } else if (msalInstance) {
-        const cached = msalInstance.getAllAccounts()[0]
-        if (cached) {
-          msalInstance.setActiveAccount(cached)
-          account.value = cached
+  async function initialize(): Promise<void> {
+    if (initialized.value) return
+    if (_initPromise) return _initPromise
+
+    _initPromise = (async () => {
+      initializing.value = true
+      try {
+        if (isDevSkipAuth) {
+          account.value = makeDevAccount()
+          initialized.value = true
+          return
         }
+
+        // handleRedirectPromise can throw (expired code, state mismatch, etc.).
+        // On error, clear the stale interaction state and fall through to the
+        // cached-account lookup so existing sessions still work.
+        let redirectResult = null
+        try {
+          redirectResult = await ensureMsalInitialized()
+        } catch {
+          clearMsalInteractionState()
+        }
+
+        if (redirectResult?.account) {
+          msalInstance!.setActiveAccount(redirectResult.account)
+          account.value = redirectResult.account
+        } else if (msalInstance) {
+          const cached = msalInstance.getAllAccounts()[0]
+          if (cached) {
+            msalInstance.setActiveAccount(cached)
+            account.value = cached
+          }
+        }
+
+        if (account.value) {
+          await refreshApiRoles()
+        }
+        initialized.value = true
+      } finally {
+        initializing.value = false
+        _initPromise = null
       }
-      if (account.value) {
-        await refreshApiRoles()
-      }
-      initialized.value = true
-    } finally {
-      initializing.value = false
-    }
+    })()
+
+    return _initPromise
   }
 
   async function login(returnTo?: string) {
@@ -122,22 +157,38 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error('Auth not configured — set VITE_MSAL_* env vars or VITE_DEV_SKIP_AUTH=true.')
     }
     await ensureMsalInitialized()
-    await msalInstance.loginRedirect({
-      scopes: [apiScope],
-      redirectStartPage: returnTo ?? window.location.href,
-    })
+    try {
+      await msalInstance.loginRedirect({
+        scopes: [apiScope],
+        redirectStartPage: returnTo ?? window.location.href,
+      })
+    } catch (err) {
+      if (err instanceof BrowserAuthError && err.errorCode === 'interaction_in_progress') {
+        // Stale interaction state from an interrupted redirect — clear it and retry once.
+        clearMsalInteractionState()
+        await ensureMsalInitialized()
+        await msalInstance.loginRedirect({
+          scopes: [apiScope],
+          redirectStartPage: returnTo ?? window.location.href,
+        })
+        return
+      }
+      throw err
+    }
   }
 
   async function logout() {
     if (isDevSkipAuth) {
-      account.value = null
+      account.value  = null
       apiRoles.value = []
+      apiOid.value   = null
       window.location.href = window.location.origin
       return
     }
     if (!msalInstance || !account.value) {
-      account.value = null
+      account.value  = null
       apiRoles.value = []
+      apiOid.value   = null
       return
     }
     await msalInstance.logoutRedirect({ account: account.value })
@@ -155,8 +206,10 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
     try {
-      const result = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
-      apiRoles.value = decodeJwtRoles(result.accessToken)
+      const result   = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
+      const decoded  = decodeJwtPayload(result.accessToken)
+      apiRoles.value = decoded.roles
+      if (decoded.oid) apiOid.value = decoded.oid
     } catch {
       apiRoles.value = []
     }
@@ -173,8 +226,10 @@ export const useAuthStore = defineStore('auth', () => {
     if (!msalInstance || !account.value) return null
     await ensureMsalInitialized()
     try {
-      const result = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
-      apiRoles.value = decodeJwtRoles(result.accessToken)
+      const result   = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
+      const decoded  = decodeJwtPayload(result.accessToken)
+      apiRoles.value = decoded.roles
+      if (decoded.oid) apiOid.value = decoded.oid
       return result.accessToken
     } catch (err) {
       if (err instanceof InteractionRequiredAuthError) {
@@ -195,6 +250,7 @@ export const useAuthStore = defineStore('auth', () => {
     isContributor,
     isMember,
     displayName,
+    oid,
     initialize,
     login,
     logout,

@@ -17,7 +17,8 @@ import { useAuthStore } from '@/stores/auth'
 const AuthCallbackView = () => import('@/views/AuthCallbackView.vue')
 const DashboardView    = () => import('@/views/DashboardView.vue')
 const EditorView       = () => import('@/views/EditorView.vue')
-const AdminView        = () => import('@/views/AdminView.vue')
+const AdminView             = () => import('@/views/AdminView.vue')
+const EventManagementView   = () => import('@/views/EventManagementView.vue')
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -38,6 +39,7 @@ const router = createRouter({
     { path: '/articles/:slug',    name: 'article-detail',  component: ArticleDetailView },
     { path: '/blog',              name: 'blog',            component: BlogView },
     { path: '/events',            name: 'events',          component: EventsView },
+    { path: '/events/:id',       name: 'event-detail',    component: () => import('@/views/EventDetailView.vue') },
     { path: '/resources',         name: 'resources',       component: ResourcesView },
     { path: '/newsletter',        name: 'newsletter',      component: NewsletterView },
     { path: '/login',             name: 'login',           component: LoginView },
@@ -49,6 +51,8 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
     { path: '/admin', name: 'admin', component: AdminView,
       meta: { requiresAuth: true, requiresRole: ['Admin'] } },
+    { path: '/admin/events', name: 'admin-events', component: EventManagementView,
+      meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
 
     { path: '/:pathMatch(.*)*',   name: 'not-found',       component: NotFoundView },
   ],

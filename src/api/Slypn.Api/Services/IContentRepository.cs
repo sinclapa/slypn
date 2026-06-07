@@ -19,6 +19,7 @@ public interface IContentRepository
     Task<IReadOnlyList<Article>>        ListBlogPostsAsync(string? status, CancellationToken ct);
     Task<Article?>                      GetArticleBySlugAsync(string slug, CancellationToken ct);
     Task<IReadOnlyList<CommunityEvent>> ListEventsAsync(bool upcomingOnly, CancellationToken ct);
+    Task<CommunityEvent?>               GetEventByIdAsync(string id, CancellationToken ct);
     Task<IReadOnlyList<Resource>>       ListResourcesAsync(CancellationToken ct);
     Task<IReadOnlyList<Newsletter>>     ListNewslettersAsync(CancellationToken ct);
 
@@ -27,8 +28,8 @@ public interface IContentRepository
     Task<Article>     ReplaceArticleAsync    (string id, ArticleInput input, string? ifMatch, CancellationToken ct);
     Task              DeleteArticleAsync     (string id, string status, string? ifMatch, CancellationToken ct);
 
-    Task<CommunityEvent> CreateEventAsync    (EventInput input, CancellationToken ct);
-    Task<CommunityEvent> ReplaceEventAsync   (string id, EventInput input, string? ifMatch, CancellationToken ct);
+    Task<CommunityEvent> CreateEventAsync    (EventInput input, string? createdByOid, string? createdByName, CancellationToken ct);
+    Task<CommunityEvent> ReplaceEventAsync   (string id, string oldYearMonth, EventInput input, string? createdByOid, string? createdByName, string? ifMatch, CancellationToken ct);
     Task                 DeleteEventAsync    (string id, string yearMonth, string? ifMatch, CancellationToken ct);
 
     Task<Resource>   CreateResourceAsync     (ResourceInput input, CancellationToken ct);
