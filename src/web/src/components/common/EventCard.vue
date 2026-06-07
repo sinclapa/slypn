@@ -1,21 +1,29 @@
 <script setup lang="ts">
 import type { CommunityEvent } from '@/types/content'
 
-defineProps<{ event: CommunityEvent }>()
+defineProps<{ event: CommunityEvent; past?: boolean }>()
 
-const formatDate = (iso: string) =>
+const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
-const formatTime = (iso: string) =>
+const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
 </script>
 
 <template>
   <RouterLink
     :to="{ name: 'event-detail', params: { id: event.id } }"
-    class="flex gap-5 rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+    :class="[
+      'relative flex gap-5 rounded-xl border p-5 shadow-sm transition-shadow hover:shadow-md',
+      past ? 'border-slypn-100 bg-slypn-50 opacity-70' : 'border-slypn-100 bg-white',
+    ]"
   >
-    <div class="flex w-20 flex-shrink-0 flex-col items-center justify-center rounded-lg bg-slypn-50 text-center">
+    <div
+      :class="[
+        'flex w-20 flex-shrink-0 flex-col items-center justify-center rounded-lg text-center',
+        past ? 'bg-slypn-100/60' : 'bg-slypn-50',
+      ]"
+    >
       <span class="text-xs font-semibold uppercase tracking-wider text-slypn-500">
         {{ new Date(event.startsAt).toLocaleDateString('en-GB', { weekday: 'short' }) }}
       </span>
@@ -28,13 +36,19 @@ const formatTime = (iso: string) =>
     </div>
 
     <div class="min-w-0 flex-1">
-      <p class="font-display text-xs font-semibold uppercase tracking-widest text-slypn-500">
-        {{ event.type }}
-      </p>
+      <div class="flex items-center gap-2">
+        <p class="font-display text-xs font-semibold uppercase tracking-widest text-slypn-500">
+          {{ event.type }}
+        </p>
+        <span
+          v-if="past"
+          class="rounded-full bg-slypn-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slypn-500"
+        >Past</span>
+      </div>
       <h3 class="mt-1 truncate text-lg font-bold text-slypn-700">{{ event.title }}</h3>
       <p class="mt-1 text-sm text-slypn-900/75">{{ event.description }}</p>
       <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slypn-900/60">
-        <span>{{ formatDate(event.startsAt) }}, {{ formatTime(event.startsAt) }}&ndash;{{ formatTime(event.endsAt) }}</span>
+        <span>{{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}</span>
         <span>{{ event.location }}</span>
         <a
           v-if="event.signupUrl"
