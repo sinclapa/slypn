@@ -3,8 +3,14 @@ import type { CommunityEvent } from '@/types/content'
 
 const props = defineProps<{ event: CommunityEvent; past?: boolean }>()
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+const currentYear = new Date().getFullYear()
+
+const fmtDate = (iso: string) => {
+  const d = new Date(iso)
+  const opts: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' }
+  if (d.getFullYear() !== currentYear) opts.year = 'numeric'
+  return d.toLocaleDateString('en-GB', opts)
+}
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
