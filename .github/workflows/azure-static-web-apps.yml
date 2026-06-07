@@ -20,7 +20,11 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: swa-${{ github.ref }}
+  # Include the event name so that a push to main and a pull_request-closed
+  # event (which share github.ref = refs/heads/main) get separate slots and
+  # don't cancel each other. Multiple pushes to the same branch still cancel
+  # the earlier in-progress run as intended.
+  group: swa-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
