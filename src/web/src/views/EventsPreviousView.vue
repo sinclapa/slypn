@@ -52,6 +52,12 @@ const paged     = computed(() =>
   </HeroBanner>
 
   <section class="mx-auto w-full max-w-4xl px-6 py-16">
+    <RouterLink
+      :to="{ name: 'events' }"
+      class="mb-8 inline-flex items-center gap-1.5 text-sm text-slypn-500 hover:text-slypn-700"
+    >
+      &larr; Back to events
+    </RouterLink>
     <p v-if="loading && !events" class="text-center text-slypn-900/70">
       Loading events&hellip;
     </p>
