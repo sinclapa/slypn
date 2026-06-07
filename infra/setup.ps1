@@ -321,6 +321,19 @@ if (-not $SkipEntra) {
         Ok $appIdUri
     }
 
+    # requestedAccessTokenVersion = 2 — CIAM must issue v2 access tokens so
+    # they include a `kid` header. Without this the API validator fails with
+    # "kid is missing" because v1 tokens use a different signing key format.
+    $apiApp = Invoke-Graph GET "/applications/$apiObjectId"
+    if ($apiApp.api.requestedAccessTokenVersion -ne 2) {
+        Invoke-Graph PATCH "/applications/$apiObjectId" @{
+            api = @{ requestedAccessTokenVersion = 2 }
+        } | Out-Null
+        Ok 'requestedAccessTokenVersion set to 2'
+    } else {
+        Info 'requestedAccessTokenVersion already 2'
+    }
+
     # ── access_as_user scope ──────────────────────────────────────────────────
 
     Step 'Entra · OAuth scope — access_as_user'
