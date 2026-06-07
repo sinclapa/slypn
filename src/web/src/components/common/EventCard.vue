@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import type { CommunityEvent } from '@/types/content'
 
-defineProps<{ event: CommunityEvent; past?: boolean }>()
+const props = defineProps<{ event: CommunityEvent; past?: boolean }>()
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+const isSameDay = (() => {
+  const s = new Date(props.event.startsAt)
+  const e = new Date(props.event.endsAt)
+  return s.getFullYear() === e.getFullYear()
+    && s.getMonth()    === e.getMonth()
+    && s.getDate()     === e.getDate()
+})()
 </script>
 
 <template>
@@ -48,7 +56,8 @@ const fmtTime = (iso: string) =>
       <h3 class="mt-1 truncate text-lg font-bold text-slypn-700">{{ event.title }}</h3>
       <p class="mt-1 text-sm text-slypn-900/75">{{ event.description }}</p>
       <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slypn-900/60">
-        <span>{{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}</span>
+        <span v-if="isSameDay">{{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}</span>
+        <span v-else>{{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&nbsp;&ndash;&nbsp;{{ fmtDate(event.endsAt) }}, {{ fmtTime(event.endsAt) }}</span>
         <span>{{ event.location }}</span>
         <a
           v-if="event.signupUrl"
