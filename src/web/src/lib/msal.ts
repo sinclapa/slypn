@@ -62,3 +62,20 @@ export function ensureMsalInitialized(): Promise<AuthenticationResult | null> {
 export function buildSilentRequest(account: AccountInfo): SilentRequest {
   return { account, scopes: [apiScope] }
 }
+
+/**
+ * Remove stale MSAL interaction-state keys from sessionStorage and reset the
+ * init promise so handleRedirectPromise runs again on the next call.
+ *
+ * These keys accumulate when a redirect flow is interrupted (browser back,
+ * closed tab, navigation away mid-flow). The next loginRedirect call then
+ * throws interaction_in_progress even though no flow is actually running.
+ */
+export function clearMsalInteractionState(): void {
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.includes('.interaction.status') || key.includes('interaction.status')) {
+      sessionStorage.removeItem(key)
+    }
+  }
+  initPromise = null
+}

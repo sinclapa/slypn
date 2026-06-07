@@ -8,7 +8,7 @@ export default [
   },
   {
     name: 'slypn/files-to-ignore',
-    ignores: ['**/dist/**', '**/node_modules/**', '**/.vite/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/.vite/**', '**/*.cjs', '**/*.mjs'],
   },
   ...pluginVue.configs['flat/essential'],
   ...vueTsEslintConfig(),

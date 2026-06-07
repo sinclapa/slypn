@@ -37,12 +37,22 @@ public sealed class EntraJwtValidator : IJwtValidator
 
         var config = await _configManager.GetConfigurationAsync(ct);
 
+        // CIAM v2 tokens set `aud` to the bare application GUID, not the
+        // api:// URI. Accept both so either form works in configuration.
+        var audience  = _opts.Audience!;
+        var guidOnly  = audience.StartsWith("api://", StringComparison.OrdinalIgnoreCase)
+                            ? audience["api://".Length..]
+                            : audience;
+        var apiUri    = audience.StartsWith("api://", StringComparison.OrdinalIgnoreCase)
+                            ? audience
+                            : $"api://{audience}";
+
         var validationParameters = new TokenValidationParameters
         {
             ValidateIssuer           = true,
             ValidIssuers             = _opts.ValidIssuers.Length > 0 ? _opts.ValidIssuers : [ _opts.Authority!.TrimEnd('/') ],
             ValidateAudience         = true,
-            ValidAudience            = _opts.Audience,
+            ValidAudiences           = [ guidOnly, apiUri ],
             ValidateLifetime         = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKeys        = config.SigningKeys,

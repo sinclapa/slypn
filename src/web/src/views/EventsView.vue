@@ -54,7 +54,7 @@ const upcoming = computed(() => {
     </template>
   </HeroBanner>
 
-  <section class="mx-auto max-w-4xl px-6 py-16">
+  <section class="mx-auto w-full max-w-4xl px-6 py-16">
     <p v-if="loading && !events" class="text-center text-slypn-900/70">
       Loading events&hellip;
     </p>

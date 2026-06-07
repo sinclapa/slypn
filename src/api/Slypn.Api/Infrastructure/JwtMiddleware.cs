@@ -148,4 +148,11 @@ public static class FunctionContextExtensions
 
     public static string? GetUserOid(this FunctionContext context) =>
         context.GetPrincipal()?.FindFirst("oid")?.Value;
+
+    public static string? GetUserName(this FunctionContext context) =>
+        context.GetPrincipal()?.FindFirst("name")?.Value
+        ?? context.GetPrincipal()?.FindFirst("preferred_username")?.Value;
+
+    public static bool IsAdmin(this FunctionContext context) =>
+        context.GetPrincipal()?.FindAll("roles").Any(c => c.Value == "Admin") ?? false;
 }

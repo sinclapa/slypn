@@ -70,6 +70,12 @@ internal static class FunctionHelpers
     public static HttpResponseData NoContent(HttpRequestData req) =>
         req.CreateResponse(HttpStatusCode.NoContent);
 
+    public static async Task<HttpResponseData> NotFound(HttpRequestData req, string message = "Not found.")
+        => await Reject(req, HttpStatusCode.NotFound, message);
+
+    public static async Task<HttpResponseData> Forbidden(HttpRequestData req, string message = "Forbidden.")
+        => await Reject(req, HttpStatusCode.Forbidden, message);
+
     public static async Task<HttpResponseData> BadRequest(HttpRequestData req, string message)
     {
         var resp = req.CreateResponse(HttpStatusCode.BadRequest);

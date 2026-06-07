@@ -64,6 +64,12 @@ jobs:
           # set in repo secrets, the action build-only and skips the upload
           # instead of erroring. Remove this flag once the token is in place.
           skip_deploy_on_missing_secrets: true
+        env:
+          # Vite bakes these into the JS bundle at build time.
+          # Set via: .\infra\setup.ps1 (GitHub secrets phase).
+          VITE_MSAL_AUTHORITY: ${{ secrets.VITE_MSAL_AUTHORITY }}
+          VITE_MSAL_CLIENT_ID: ${{ secrets.VITE_MSAL_CLIENT_ID }}
+          VITE_API_SCOPE: ${{ secrets.VITE_API_SCOPE }}
 
   close_pr_environment:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
