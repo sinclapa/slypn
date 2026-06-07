@@ -47,6 +47,10 @@ const isSameDay = (() => {
       <span class="text-xs font-semibold uppercase tracking-wider text-slypn-500">
         {{ new Date(event.startsAt).toLocaleDateString('en-GB', { month: 'short' }) }}
       </span>
+      <span
+        v-if="new Date(event.startsAt).getFullYear() !== currentYear"
+        class="text-xs font-semibold text-slypn-400"
+      >{{ new Date(event.startsAt).getFullYear() }}</span>
     </div>
 
     <div class="min-w-0 flex-1">
