@@ -126,11 +126,19 @@ public sealed class JwtMiddleware(
 
     private static string? ExtractBearer(HttpRequestData req)
     {
-        if (!req.Headers.TryGetValues("Authorization", out var vals)) return null;
-        var raw = vals.FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-        const string prefix = "Bearer ";
-        return raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? raw[prefix.Length..].Trim() : null;
+        // SWA's gateway replaces the Authorization header with its own HS256
+        // session token before requests reach the Functions. Read the MSAL token
+        // from X-Slypn-Token (set by the frontend) which SWA leaves untouched.
+        foreach (var headerName in new[] { "X-Slypn-Token", "Authorization" })
+        {
+            if (!req.Headers.TryGetValues(headerName, out var vals)) continue;
+            var raw = vals.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            const string prefix = "Bearer ";
+            if (raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return raw[prefix.Length..].Trim();
+        }
+        return null;
     }
 
     private static async Task ShortCircuit(FunctionContext context, HttpRequestData req, HttpStatusCode code, string message)

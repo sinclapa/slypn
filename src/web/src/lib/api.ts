@@ -16,7 +16,13 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
   if (auth.isAuthenticated) {
     const token = await auth.acquireToken()
-    if (token) headers.set('Authorization', `Bearer ${token}`)
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+      // SWA's gateway intercepts the Authorization header and replaces it with
+      // its own HS256 session token before the request reaches the Functions API.
+      // X-Slypn-Token bypasses that interception — the middleware reads this first.
+      headers.set('X-Slypn-Token', `Bearer ${token}`)
+    }
   }
   if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
