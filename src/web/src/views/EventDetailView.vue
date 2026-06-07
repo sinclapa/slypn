@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
@@ -16,6 +17,15 @@ const fmtDate = (iso: string) =>
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+const isSameDay = computed(() => {
+  if (!event.value) return true
+  const s = new Date(event.value.startsAt)
+  const e = new Date(event.value.endsAt)
+  return s.getFullYear() === e.getFullYear()
+    && s.getMonth()    === e.getMonth()
+    && s.getDate()     === e.getDate()
+})
 </script>
 
 <template>
@@ -45,16 +55,38 @@ const fmtTime = (iso: string) =>
 
       <!-- meta -->
       <dl class="grid gap-3 rounded-xl border border-slypn-100 bg-slypn-50 p-5 sm:grid-cols-2">
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wider text-slypn-400">Date</dt>
-          <dd class="mt-1 text-sm font-medium text-slypn-800">{{ fmtDate(event.startsAt) }}</dd>
-        </div>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wider text-slypn-400">Time</dt>
-          <dd class="mt-1 text-sm font-medium text-slypn-800">
-            {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}
-          </dd>
-        </div>
+        <!-- Same-day: Date + Time on separate rows -->
+        <template v-if="isSameDay">
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wider text-slypn-400">Date</dt>
+            <dd class="mt-1 text-sm font-medium text-slypn-800">{{ fmtDate(event.startsAt) }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wider text-slypn-400">Time</dt>
+            <dd class="mt-1 text-sm font-medium text-slypn-800">
+              {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}
+            </dd>
+          </div>
+        </template>
+
+        <!-- Multi-day: From + To -->
+        <template v-else>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wider text-slypn-400">From</dt>
+            <dd class="mt-1 text-sm font-medium text-slypn-800">
+              {{ fmtDate(event.startsAt) }},
+              <span class="text-slypn-600">{{ fmtTime(event.startsAt) }}</span>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wider text-slypn-400">To</dt>
+            <dd class="mt-1 text-sm font-medium text-slypn-800">
+              {{ fmtDate(event.endsAt) }},
+              <span class="text-slypn-600">{{ fmtTime(event.endsAt) }}</span>
+            </dd>
+          </div>
+        </template>
+
         <div class="sm:col-span-2">
           <dt class="text-xs font-semibold uppercase tracking-wider text-slypn-400">Location</dt>
           <dd class="mt-1 text-sm font-medium text-slypn-800">{{ event.location }}</dd>
