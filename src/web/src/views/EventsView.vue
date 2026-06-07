@@ -7,11 +7,7 @@ import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
 import type { CommunityEvent } from '@/types/content'
 
-const PAGE_SIZE = 10
-
-const view         = ref<'list' | 'calendar'>('list')
-const showPrevious = ref(false)
-const prevPage     = ref(1)
+const view = ref<'list' | 'calendar'>('list')
 
 const { data: events, loading, error, refresh } = useAsyncData(
   () => apiJson<CommunityEvent[]>('/events'),
@@ -34,22 +30,10 @@ const windowEvents = computed(() =>
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt)),
 )
 
-// Archive: events older than the 7-day window, descending
-const previousEvents = computed(() =>
-  [...(events.value ?? [])]
-    .filter(e => new Date(e.startsAt) < sevenDaysAgo)
-    .sort((a, b) => +new Date(b.startsAt) - +new Date(a.startsAt)),
+// Count of events older than the 7-day window (for the link label)
+const previousCount = computed(() =>
+  (events.value ?? []).filter(e => new Date(e.startsAt) < sevenDaysAgo).length,
 )
-
-const prevPageCount = computed(() => Math.ceil(previousEvents.value.length / PAGE_SIZE))
-const pagedPrevious = computed(() =>
-  previousEvents.value.slice((prevPage.value - 1) * PAGE_SIZE, prevPage.value * PAGE_SIZE),
-)
-
-function togglePrevious() {
-  showPrevious.value = !showPrevious.value
-  prevPage.value = 1
-}
 </script>
 
 <template>
@@ -108,46 +92,14 @@ function togglePrevious() {
         </p>
       </div>
 
-      <!-- Previous events toggle -->
-      <div v-if="previousEvents.length" class="mt-10">
-        <button
-          type="button"
-          class="flex items-center gap-1.5 text-sm font-semibold text-slypn-600 hover:text-slypn-800"
-          @click="togglePrevious"
+      <!-- Link to previous events page -->
+      <div v-if="previousCount" class="mt-10 text-center">
+        <RouterLink
+          :to="{ name: 'events-previous' }"
+          class="text-sm font-semibold text-slypn-600 hover:text-slypn-800"
         >
-          <span>{{ showPrevious ? '▲' : '▼' }}</span>
-          Previous events ({{ previousEvents.length }})
-        </button>
-
-        <div v-if="showPrevious" class="mt-6 space-y-4">
-          <EventCard
-            v-for="event in pagedPrevious"
-            :key="event.id"
-            :event="event"
-            :past="true"
-          />
-
-          <!-- Pagination -->
-          <div v-if="prevPageCount > 1" class="flex items-center justify-center gap-2 pt-4">
-            <button
-              type="button"
-              class="rounded-md border border-slypn-200 px-3 py-1 text-sm text-slypn-700 hover:bg-slypn-50 disabled:opacity-40"
-              :disabled="prevPage === 1"
-              @click="prevPage--"
-            >
-              &larr;
-            </button>
-            <span class="text-sm text-slypn-700">{{ prevPage }} / {{ prevPageCount }}</span>
-            <button
-              type="button"
-              class="rounded-md border border-slypn-200 px-3 py-1 text-sm text-slypn-700 hover:bg-slypn-50 disabled:opacity-40"
-              :disabled="prevPage === prevPageCount"
-              @click="prevPage++"
-            >
-              &rarr;
-            </button>
-          </div>
-        </div>
+          Previous events ({{ previousCount }}) &rarr;
+        </RouterLink>
       </div>
     </template>
 
