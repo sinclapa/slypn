@@ -206,10 +206,30 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
     try {
-      const result   = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
-      const decoded  = decodeJwtPayload(result.accessToken)
-      apiRoles.value = decoded.roles
+      const result  = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
+      const decoded = decodeJwtPayload(result.accessToken)
       if (decoded.oid) apiOid.value = decoded.oid
+
+      // Roles are managed in Cosmos, not in Entra app roles — call /me to link
+      // the OID on first login and retrieve the member's actual role list.
+      try {
+        const meResp = await fetch('/api/me', {
+          headers: {
+            Authorization:  `Bearer ${result.accessToken}`,
+            'X-Slypn-Token': `Bearer ${result.accessToken}`,
+          },
+        })
+        if (meResp.ok) {
+          const me = (await meResp.json()) as { roles?: unknown }
+          apiRoles.value = Array.isArray(me.roles)
+            ? (me.roles as unknown[]).filter((r): r is string => typeof r === 'string')
+            : decoded.roles
+        } else {
+          apiRoles.value = decoded.roles
+        }
+      } catch {
+        apiRoles.value = decoded.roles
+      }
     } catch {
       apiRoles.value = []
     }
@@ -226,9 +246,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (!msalInstance || !account.value) return null
     await ensureMsalInitialized()
     try {
-      const result   = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
-      const decoded  = decodeJwtPayload(result.accessToken)
-      apiRoles.value = decoded.roles
+      const result  = await msalInstance.acquireTokenSilent(buildSilentRequest(account.value))
+      const decoded = decodeJwtPayload(result.accessToken)
       if (decoded.oid) apiOid.value = decoded.oid
       return result.accessToken
     } catch (err) {

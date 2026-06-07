@@ -8,12 +8,14 @@ using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Slypn.Api.Services;
 
 namespace Slypn.Api.Infrastructure;
 
 public sealed class JwtMiddleware(
     IJwtValidator validator,
     IOptions<EntraOptions> options,
+    IContentRepository repo,
     ILogger<JwtMiddleware> logger) : IFunctionsWorkerMiddleware
 {
     private static readonly ConcurrentDictionary<string, RequireRoleAttribute?> AttrCache = new();
@@ -84,6 +86,26 @@ public sealed class JwtMiddleware(
             logger.LogError(ex, "Unexpected error validating JWT");
             await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, "Token validation error.");
             return;
+        }
+
+        // Enrich principal with Cosmos roles (source of truth — overrides any JWT roles).
+        if (repo.SupportsWrites && principal.FindFirst("oid")?.Value is { Length: > 0 } callerOid)
+        {
+            try
+            {
+                var member = await repo.GetMemberByOidAsync(callerOid, context.CancellationToken);
+                if (member?.Roles is { Count: > 0 } cosmosRoles
+                    && principal.Identity is ClaimsIdentity identity)
+                {
+                    foreach (var role in cosmosRoles)
+                        if (!identity.HasClaim("roles", role))
+                            identity.AddClaim(new Claim("roles", role));
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cosmos role enrichment failed for OID {Oid}", callerOid);
+            }
         }
 
         if (attr.Roles.Length > 0 && !attr.Roles.Any(r => principal.IsInRole(r)))

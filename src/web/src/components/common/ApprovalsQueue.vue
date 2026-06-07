@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { apiFetch } from '@/lib/api'
+import { useApprovalsStore } from '@/stores/approvals'
 
 interface PendingArticle {
   id: string
@@ -10,20 +11,26 @@ interface PendingArticle {
   body: string
   author: string
   authorId?: string
-  publishedAt: string  // submission time while status=in-review
+  publishedAt: string
   category: string
   tags: string[]
   status: string
   readingMinutes: number
-  type?: 'article' | 'blog'  // missing on legacy rows; treat as 'article'
+  type?: 'article' | 'blog'
 }
+
+const approvalsStore = useApprovalsStore()
 
 const articles  = ref<PendingArticle[]>([])
 const loading   = ref(false)
 const loadError = ref<string | null>(null)
 const expanded  = ref<Record<string, boolean>>({})
-const busy      = ref<Record<string, 'publishing' | 'rejecting' | null>>({})
+const busy      = ref<Record<string, 'publishing' | 'revising' | null>>({})
 const errors    = ref<Record<string, string | null>>({})
+
+const reviseDialog = ref<{ show: boolean; article: PendingArticle | null; feedback: string }>({
+  show: false, article: null, feedback: '',
+})
 
 const groupedByAuthor = computed(() => {
   const map = new Map<string, PendingArticle[]>()
@@ -39,8 +46,6 @@ async function load() {
   loading.value = true
   loadError.value = null
   try {
-    // /api/articles is type-filtered to "article", so blog submissions never
-    // appear there. Pull both endpoints in parallel and merge.
     const [articlesResp, blogResp] = await Promise.all([
       apiFetch('/articles?status=in-review'),
       apiFetch('/blog?status=in-review'),
@@ -54,6 +59,7 @@ async function load() {
     articles.value = [...a, ...b].sort(
       (x, y) => +new Date(y.publishedAt) - +new Date(x.publishedAt),
     )
+    approvalsStore.pendingCount = articles.value.length
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -71,6 +77,7 @@ async function publish(article: PendingArticle) {
       throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
     }
     articles.value = articles.value.filter(a => a.id !== article.id)
+    approvalsStore.pendingCount = articles.value.length
   } catch (err) {
     errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
   } finally {
@@ -78,18 +85,23 @@ async function publish(article: PendingArticle) {
   }
 }
 
-async function reject(article: PendingArticle) {
-  const feedback = window.prompt(`Why is "${article.title}" being rejected? (5-1000 characters)`, '')
-  if (!feedback || feedback.trim().length < 5) {
-    if (feedback !== null) {
-      errors.value = { ...errors.value, [article.id]: 'Feedback must be at least 5 characters.' }
-    }
+function openRevise(article: PendingArticle) {
+  reviseDialog.value = { show: true, article, feedback: '' }
+}
+
+async function confirmRevise() {
+  const { article, feedback } = reviseDialog.value
+  if (!article) return
+  if (feedback.trim().length < 5) {
+    errors.value = { ...errors.value, [article.id]: 'Feedback must be at least 5 characters.' }
+    reviseDialog.value.show = false
     return
   }
-  busy.value = { ...busy.value, [article.id]: 'rejecting' }
+  reviseDialog.value.show = false
+  busy.value = { ...busy.value, [article.id]: 'revising' }
   errors.value = { ...errors.value, [article.id]: null }
   try {
-    const resp = await apiFetch(`/articles/${article.id}/reject`, {
+    const resp = await apiFetch(`/articles/${article.id}/revise`, {
       method: 'POST',
       body: JSON.stringify({ feedback: feedback.trim() }),
     })
@@ -98,6 +110,7 @@ async function reject(article: PendingArticle) {
       throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
     }
     articles.value = articles.value.filter(a => a.id !== article.id)
+    approvalsStore.pendingCount = articles.value.length
   } catch (err) {
     errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
   } finally {
@@ -125,7 +138,7 @@ onMounted(load)
       <div>
         <h2 class="font-display text-xl font-bold text-slypn-700">Approvals</h2>
         <p class="mt-1 text-sm text-slypn-900/75">
-          Articles submitted by contributors, awaiting publish or reject.
+          Articles submitted by contributors, awaiting publish or revision.
         </p>
       </div>
       <button
@@ -133,9 +146,7 @@ onMounted(load)
         class="rounded-md border border-slypn-200 bg-white px-3 py-1.5 text-sm font-semibold text-slypn-700 hover:bg-slypn-50"
         :disabled="loading"
         @click="load"
-      >
-        {{ loading ? 'Loading…' : 'Refresh' }}
-      </button>
+      >{{ loading ? 'Loading…' : 'Refresh' }}</button>
     </div>
 
     <p v-if="loadError" class="mt-4 rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
@@ -164,23 +175,15 @@ onMounted(load)
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span
-                    :class="[
-                      'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
-                      article.type === 'blog'
-                        ? 'bg-violet-100 text-violet-800'
-                        : 'bg-slypn-100 text-slypn-700',
-                    ]"
-                  >
-                    {{ article.type === 'blog' ? 'Blog' : 'Article' }}
-                  </span>
+                  <span :class="[
+                    'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                    article.type === 'blog' ? 'bg-violet-100 text-violet-800' : 'bg-slypn-100 text-slypn-700',
+                  ]">{{ article.type === 'blog' ? 'Blog' : 'Article' }}</span>
                   <button
                     type="button"
                     class="text-left font-display text-lg font-bold text-slypn-700 hover:text-slypn-600"
                     @click="toggle(article.id)"
-                  >
-                    {{ article.title || '(untitled)' }}
-                  </button>
+                  >{{ article.title || '(untitled)' }}</button>
                 </div>
                 <p class="mt-1 text-xs text-slypn-900/60">
                   Submitted {{ formatDateTime(article.publishedAt) }}
@@ -195,17 +198,13 @@ onMounted(load)
                   class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                   :disabled="busy[article.id] !== null && busy[article.id] !== undefined"
                   @click="publish(article)"
-                >
-                  {{ busy[article.id] === 'publishing' ? '…' : 'Publish' }}
-                </button>
+                >{{ busy[article.id] === 'publishing' ? '…' : 'Approve' }}</button>
                 <button
                   type="button"
-                  class="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                  class="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
                   :disabled="busy[article.id] !== null && busy[article.id] !== undefined"
-                  @click="reject(article)"
-                >
-                  {{ busy[article.id] === 'rejecting' ? '…' : 'Reject' }}
-                </button>
+                  @click="openRevise(article)"
+                >{{ busy[article.id] === 'revising' ? '…' : 'Revise' }}</button>
               </div>
             </div>
 
@@ -223,4 +222,45 @@ onMounted(load)
       </li>
     </ol>
   </article>
+
+  <!-- Revise dialog -->
+  <Teleport to="body">
+    <div
+      v-if="reviseDialog.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      @mousedown.self="reviseDialog.show = false"
+    >
+      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h3 class="font-display font-semibold text-slypn-700">Request revision</h3>
+        <p class="mt-1 text-sm text-slypn-900/70">
+          <strong>{{ reviseDialog.article?.title }}</strong> will be sent back to the author as a draft with your feedback.
+        </p>
+        <div class="mt-4">
+          <label class="block text-sm font-medium text-slypn-800">Feedback for the author</label>
+          <textarea
+            v-model="reviseDialog.feedback"
+            rows="4"
+            maxlength="1000"
+            placeholder="Explain what needs to change (min 5 characters)…"
+            class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
+            @keydown.esc.prevent="reviseDialog.show = false"
+          />
+          <p class="mt-1 text-right text-xs text-slypn-400">{{ reviseDialog.feedback.length }}/1000</p>
+        </div>
+        <div class="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 text-sm font-medium text-slypn-700 hover:bg-slypn-50"
+            @click="reviseDialog.show = false"
+          >Cancel</button>
+          <button
+            type="button"
+            :disabled="reviseDialog.feedback.trim().length < 5"
+            class="rounded-md bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+            @click="confirmRevise"
+          >Send back for revision</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import TulipIcon from '@/components/common/TulipIcon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useApprovalsStore } from '@/stores/approvals'
 
 const navItems = [
   { to: '/',           label: 'Home' },
@@ -15,9 +16,13 @@ const navItems = [
 ]
 
 const auth = useAuthStore()
+const approvalsStore = useApprovalsStore()
 const router = useRouter()
 const mobileOpen = ref(false)
 const userMenuOpen = ref(false)
+
+onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
+watch(() => auth.isAdmin, (isAdmin) => { if (isAdmin) approvalsStore.refresh() })
 
 async function onSignIn() {
   if (!auth.isConfigured) {
@@ -109,7 +114,16 @@ async function onSignOut() {
               <RouterLink to="/admin/events" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Event management</RouterLink>
             </li>
             <li v-if="auth.isAdmin">
-              <RouterLink to="/admin" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Admin</RouterLink>
+              <RouterLink to="/admin/members" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Members</RouterLink>
+            </li>
+            <li v-if="auth.isAdmin">
+              <RouterLink to="/admin" class="flex items-center justify-between px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">
+                Admin
+                <span
+                  v-if="approvalsStore.pendingCount > 0"
+                  class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+                >{{ approvalsStore.pendingCount }}</span>
+              </RouterLink>
             </li>
             <li>
               <button class="block w-full px-4 py-2 text-left hover:bg-slypn-50" @click="onSignOut">Sign out</button>
@@ -161,11 +175,24 @@ async function onSignOut() {
         >Event management</RouterLink>
         <RouterLink
           v-if="auth.isAdmin"
-          to="/admin"
+          to="/admin/members"
           class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
           active-class="bg-slypn-50"
           @click="mobileOpen = false"
-        >Admin</RouterLink>
+        >Members</RouterLink>
+        <RouterLink
+          v-if="auth.isAdmin"
+          to="/admin"
+          class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+          active-class="bg-slypn-50"
+          @click="mobileOpen = false"
+        >
+          Admin
+          <span
+            v-if="approvalsStore.pendingCount > 0"
+            class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+          >{{ approvalsStore.pendingCount }}</span>
+        </RouterLink>
         <button
           v-if="!auth.isAuthenticated"
           class="mt-1 rounded-md bg-slypn-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-slypn-700"

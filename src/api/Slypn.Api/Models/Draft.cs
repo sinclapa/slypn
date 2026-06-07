@@ -15,7 +15,8 @@ public sealed record Draft(
     IReadOnlyList<string> Tags,
     int ReadingMinutes,
     DateTime CreatedAt,
-    DateTime UpdatedAt)
+    DateTime UpdatedAt,
+    string? RevisionFeedback = null)
 {
     [JsonPropertyName("_etag")]
     [Newtonsoft.Json.JsonProperty("_etag")]

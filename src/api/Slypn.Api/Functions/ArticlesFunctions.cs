@@ -130,17 +130,17 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     }
 
     /// <summary>
-    /// Admin rejects an in-review article with required feedback. Moves it to
-    /// status=rejected so the author can see the feedback alongside their draft.
+    /// Admin returns an in-review article to the author as a draft with revision feedback.
+    /// The in-review article is deleted and a draft is created so the author can edit and resubmit.
     /// </summary>
-    [Function("RejectArticle")]
+    [Function("ReviseArticle")]
     [RequireRole("Admin")]
-    [OpenApiOperation(operationId: "articles.reject", tags: new[] { "articles" }, Summary = "Reject article", Description = "Rejects an article and records reviewer feedback.")]
+    [OpenApiOperation(operationId: "articles.revise", tags: new[] { "articles" }, Summary = "Request revision", Description = "Returns an in-review article to the author as a draft with feedback.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
-    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(RejectionInput), Required = true, Description = "Rejection feedback.")]
-    public async Task<HttpResponseData> Reject(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/reject")] HttpRequestData req,
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(RejectionInput), Required = true, Description = "Revision feedback.")]
+    public async Task<HttpResponseData> Revise(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/revise")] HttpRequestData req,
         string id, CancellationToken ct)
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
@@ -150,8 +150,8 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
 
         try
         {
-            var article = await repo.RejectArticleAsync(id, input!.Feedback.Trim(), ct);
-            return await Ok(req, article, article.Etag);
+            var draft = await repo.ReviseArticleAsync(id, input!.Feedback.Trim(), ct);
+            return await Ok(req, draft, draft.Etag);
         }
         catch (InvalidOperationException ex)
         {
