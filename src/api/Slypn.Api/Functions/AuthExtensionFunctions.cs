@@ -48,7 +48,7 @@ public sealed class AuthExtensionFunctions(
         string? email;
         try
         {
-            var body = await req.ReadAsStringAsync();
+            var body = await req.ReadAsStringAsync() ?? string.Empty;
             var node = JsonNode.Parse(body);
             email = node?["data"]?["userDetails"]?["mail"]?.GetValue<string>();
             log.LogInformation("AllowSignup: parsed email={Email}", email);
