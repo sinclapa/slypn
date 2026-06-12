@@ -16,5 +16,9 @@ public sealed class GraphOptions
     /// <summary>Where invitees land after accepting. Must be an HTTPS URL — Graph rejects http://localhost.</summary>
     public string InviteRedirectUrl { get; set; } = "https://thankful-tree-090006c03.7.azurestaticapps.net/";
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientSecret);
+    /// <summary>True when a sign-up URL is available for the CIAM invite flow.</summary>
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(InviteRedirectUrl);
+
+    /// <summary>True when client credentials are available for Graph API calls (e.g. user deletion).</summary>
+    public bool HasClientCredentials => !string.IsNullOrWhiteSpace(ClientSecret);
 }

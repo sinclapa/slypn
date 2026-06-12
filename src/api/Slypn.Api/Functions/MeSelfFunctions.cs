@@ -47,11 +47,15 @@ public sealed class MeSelfFunctions(
                 var byEmail = await repo.GetMemberByEmailAsync(email.Trim().ToLowerInvariant(), ct);
                 if (byEmail is not null && byEmail.Oid != callerOid)
                 {
+                    // Use the display name the user chose during CIAM sign-up; fall back
+                    // to the admin's placeholder only if the JWT carries no name claim.
+                    var jwtName = context.GetUserName();
                     var activated = byEmail with
                     {
-                        Oid        = callerOid,
-                        AcceptedAt = byEmail.AcceptedAt ?? DateTime.UtcNow,
-                        Status     = byEmail.AcceptedAt is null ? "active" : byEmail.Status,
+                        Oid         = callerOid,
+                        AcceptedAt  = byEmail.AcceptedAt ?? DateTime.UtcNow,
+                        Status      = byEmail.AcceptedAt is null ? "active" : byEmail.Status,
+                        DisplayName = !string.IsNullOrWhiteSpace(jwtName) ? jwtName : byEmail.DisplayName,
                     };
                     try
                     {
