@@ -33,9 +33,11 @@ A user flow is the policy that drives the hosted sign-up + sign-in pages.
 
 1. **Identity → External Identities → User flows → New user flow**.
 2. Name: `B2C_1_SLYPN_SignInSignUp`. (The portal forces the `B2C_1_` prefix for historical reasons; we'll refer to it as `slypn-signin-signup` everywhere else.)
-3. **Identity providers** — leave **Email with password** selected. Google + Facebook are added in section 3.
-4. **Create** the flow.
-5. Open the flow and choose **User attributes**: tick **Display Name** and **Email Address**. Skip everything else — we don't need address / job title / etc.
+3. **Flow type** — choose **Sign up and sign in**. Do **not** choose "Sign in" only — that blocks new users with "We couldn't find an account with this email address" and prevents self-service registration.
+4. **Identity providers** — leave **Email with password** selected. Google + Facebook are added in section 3.
+5. **Self-service sign-up** — ensure this is **enabled**. This is what lets invited users create their own account by navigating to the app.
+6. **Create** the flow.
+7. Open the flow and choose **User attributes**: tick **Display Name** and **Email Address**. Skip everything else — we don't need address / job title / etc.
 
 > **Note on claims**
 >
@@ -155,20 +157,96 @@ After registration:
 2. Pick yourself and assign the **Administrator** role.
 3. Repeat for any additional admins / contributors. New customers who self-sign-up via the user flow start with no app role; the **Invite Member** flow in #24 grants them `Member` automatically.
 
-### 6.4 Grant Microsoft Graph invitation permission
+### 6.4 Custom authentication extension — sign-up gate
 
-The `slypn-api` app calls the Graph `POST /v1.0/invitations` endpoint to send B2B invitation emails to new members. It needs `User.Invite.All` and a client secret.
+The sign-up gate blocks uninvited email addresses at the point of account creation. When a new user reaches the sign-up form, Entra calls our `/api/auth/allow-signup` endpoint before creating their account. The API checks whether the email exists in Cosmos as an invited member; if not, it returns a block-page response and no Entra account is created.
 
-1. In the SLYPN External ID tenant: **Identity → Applications → App registrations → `slypn-api` → API permissions → Add a permission → Microsoft Graph → Application permissions**.
-2. Search for and tick **`User.Invite.All`**. Add permissions.
-3. Click **Grant admin consent for SLYPN** (the yellow warning banner). Confirm.
-4. **Certificates & secrets → Client secrets → New client secret** — description: `graph-invitations`, expiry: 24 months.
-5. Copy the secret **Value** immediately — it's hidden once you leave the page.
-6. Add it to your local settings:
+`infra/setup.ps1` handles the prerequisites automatically:
+
+- Sets the two required identifier URIs on `slypn-api`:
+  - `api://<apiClientId>` (base form)
+  - `api://<swa-hostname>/<apiClientId>` (required by the Custom Auth Extension wizard)
+- Reports whether the `CustomAuthenticationExtensions.Receive.Payload` permission has been granted
+
+The extension itself must be created once in the portal — the Graph beta API requires a delegated permission (`CustomAuthenticationExtension.ReadWrite.All`) that the CLI cannot obtain in a CIAM tenant context.
+
+#### Step 1 — Run `setup.ps1` first
+
+```powershell
+.\infra\setup.ps1 -SkipBicep -SkipSwa -SkipGitHub -SkipLocal
+```
+
+This ensures the identifier URIs are set on `slypn-api` before you open the portal wizard. Without them the wizard shows a validation error and cannot be completed.
+
+#### Step 2 — Create the extension
+
+1. In the SLYPN External ID tenant, go to **Identity → External Identities → Custom authentication extensions → + Create**.
+2. **Basics**:
+   - Name: `SLYPN sign-up gate`
+   - Description: *Blocks uninvited emails at sign-up*
+3. **Endpoint configuration**:
+   - Event type: **AttributeCollectionStart**
+   - Target URL: `https://<swa-hostname>/api/auth/allow-signup`
+     (e.g. `https://thankful-tree-090006c03.7.azurestaticapps.net/api/auth/allow-signup`)
+   - Timeout: `2000` ms
+   - Max retries: `1`
+4. **API Authentication**:
+   - Select **Select an existing app registration in this directory**
+   - Search for and select **slypn-api**
+   - App name and App ID will populate automatically
+5. **Review** — you will see one validation warning:
+   > *The Microsoft Graph CustomAuthenticationExtensions.Receive.Payload app role is not found in the requiredResourceAccess property of the application*
+
+   This is expected. The warning exists because the permission has not been granted yet — that happens in the next step. You can proceed past this warning.
+6. Click **Save** to create the extension.
+
+#### Step 3 — Grant the CustomAuthenticationExtensions.Receive.Payload permission
+
+This permission cannot be granted programmatically — the CIAM tenant does not expose the appRole via Graph API. Add it manually in the `slypn-api` app registration:
+
+1. **Identity → Applications → App registrations → slypn-api → API permissions**.
+2. **Add a permission → Microsoft Graph → Application permissions**.
+3. Search `CustomAuthentication` → tick **`CustomAuthenticationExtensions.Receive.Payload`**.
+4. **Add permissions**.
+5. **Grant admin consent for SLYPN** (the yellow bar at the top of the permissions list).
+
+Once granted, `setup.ps1` will report `✓ CustomAuthenticationExtensions.Receive.Payload already granted` on subsequent runs.
+
+#### Step 4 — Associate with the user flow
+
+1. Go to **Identity → External Identities → User flows → slypn-signin-signup**.
+2. In the left menu under **Settings**, click **Custom authentication extensions**.
+3. Click the **pencil icon** next to **"Before collecting information from the user"**.
+4. Select **SLYPN sign-up gate** and confirm.
+5. Click **Save** in the top toolbar.
+
+#### Step 5 — Save the extension ID
+
+1. On the extension blade, copy the **ID** (a GUID in the Properties or Overview section).
+2. Open `infra/secrets.json` and add:
+   ```json
+   "signupExtensionId": "<the-guid>"
    ```
-   "Graph__ClientSecret": "<value>"
-   ```
-   Tenant ID and client ID come from the `AzureAd__TenantId` and `AzureAd__Audience` settings already in `local.settings.json`; you don't need to set separate `Graph__TenantId` / `Graph__ClientId` values.
+   Or paste it when prompted by `setup.ps1` on its next run.
+
+#### Smoke test
+
+Open the user flow and click **Run user flow**. Use an email address that is **not** in Cosmos as an invited member. After entering the email and clicking Next, you should see the block page: *"You haven't been invited to SLYPN. Please ask an admin to invite you."*
+
+---
+
+### 6.5 Member invitations — CIAM sign-up link
+
+Member invitations no longer use the Microsoft Graph B2B invitation API. Instead, when an admin invites a member the app saves the member record in Cosmos and returns the app's base URL for the admin to share. The invitee visits the link, clicks **Sign in**, and creates their account through the CIAM **Sign up and sign in** flow (email + password). On first login `GET /me` automatically links their Entra OID to their Cosmos member record and activates their status.
+
+When an admin **deletes** a member, the API also deletes their Entra account via Graph so they can no longer sign in. This requires `User.ReadWrite.All` (application permission) and a client secret.
+
+`infra/setup.ps1` handles both automatically:
+- Grants `User.ReadWrite.All` with admin consent
+- Creates/rotates a client secret named `slypn-graph-mgmt` (24-month expiry)
+- Writes `Graph__ClientSecret` to SWA app settings and local settings
+
+To rotate the secret manually: `.\infra\setup.ps1 -SkipBicep -SkipSwa -SkipGitHub -SkipLocal -RotateSecret`
 
 ---
 

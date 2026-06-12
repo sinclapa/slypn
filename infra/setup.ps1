@@ -9,10 +9,10 @@
           Storage connection string.
 
   ENTRA   Configure Entra External ID (CIAM):
-            – API app (slypn-api): roles, scope, Graph User.Invite.All, secret
+            – API app (slypn-api): roles, scope
             – SPA app (slypn-web): PKCE, redirect URIs, pre-authorisation
-            – User flows: checked and reported
-            – Company branding HTML: uploaded to the storage static site
+            – User flows: checked and reported (must be Sign up and sign in type)
+            – Custom auth extension: sign-up gate (created via Graph; 2 manual portal clicks remain)
 
   SWA     Wire both halves together: set all app settings on the Static Web App
           (AzureAd, Graph, Cosmos, Storage) in one call.
@@ -44,9 +44,6 @@
 .PARAMETER SkipLocal
   Skip writing local dev config files.
 
-.PARAMETER SkipBranding
-  Skip uploading the company branding HTML template to blob storage.
-
 .PARAMETER SkipGitHub
   Skip the GitHub secrets phase. Also skipped automatically when the gh CLI
   is not found on PATH.
@@ -61,7 +58,6 @@ param(
     [switch]$SkipSwa,
     [switch]$SkipGitHub,
     [switch]$SkipLocal,
-    [switch]$SkipBranding,
     [switch]$RotateSecret
 )
 
@@ -79,7 +75,6 @@ function Warn([string]$m) { Write-Host "  ! $m" -ForegroundColor Yellow }
 $repoRoot     = Split-Path -Parent $PSScriptRoot
 $scriptDir    = $PSScriptRoot
 $secretsPath  = Join-Path $scriptDir 'secrets.json'
-$templatePath = Join-Path $scriptDir 'signin-template.html'
 $bicepPath    = Join-Path $scriptDir 'main.bicep'
 $paramsPath   = Join-Path $scriptDir 'main.parameters.prod.json'
 $envLocalPath = Join-Path $repoRoot 'src' 'web' '.env.local'
@@ -127,19 +122,6 @@ function Invoke-Graph([string]$Method, [string]$Path, [object]$Body = $null,
     }
     if ($null -ne $Body) { $params.Body = ($Body | ConvertTo-Json -Depth 10) }
     Invoke-RestMethod @params
-}
-
-# Upload raw file bytes to a Graph navigation property (e.g. branding assets).
-function Invoke-GraphUpload([string]$Path, [string]$FilePath, [string]$ContentType,
-                            [string]$ApiVersion = 'v1.0') {
-    $token = (az account get-access-token --resource https://graph.microsoft.com `
-                --query accessToken -o tsv 2>$null)
-    $bytes = [IO.File]::ReadAllBytes($FilePath)
-    Invoke-RestMethod `
-        -Method Put `
-        -Uri    "https://graph.microsoft.com/$ApiVersion$Path" `
-        -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = $ContentType } `
-        -Body   $bytes
 }
 
 # Compare two string arrays as unordered sets.
@@ -279,16 +261,22 @@ if (-not $SkipEntra) {
 
     # ── Login to CIAM tenant ──────────────────────────────────────────────────
 
-    # az login --tenant switches the active az context to the CIAM tenant,
-    # which is required so that subsequent az ad / az rest calls target the
-    # right directory. If the token is already cached (e.g. re-run) the CLI
-    # uses it silently without opening a browser.
     $currentTenant = az account show --query 'tenantId' -o tsv 2>$null
-    if ($currentTenant -ne $tenantId) {
-        Info 'Switching to CIAM tenant...'
+    if ($currentTenant -eq $tenantId) {
+        # Already in CIAM context — check the token is still valid.
+        az account get-access-token --resource https://graph.microsoft.com -o none 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Ok "Signed in to $tenantDomain (cached — skipping browser login)"
+        } else {
+            Info 'Token expired — re-authenticating...'
+            az login --tenant $tenantId --allow-no-subscriptions | Out-Null
+            Ok "Signed in to $tenantDomain"
+        }
+    } else {
+        Info "Switching to CIAM tenant $tenantDomain..."
         az login --tenant $tenantId --allow-no-subscriptions | Out-Null
+        Ok "Signed in to $tenantDomain"
     }
-    Ok "Signed in to $tenantDomain"
 
     # ── API app registration ──────────────────────────────────────────────────
 
@@ -311,14 +299,28 @@ if (-not $SkipEntra) {
     $s['apiObjectId'] = $apiObjectId
     Save-Secrets $s
 
-    # App ID URI
+    # App ID URI — base form api://<clientId> plus the SWA-hostname form
+    # required by Custom Auth Extensions: api://<swa-host>/<clientId>.
     $appIdUri    = "api://$apiClientId"
-    $currentUris = @(az ad app show --id $apiObjectId --query 'identifierUris' -o json | ConvertFrom-Json)
-    if ($currentUris -contains $appIdUri) {
-        Info "App ID URI already set"
+    $currentUris = [System.Collections.Generic.List[string]](
+        @(az ad app show --id $apiObjectId --query 'identifierUris' -o json | ConvertFrom-Json))
+    $urisChanged = $false
+    if (-not $currentUris.Contains($appIdUri)) { $currentUris.Add($appIdUri); $urisChanged = $true }
+    $pUrl = if ($s.Contains('prodUrl') -and -not [string]::IsNullOrWhiteSpace($s['prodUrl'])) { $s['prodUrl'] } else { '' }
+    $extAppIdUri = ''
+    if (-not [string]::IsNullOrWhiteSpace($pUrl)) {
+        $swaHost     = ([Uri]$pUrl).Host
+        $extAppIdUri = "api://$swaHost/$apiClientId"
+        if (-not $currentUris.Contains($extAppIdUri)) { $currentUris.Add($extAppIdUri); $urisChanged = $true }
+    }
+    if ($urisChanged) {
+        az ad app update --id $apiObjectId --identifier-uris @($currentUris) | Out-Null
+        Ok "Identifier URIs: $($currentUris -join '  ')"
     } else {
-        az ad app update --id $apiObjectId --identifier-uris $appIdUri | Out-Null
-        Ok $appIdUri
+        Info "Identifier URIs already set"
+    }
+    if ([string]::IsNullOrWhiteSpace($extAppIdUri)) {
+        Warn 'Extension App ID URI (api://<swa-host>/...) not set — prodUrl not yet known. Re-run with -SkipBicep after first deploy.'
     }
 
     # requestedAccessTokenVersion = 2 — CIAM must issue v2 access tokens so
@@ -440,40 +442,71 @@ if (-not $SkipEntra) {
     Save-Secrets $s
     Ok "objectId=$apiSpId"
 
-    # ── Graph User.Invite.All permission ─────────────────────────────────────
+    # ── Graph User.ReadWrite.All permission (member deletion) ────────────────
 
-    Step 'Entra · Graph User.Invite.All (invitation emails)'
-    $graphAppId       = '00000003-0000-0000-c000-000000000000'
-    $userInviteRoleId = '09850681-111b-4a89-9bed-3f2cae46d706'
-    $graphSp          = az ad sp show --id $graphAppId -o json | ConvertFrom-Json
-    $graphSpId        = $graphSp.id
+    Step 'Entra · Graph User.ReadWrite.All (Entra account deletion)'
+    $graphAppId         = '00000003-0000-0000-c000-000000000000'
+    $userReadWriteAllId = '741f803b-c850-494e-b5df-cde7c675a1ca'
+    $graphSp            = az ad sp show --id $graphAppId -o json | ConvertFrom-Json
+    $graphSpId          = $graphSp.id
 
     $assignments    = Invoke-Graph GET "/servicePrincipals/$apiSpId/appRoleAssignments"
     $alreadyGranted = $assignments.value |
-        Where-Object { $_.resourceId -eq $graphSpId -and $_.appRoleId -eq $userInviteRoleId }
+        Where-Object { $_.resourceId -eq $graphSpId -and $_.appRoleId -eq $userReadWriteAllId }
 
     if ($alreadyGranted) {
-        Info 'User.Invite.All already granted'
+        Info 'User.ReadWrite.All already granted'
     } else {
         Invoke-Graph POST "/servicePrincipals/$graphSpId/appRoleAssignedTo" @{
             principalId = $apiSpId
             resourceId  = $graphSpId
-            appRoleId   = $userInviteRoleId
+            appRoleId   = $userReadWriteAllId
         } | Out-Null
-        Ok 'User.Invite.All granted with admin consent'
+        Ok 'User.ReadWrite.All granted with admin consent'
     }
 
-    # ── Graph client secret ───────────────────────────────────────────────────
+    # ── Graph CustomAuthenticationExtensions.Receive.Payload ─────────────────
+    # The CIAM tenant does not expose this appRole via the Graph SP, so the GUID
+    # cannot be looked up programmatically. Instead, read the role ID from the
+    # app's own requiredResourceAccess (populated when the permission is added in
+    # the portal), then verify the appRoleAssignment exists.
+
+    Step 'Entra · Graph CustomAuthenticationExtensions.Receive.Payload'
+    $apiApp          = Invoke-Graph GET "/applications/$apiObjectId"
+    $graphRRAEntry   = @($apiApp.requiredResourceAccess) |
+                           Where-Object { $_.resourceAppId -eq $graphAppId }
+    $customAuthRoles = if ($graphRRAEntry) {
+        @($graphRRAEntry.resourceAccess) |
+            Where-Object { $_.type -eq 'Role' -and $_.id -ne $userReadWriteAllId }
+    } else { @() }
+
+    if ($customAuthRoles.Count -eq 0) {
+        Warn 'Not yet added — add it manually in the slypn-api app registration:'
+        Warn '  App registrations → slypn-api → API permissions'
+        Warn '  → Add a permission → Microsoft Graph → Application permissions'
+        Warn '  → Search "CustomAuthentication" → tick CustomAuthenticationExtensions.Receive.Payload'
+        Warn '  → Add permissions → Grant admin consent for SLYPN'
+    } else {
+        $spAssignments = Invoke-Graph GET "/servicePrincipals/$apiSpId/appRoleAssignments"
+        $granted = $customAuthRoles | Where-Object {
+            $id = $_.id
+            $spAssignments.value | Where-Object { $_.appRoleId -eq $id -and $_.resourceId -eq $graphSpId }
+        }
+        if ($granted) {
+            Ok 'CustomAuthenticationExtensions.Receive.Payload granted'
+        } else {
+            Warn 'Permission added but admin consent not yet granted — click "Grant admin consent for SLYPN":'
+            Warn '  App registrations → slypn-api → API permissions'
+        }
+    }
+
+    # ── Graph client secret (used for Entra account deletion) ─────────────────
 
     Step 'Entra · Graph client secret'
-
-    # Look up by display name, not stored key ID — the ID in secrets.json can
-    # go stale (e.g. after a failed run or a tenant switch bug). This also
-    # catches and cleans up any accidental duplicates.
-    $apiApp        = Invoke-Graph GET "/applications/$apiObjectId"
-    $managed       = @($apiApp.passwordCredentials) |
-                     Where-Object { $_.displayName -eq 'slypn-graph-invite' }
-    $needsSecret   = $RotateSecret.IsPresent
+    $apiApp      = Invoke-Graph GET "/applications/$apiObjectId"
+    $managed     = @(@($apiApp.passwordCredentials) |
+                   Where-Object { $_.displayName -eq 'slypn-graph-mgmt' })
+    $needsSecret = $RotateSecret.IsPresent
 
     if (-not $needsSecret) {
         if ($managed.Count -gt 1) {
@@ -494,8 +527,6 @@ if (-not $SkipEntra) {
     }
 
     if ($needsSecret) {
-        # Remove every slypn-graph-invite credential on the app before creating
-        # a fresh one — prevents accumulation regardless of what secrets.json holds.
         foreach ($cred in $managed) {
             try {
                 Invoke-Graph POST "/applications/$apiObjectId/removePassword" `
@@ -511,7 +542,7 @@ if (-not $SkipEntra) {
 
         $result = Invoke-Graph POST "/applications/$apiObjectId/addPassword" @{
             passwordCredential = @{
-                displayName = 'slypn-graph-invite'
+                displayName = 'slypn-graph-mgmt'
                 endDateTime = (Get-Date).AddYears(2).ToString('o')
             }
         }
@@ -620,15 +651,31 @@ if (-not $SkipEntra) {
     try {
         $flows = Invoke-Graph GET '/identity/authenticationEventsFlows' -ApiVersion 'beta'
         if ($flows.value -and $flows.value.Count -gt 0) {
+            $signUpFlows = $flows.value | Where-Object {
+                $_.displayName -match 'sign.?up' -or
+                $_.'@odata.type' -match 'externalUsersSelfServiceSignUp'
+            }
             Ok "$($flows.value.Count) user flow(s) found:"
             $flows.value | ForEach-Object { Info "  $($_.displayName)" }
+            if (-not $signUpFlows) {
+                Warn ''
+                Warn 'WARNING: No "Sign up and sign in" flow detected.'
+                Warn 'A "Sign in" only flow will block new users with "account not found".'
+                Warn 'Create a new flow in the CIAM portal (see instructions below).'
+            }
         } else {
-            Warn 'No user flows found — create one in the CIAM portal:'
-            Warn '  External Identities → User flows → New user flow'
-            Warn '  Type:               Sign in and sign up'
-            Warn '  Identity providers: Email with password'
-            Warn '  Enable:             Self-service password reset'
-            Warn "  Associated app:     slypn-web ($spaClientId)"
+            Warn 'No user flows found. Create one in the CIAM portal:'
+        }
+        if (-not $flows.value -or $flows.value.Count -eq 0) {
+            Warn ''
+            Warn '  1. External Identities → User flows → New user flow'
+            Warn '  2. Flow type:          Sign up and sign in  ← IMPORTANT: not "Sign in" only'
+            Warn '  3. Identity providers: Email with password'
+            Warn '  4. User attributes:    tick Display Name and Email Address'
+            Warn "  5. Associated app:     slypn-web ($spaClientId)"
+            Warn ''
+            Warn '  Self-service sign-up must be ON so new invited users can register.'
+            Warn '  After creating the flow, run "Run user flow" in the portal to smoke-test.'
         }
     } catch {
         # The authenticationEventsFlows beta API requires the
@@ -639,25 +686,46 @@ if (-not $SkipEntra) {
         Info '  Entra admin centre → External Identities → User flows'
     }
 
-    # ── Company branding HTML ─────────────────────────────────────────────────
+    # ── Custom authentication extension — sign-up gate ───────────────────────
+    # The Graph beta API for custom extensions requires the delegated permission
+    # CustomAuthenticationExtension.ReadWrite.All, which az CLI tokens cannot
+    # include in a no-subscription CIAM tenant context. Create it manually once
+    # using the steps below; the extension ID is then saved to secrets.json.
 
-    if (-not $SkipBranding -and (Test-Path $templatePath)) {
-        Step 'Entra · Company branding HTML'
+    Step 'Entra · Custom auth extension — sign-up gate'
+    $extApiUrl = if ($s.Contains('prodUrl') -and -not [string]::IsNullOrWhiteSpace($s['prodUrl'])) {
+        "$($s['prodUrl'])/api/auth/allow-signup"
+    } else { '<prodUrl>/api/auth/allow-signup (re-run after first deploy)' }
 
-        # Upload the HTML file content directly to Microsoft via the Graph
-        # branding API. CIAM does not allow external URIs for custom HTML
-        # (see aka.ms/entra-branding), so the file must be sent as bytes here.
-        $brandingPath = "/organization/$tenantId/branding/localizations/0/customHTML"
-        try {
-            Invoke-GraphUpload $brandingPath $templatePath 'text/html' | Out-Null
-            Ok 'Custom HTML uploaded to CIAM branding'
-        } catch {
-            $statusCode = $_.Exception.Response.StatusCode.value__
-            Warn "Graph branding upload failed (HTTP $statusCode)."
-            Warn 'Custom HTML branding may require a paid Entra External ID tier.'
-            Warn 'Check: Entra admin centre → External Identities → Company Branding'
+    if (-not $s.Contains('signupExtensionId') -or [string]::IsNullOrWhiteSpace($s['signupExtensionId'])) {
+        Warn 'Sign-up gate extension not yet created. Follow these steps in the CIAM portal:'
+        Warn ''
+        Warn '  Step 1 — Create the extension'
+        Warn '    External Identities → Custom authentication extensions → + Create'
+        Warn '    Name:       SLYPN sign-up gate'
+        Warn '    Event type: AttributeCollectionStart'
+        Warn "    Target URL: $extApiUrl"
+        Warn '    Auth tab:   Select an existing app registration → slypn-api'
+        Warn '                (do NOT create a new registration — the token audience must match)'
+        Warn '    Timeout:    2 000 ms   Retries: 1'
+        Warn '    → Save'
+        Warn ''
+        Warn '  Step 2 — Associate with your user flow'
+        Warn '    External Identities → User flows → slypn-signin-signup'
+        Warn '    Left menu (Settings) → Custom authentication extensions'
+        Warn "    Click the pencil icon next to 'Before collecting information from the user'"
+        Warn "    Select 'SLYPN sign-up gate' → Save (top toolbar)"
+        Warn ''
+        $extId = Ask $s 'signupExtensionId' 'Paste the Extension ID from the portal (or Enter to skip)'
+        if (-not [string]::IsNullOrWhiteSpace($extId)) {
+            $s['signupExtensionId'] = $extId
+            Save-Secrets $s
+            Ok "Extension ID saved: $extId"
         }
+    } else {
+        Ok "Extension already configured: $($s['signupExtensionId'])"
     }
+
 
     # Make variables available for downstream phases.
     $tenantId     = $s['tenantId']
@@ -674,7 +742,7 @@ $apiClientId   = $s['apiClientId']
 $spaClientId   = $s['spaClientId']
 $prodUrl       = $s['prodUrl']
 $swaName       = $s['swaName']
-$graphSecret   = $s['graphClientSecret']
+$graphSecret   = if ($s.Contains('graphClientSecret')) { $s['graphClientSecret'] } else { '' }
 $authority     = if ($tenantId -and $tenantDomain) { "https://$tenantDomain/$tenantId/v2.0" } else { '' }
 $apiScopeStr   = if ($apiClientId) { "api://$apiClientId/access_as_user" } else { '' }
 
@@ -807,10 +875,7 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         $ls['Values']['AzureAd__Audience']  = "api://$apiClientId"
         $ls['Values']['AzureAd__TenantId']  = $tenantId
         $ls['Values']['AzureAd__SkipAuth']  = 'false'
-        # Set Graph secret for local invitation testing if available.
-        if ($graphSecret) {
-            $ls['Values']['Graph__ClientSecret'] = $graphSecret
-        }
+        if ($graphSecret) { $ls['Values']['Graph__ClientSecret'] = $graphSecret }
         $ls['Values']['Graph__InviteRedirectUrl'] = 'http://localhost:5173/'
 
         $ls | ConvertTo-Json -Depth 5 | Set-Content $localSettingsPath -Encoding UTF8
@@ -841,8 +906,10 @@ if ($authority) {
 if ($swaName -and $authority) {
     Write-Host ''
     Write-Host " SWA app settings applied to $swaName" -ForegroundColor Yellow
-    if ($graphSecret) {
-        Warn "  Remove graphClientSecret from infra/secrets.json now that it is in SWA settings."
+    if ($graphSecret -and $s.Contains('graphClientSecret')) {
+        $s.Remove('graphClientSecret')
+        Save-Secrets $s
+        Ok '  graphClientSecret removed from secrets.json'
     }
 }
 

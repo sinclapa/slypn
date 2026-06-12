@@ -54,9 +54,10 @@ var host = new HostBuilder()
         {
             var graphOpts = sp.GetRequiredService<IOptions<GraphOptions>>().Value;
             return graphOpts.IsConfigured
-                ? ActivatorUtilities.CreateInstance<GraphInviteService>(sp)
+                ? ActivatorUtilities.CreateInstance<CiamInviteService>(sp)
                 : ActivatorUtilities.CreateInstance<LoggingInviteService>(sp);
         });
+        services.AddSingleton<IEntraUserService, EntraUserService>();
 
         // ---- OpenTelemetry ---------------------------------------------------
         services

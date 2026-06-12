@@ -150,8 +150,8 @@ const fmtDate = (iso: string) =>
 
       <div v-if="showInvite" class="mt-6">
         <p class="text-sm text-slypn-900/75">
-          Sends an Entra External ID invitation. The recipient gets an email with a sign-up link
-          and is granted the role you choose when they accept.
+          Saves the member record and gives you a sign-up link to share with them directly.
+          They visit the link, click Sign in, and create their account with email and password.
         </p>
 
         <form class="mt-4 space-y-4" @submit.prevent="submitInvite">
@@ -201,13 +201,16 @@ const fmtDate = (iso: string) =>
           <p v-if="invError" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ invError }}</p>
 
           <div v-if="invSuccess" class="rounded-md bg-emerald-50 p-4 text-sm text-emerald-900">
-            <p class="font-semibold">Invitation recorded for {{ invSuccess.member.email }}.</p>
-            <p v-if="invSuccess.inviteSent" class="mt-1">Graph sent the invitation email.</p>
-            <p v-else class="mt-1">
-              Graph skipped ({{ invSuccess.inviteReason }}) — member saved but no email sent.
-            </p>
-            <p v-if="invSuccess.redeemUrl" class="mt-1">
-              Redeem URL: <a class="underline" :href="invSuccess.redeemUrl">{{ invSuccess.redeemUrl }}</a>
+            <p class="font-semibold">Member {{ invSuccess.member.email }} has been saved.</p>
+            <template v-if="invSuccess.redeemUrl">
+              <p class="mt-2">Share this sign-up link with them:</p>
+              <p class="mt-1 break-all rounded bg-emerald-100 px-2 py-1 font-mono text-xs">
+                <a class="underline" :href="invSuccess.redeemUrl" target="_blank" rel="noopener">{{ invSuccess.redeemUrl }}</a>
+              </p>
+              <p class="mt-2 text-emerald-700">They should click <strong>Sign in</strong> and create an account with their email address and a password.</p>
+            </template>
+            <p v-else class="mt-1 text-amber-700">
+              Sign-up URL not configured — member saved. Share the site address with them manually.
             </p>
           </div>
         </form>

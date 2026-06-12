@@ -16,6 +16,7 @@ namespace Slypn.Api.Functions;
 public sealed class MembersFunctions(
     IContentRepository repo,
     IInviteService invites,
+    IEntraUserService entra,
     ILogger<MembersFunctions> log)
 {
     private static readonly HashSet<string> AllowedRoles = new(StringComparer.OrdinalIgnoreCase)
@@ -153,8 +154,14 @@ public sealed class MembersFunctions(
         try
         {
             await repo.DeleteMemberAsync(id, IfMatch(req), ct);
-            return NoContent(req);
         }
         catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+
+        // Best-effort: remove the Entra account so the user can no longer sign in.
+        // Only possible once the member completed sign-up and has an OID.
+        if (!string.IsNullOrEmpty(existing.Oid))
+            await entra.DeleteUserAsync(existing.Oid, ct);
+
+        return NoContent(req);
     }
 }
