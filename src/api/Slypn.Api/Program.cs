@@ -37,7 +37,7 @@ var host = new HostBuilder()
             o.IncludeFormattedMessage = true;
             o.AddOtlpExporter(opts =>
             {
-                opts.Endpoint = new Uri(otelOpts.Endpoint!);
+                opts.Endpoint = new Uri(otelOpts.Endpoint!.TrimEnd('/') + "/v1/logs");
                 opts.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
                 if (!string.IsNullOrWhiteSpace(otelOpts.Headers))
                     opts.Headers = otelOpts.Headers;
@@ -94,9 +94,13 @@ var host = new HostBuilder()
 
         if (otelOpts.IsConfigured)
         {
-            void ConfigureExporter(OpenTelemetry.Exporter.OtlpExporterOptions options)
+            // OTel .NET 1.9+: setting Endpoint programmatically disables auto path-appending,
+            // so each signal needs its explicit /v1/* suffix.
+            var baseEndpoint = otelOpts.Endpoint!.TrimEnd('/');
+
+            void ConfigureExporter(string signalPath, OpenTelemetry.Exporter.OtlpExporterOptions options)
             {
-                options.Endpoint = new Uri(otelOpts.Endpoint!);
+                options.Endpoint = new Uri(baseEndpoint + signalPath);
                 options.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
                 if (!string.IsNullOrWhiteSpace(otelOpts.Headers))
                     options.Headers = otelOpts.Headers;
@@ -111,12 +115,12 @@ var host = new HostBuilder()
                     .AddSource(OtelSources.ApiName)
                     .AddSource("Azure.*")
                     .AddHttpClientInstrumentation()
-                    .AddOtlpExporter(ConfigureExporter))
+                    .AddOtlpExporter(opts => ConfigureExporter("/v1/traces", opts)))
                 .WithMetrics(metrics => metrics
                     .AddMeter("Slypn.Api")
                     .AddRuntimeInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddOtlpExporter(ConfigureExporter));
+                    .AddOtlpExporter(opts => ConfigureExporter("/v1/metrics", opts)));
         }
     })
     .Build();
