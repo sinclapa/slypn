@@ -699,11 +699,13 @@ if (-not $SkipEntra) {
         Warn '    Timeout:    2 000 ms   Retries: 1'
         Warn '    → Save'
         Warn ''
-        Warn '  Step 2 — Associate with your user flow'
+        Warn '  Step 2 — Associate with your user flow  (THIS is what enforces the gate)'
         Warn '    External Identities → User flows → slypn-signin-signup'
         Warn '    Left menu (Settings) → Custom authentication extensions'
         Warn "    Click the pencil icon next to 'Before collecting information from the user'"
         Warn "    Select 'SLYPN sign-up gate' → Save (top toolbar)"
+        Warn '    Without this association CIAM never calls /api/auth/allow-signup'
+        Warn '    and ANY email can register — creating the extension is not enough.'
         Warn ''
         $extId = Ask $s 'signupExtensionId' 'Paste the Extension ID from the portal (or Enter to skip)'
         if (-not [string]::IsNullOrWhiteSpace($extId)) {
@@ -712,7 +714,17 @@ if (-not $SkipEntra) {
             Ok "Extension ID saved: $extId"
         }
     } else {
-        Ok "Extension already configured: $($s['signupExtensionId'])"
+        Ok "Extension created: $($s['signupExtensionId'])"
+        # The extension ID being saved only proves the extension exists — NOT that
+        # it's wired to the user flow. That association is a manual portal step the
+        # CLI/Graph cannot read back in a CIAM tenant, so we can't verify it here.
+        Warn 'Reminder: confirm the extension is ASSOCIATED with the slypn-signin-signup'
+        Warn "  user flow ('Before collecting information from the user'). If it isn't,"
+        Warn '  uninvited emails can still register.'
+        Warn '  Verify in Grafana — uninvited sign-ups should log an AllowSignup line:'
+        Warn '    {service_name="slypn-api"} |= "AllowSignup"'
+        Warn '  No AllowSignup lines while sign-ups happen ⇒ the gate is not wired.'
+        Warn '  See docs/auth-setup.md §6.4 "Verifying the gate is actually enforced".'
     }
 
 
