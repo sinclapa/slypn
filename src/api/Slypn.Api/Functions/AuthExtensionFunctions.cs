@@ -90,7 +90,8 @@ public sealed class AuthExtensionFunctions(
 
         log.LogInformation("AllowSignup: blocking uninvited email {Email}", email);
         return await Block(req,
-            "You haven't been invited to SLYPN. Please ask an admin to invite you.");
+            "You haven't been invited to SLYPN yet. Ask a SLYPN admin to send you an invite, then sign up with the same email address.",
+            title: "You need an invite");
     }
 
     private static string? ExtractBearer(HttpRequestData req)
@@ -109,18 +110,19 @@ public sealed class AuthExtensionFunctions(
         resp.Headers.Add("Content-Type", "application/json");
         await resp.WriteStringAsync(CiamJson(new JsonObject
         {
-            ["@odata.type"] = "microsoft.graph.attributeCollectionStartContinue",
+            ["@odata.type"] = "microsoft.graph.attributeCollectionStart.continueWithDefaultBehavior",
         }));
         return resp;
     }
 
-    private static async Task<HttpResponseData> Block(HttpRequestData req, string message)
+    private static async Task<HttpResponseData> Block(HttpRequestData req, string message, string title = "Sign-up unavailable")
     {
         var resp = req.CreateResponse(System.Net.HttpStatusCode.OK);
         resp.Headers.Add("Content-Type", "application/json");
         await resp.WriteStringAsync(CiamJson(new JsonObject
         {
-            ["@odata.type"] = "microsoft.graph.attributeCollectionStartShowBlockPage",
+            ["@odata.type"] = "microsoft.graph.attributeCollectionStart.showBlockPage",
+            ["title"]       = title,
             ["message"]     = message,
         }));
         return resp;
