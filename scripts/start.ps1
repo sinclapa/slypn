@@ -1,12 +1,11 @@
 #requires -Version 7
 <#
 .SYNOPSIS
-  Boots Azurite + Cosmos emulator + Vue dev server + .NET Functions host.
+  Boots Azurite + Vue dev server + .NET Functions host.
 
 .DESCRIPTION
   Starts:
     - slypn-azurite (Docker)    blob/queue/table emulator on :10000-10002
-    - slypn-cosmos  (Docker)    Cosmos DB emulator (vnext-preview) on :8081
     - vite (npm)                Vue dev server on http://localhost:5173/
     - func (Functions Core)     .NET API host on http://localhost:7071/
 
@@ -22,7 +21,7 @@
 
 [CmdletBinding()]
 param(
-    [switch] $NoEmulators   # skip starting Docker containers (e.g. when running against a real Cosmos / Storage account)
+    [switch] $NoEmulators   # skip starting Docker containers (e.g. when running against a real Storage account)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,26 +77,11 @@ if (-not $NoEmulators) {
         Write-Err "Azurite blob port $AzuriteBlobPort did not come up in 30s. See: docker logs $AzuriteContainer"
         exit 1
     }
-    Write-Ok "Azurite ready on http://127.0.0.1:$AzuriteBlobPort/"
-
-    Write-Step 'Ensuring Cosmos DB emulator container (vnext-preview)'
-    if (Test-ContainerRunning $CosmosContainer) {
-        Write-Ok "$CosmosContainer already running"
-    } elseif (Test-ContainerExists $CosmosContainer) {
-        docker start $CosmosContainer | Out-Null
-        Write-Ok "$CosmosContainer started"
-    } else {
-        docker run -d --name $CosmosContainer `
-            -p "${CosmosPort}:8081" `
-            $CosmosImage | Out-Null
-        Write-Ok "$CosmosContainer created (first start downloads the image; can take a few minutes)"
-    }
-    Write-Step 'Waiting for Cosmos emulator (~30-90s)'
-    if (-not (Wait-Port $CosmosPort 180)) {
-        Write-Err "Cosmos emulator port $CosmosPort did not come up in 180s. See: docker logs $CosmosContainer"
+    if (-not (Wait-Port $AzuriteTablePort 30)) {
+        Write-Err "Azurite table port $AzuriteTablePort did not come up in 30s. See: docker logs $AzuriteContainer"
         exit 1
     }
-    Write-Ok "Cosmos emulator ready on https://localhost:$CosmosPort/"
+    Write-Ok "Azurite ready on http://127.0.0.1:$AzuriteBlobPort/ (blob) + :$AzuriteTablePort (table)"
 }
 
 # --- web --------------------------------------------------------------------
@@ -176,8 +160,8 @@ Write-Host 'Dev stack is up.' -ForegroundColor Green
 Write-Host "  Web:    http://localhost:$WebPort/"           -ForegroundColor Green
 Write-Host "  API:    http://localhost:$ApiPort/api/articles" -ForegroundColor Green
 if (-not $NoEmulators) {
-    Write-Host "  Cosmos: https://localhost:$CosmosPort/ (self-signed cert)" -ForegroundColor Green
-    Write-Host "  Blob:   http://127.0.0.1:$AzuriteBlobPort/devstoreaccount1" -ForegroundColor Green
+    Write-Host "  Blob:   http://127.0.0.1:$AzuriteBlobPort/devstoreaccount1"  -ForegroundColor Green
+    Write-Host "  Table:  http://127.0.0.1:$AzuriteTablePort/devstoreaccount1" -ForegroundColor Green
 }
 Write-Host ''
 Write-Host "Logs:  $runtimeDir"           -ForegroundColor DarkGray

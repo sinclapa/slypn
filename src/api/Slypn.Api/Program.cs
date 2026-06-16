@@ -31,15 +31,12 @@ var host = new HostBuilder()
         services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>();
 
         services
-            .AddOptions<CosmosOptions>()
-            .Bind(context.Configuration.GetSection(CosmosOptions.SectionName));
-        services.AddSingleton<ICosmosService, CosmosService>();
-        services.AddHostedService<CosmosBootstrapper>();
-
-        services
             .AddOptions<StorageOptions>()
             .Bind(context.Configuration.GetSection(StorageOptions.SectionName));
+        services.AddSingleton<ITableStore, TableStore>();
+        services.AddSingleton<IContentBodyStore, ContentBodyStore>();
         services.AddSingleton<IBlobService, BlobService>();
+        services.AddHostedService<TableBootstrapper>();
 
         services
             .AddOptions<EntraOptions>()
@@ -90,7 +87,7 @@ var host = new HostBuilder()
                     .AddAttributes(new[] { new KeyValuePair<string, object>("deployment.environment", otelOpts.Env) }))
                 .WithTracing(tracing => tracing
                     .AddSource(OtelSources.ApiName)
-                    .AddSource("Azure.*")  // captures Cosmos + Storage SDK activities
+                    .AddSource("Azure.*")  // captures Table + Blob storage SDK activities
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter(ConfigureExporter))
                 .WithMetrics(metrics => metrics
@@ -99,13 +96,20 @@ var host = new HostBuilder()
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter(ConfigureExporter));
 
-            services.AddLogging(logging => logging.AddOpenTelemetry(o =>
+            services.AddLogging(logging =>
             {
-                o.SetResourceBuilder(resourceBuilder);
-                o.IncludeScopes = true;
-                o.IncludeFormattedMessage = true;
-                o.AddOtlpExporter(ConfigureExporter);
-            }));
+                // Export our app's Information/Warning logs (e.g. AllowSignup gate
+                // decisions, role enrichment) to OTLP, not just errors — these are
+                // the breadcrumbs we need when diagnosing auth/data issues in prod.
+                logging.AddFilter("Slypn", LogLevel.Information);
+                logging.AddOpenTelemetry(o =>
+                {
+                    o.SetResourceBuilder(resourceBuilder);
+                    o.IncludeScopes = true;
+                    o.IncludeFormattedMessage = true;
+                    o.AddOtlpExporter(ConfigureExporter);
+                });
+            });
         }
     })
     .Build();

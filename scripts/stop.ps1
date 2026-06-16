@@ -1,14 +1,13 @@
 #requires -Version 7
 <#
 .SYNOPSIS
-  Stops the local dev stack: vite + func + Azurite + Cosmos emulator.
+  Stops the local dev stack: vite + func + Azurite.
 
 .DESCRIPTION
   - Kills the vite + func process trees recorded in scripts/.runtime/pids.json
     and sweeps ports 5173 + 7071 as a safety net.
-  - Stops the slypn-azurite and slypn-cosmos Docker containers (they remain
-    so data persists across start/stop cycles — use scripts/clean.ps1 to
-    remove them).
+  - Stops the slypn-azurite Docker container (it remains so data persists
+    across start/stop cycles — use scripts/clean.ps1 to remove it).
   - Pass -KeepEmulators to leave the Docker containers running (useful when
     you want to seed or run the API on its own).
 
@@ -54,7 +53,7 @@ Stop-Port $ApiPort
 if (-not $KeepEmulators) {
     if (Test-DockerRunning) {
         Write-Step 'Stopping emulator containers'
-        foreach ($name in @($AzuriteContainer, $CosmosContainer)) {
+        foreach ($name in @($AzuriteContainer)) {
             if (Test-ContainerRunning $name) {
                 Write-Host "    stopping $name" -ForegroundColor DarkGray
                 docker stop $name | Out-Null

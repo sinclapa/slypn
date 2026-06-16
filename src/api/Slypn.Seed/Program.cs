@@ -1,32 +1,32 @@
 using System.Globalization;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using Azure.Data.Tables;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
-using Microsoft.Azure.Cosmos;
 using Slypn.Seed;
 
 // Args:
-//   <docx-path>  --endpoint <url>  --key <key>  --database <name>  [--container <name>]
+//   <docx-path>  --connection-string <cs>  [--table <name>]
 //
-// Defaults: container = "newsletters".
-// Exit codes: 0 success, 1 bad args, 2 docx error, 3 Cosmos error.
+// Defaults: table = "newsletters".
+// Exit codes: 0 success, 1 bad args, 2 docx error, 3 storage error.
 
 if (args.Length < 1)
 {
-    Console.Error.WriteLine("usage: dotnet run -- <docx-path> --endpoint <url> --key <key> --database <name> [--container <name>]");
+    Console.Error.WriteLine("usage: dotnet run -- <docx-path> --connection-string <cs> [--table <name>]");
     return 1;
 }
 
 string docxPath = args[0];
 var named = ParseNamed(args.Skip(1).ToArray());
-if (!named.TryGetValue("endpoint", out var endpoint) ||
-    !named.TryGetValue("key",      out var key)      ||
-    !named.TryGetValue("database", out var database))
+if (!named.TryGetValue("connection-string", out var connectionString))
 {
-    Console.Error.WriteLine("Missing one of --endpoint / --key / --database.");
+    Console.Error.WriteLine("Missing --connection-string.");
     return 1;
 }
-var container = named.GetValueOrDefault("container", "newsletters");
+var table = named.GetValueOrDefault("table", "newsletters");
 
 if (!File.Exists(docxPath))
 {
@@ -49,13 +49,13 @@ Console.WriteLine($"Parsed newsletter: id={newsletter.Id} title='{newsletter.Tit
 
 try
 {
-    await UpsertAsync(endpoint, key, database, container, newsletter);
-    Console.WriteLine($"Upserted into {database}.{container}.");
+    await UpsertAsync(connectionString, table, newsletter);
+    Console.WriteLine($"Upserted into table {table}.");
     return 0;
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"Cosmos upsert failed: {ex.Message}");
+    Console.Error.WriteLine($"Table upsert failed: {ex.Message}");
     return 3;
 }
 
@@ -121,29 +121,15 @@ static (DateOnly IssueDate, string Title) ExtractIssueDateAndTitle(string path)
     return (DateOnly.FromDateTime(DateTime.UtcNow), name);
 }
 
-static async Task UpsertAsync(string endpoint, string key, string database, string container, SeedNewsletter newsletter)
+static async Task UpsertAsync(string connectionString, string table, SeedNewsletter newsletter)
 {
-    var isLocalEmulator =
-        endpoint.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
-        endpoint.Contains("127.0.0.1", StringComparison.Ordinal);
+    // Mirror the API's serialization (System.Text.Json web defaults / camelCase) so
+    // ContentRepository can deserialise the Json column straight into a Newsletter.
+    var json = JsonSerializer.Serialize(newsletter, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
-    var options = new CosmosClientOptions
-    {
-        ConnectionMode  = ConnectionMode.Gateway,
-        ApplicationName = "Slypn.Seed",
-        SerializerOptions = new CosmosSerializationOptions { PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase },
-    };
-    if (isLocalEmulator)
-    {
-        options.HttpClientFactory = () => new HttpClient(new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        });
-    }
+    var client = new TableClient(connectionString, table);
+    await client.CreateIfNotExistsAsync();
 
-    using var client = new CosmosClient(endpoint, key, options);
-    var db  = (await client.CreateDatabaseIfNotExistsAsync(database)).Database;
-    var col = (await db.CreateContainerIfNotExistsAsync(new ContainerProperties(container, "/year"))).Container;
-
-    await col.UpsertItemAsync(newsletter, new PartitionKey(newsletter.Year));
+    var entity = new TableEntity(newsletter.Year, newsletter.Id) { ["Json"] = json };
+    await client.UpsertEntityAsync(entity, TableUpdateMode.Replace);
 }

@@ -4,11 +4,13 @@ using Slypn.Api.Models.Inputs;
 namespace Slypn.Api.Services;
 
 /// <summary>
-/// Reads + writes for SLYPN public content. Cosmos when configured; mock
-/// otherwise (mock writes return false / null — writes need real persistence).
+/// Reads + writes for SLYPN public content. Table + Blob storage when
+/// configured; mock otherwise (mock serves reads only — writes need real
+/// persistence).
 ///
-/// Optimistic concurrency is propagated via Cosmos's _etag. Write methods
-/// take a nullable If-Match etag; null means "don't check".
+/// Optimistic concurrency is propagated via the Table entity ETag (base64
+/// encoded for transport). Write methods take a nullable If-Match etag; null
+/// means "don't check".
 /// </summary>
 public interface IContentRepository
 {

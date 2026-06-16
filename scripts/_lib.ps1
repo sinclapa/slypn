@@ -17,10 +17,6 @@ $script:AzuriteBlobPort  = 10000
 $script:AzuriteQueuePort = 10001
 $script:AzuriteTablePort = 10002
 
-$script:CosmosContainer  = 'slypn-cosmos'
-$script:CosmosImage      = 'mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview'
-$script:CosmosPort       = 8081
-
 function Write-Step($msg) {
     Write-Host "==> $msg" -ForegroundColor Cyan
 }

@@ -67,8 +67,8 @@ public sealed class AuthExtensionFunctions(
 
         if (!repo.SupportsWrites)
         {
-            // Cosmos not configured — local dev only, allow through.
-            log.LogWarning("AllowSignup: Cosmos not configured — allowing {Email}", email);
+            // Storage not configured — local dev only, allow through.
+            log.LogWarning("AllowSignup: storage not configured — allowing {Email}", email);
             return await Continue(req);
         }
 
@@ -83,7 +83,7 @@ public sealed class AuthExtensionFunctions(
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "AllowSignup: Cosmos lookup failed for {Email} — blocking", email);
+            log.LogError(ex, "AllowSignup: member lookup failed for {Email} — blocking", email);
             return await Block(req, "Sign-up unavailable. Please try again later.");
         }
 

@@ -10,6 +10,9 @@ public sealed class StorageOptions
     /// <summary>Container that holds article/media uploads.</summary>
     public string MediaContainer { get; set; } = "media";
 
+    /// <summary>Container that holds large article/draft HTML bodies (one blob per content id).</summary>
+    public string ContentContainer { get; set; } = "content";
+
     /// <summary>How long a generated read SAS URL is valid for.</summary>
     public TimeSpan ReadSasLifetime { get; set; } = TimeSpan.FromMinutes(15);
 }

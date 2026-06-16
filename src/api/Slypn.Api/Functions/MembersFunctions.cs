@@ -1,4 +1,4 @@
-using Microsoft.Azure.Cosmos;
+using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -36,7 +36,7 @@ public sealed class MembersFunctions(
             var members = await repo.ListMembersAsync(ct);
             return await Ok(req, members);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("InviteMember")]
@@ -62,7 +62,7 @@ public sealed class MembersFunctions(
 
         Member? existing;
         try { existing = await repo.GetMemberByEmailAsync(email, ct); }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
         var now = DateTime.UtcNow;
         var member = existing is null
@@ -86,7 +86,7 @@ public sealed class MembersFunctions(
 
         Member saved;
         try { saved = await repo.UpsertMemberAsync(member, existing?.Etag, ct); }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
         var inviteResult = await invites.SendInviteAsync(member.Email, member.DisplayName, ct);
 
@@ -120,7 +120,7 @@ public sealed class MembersFunctions(
 
         Member? existing;
         try { existing = await repo.GetMemberByIdAsync(id, ct); }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
         if (existing is null) return await NotFound(req, "Member not found.");
 
         var updated = existing with { Roles = input.Roles.Distinct(StringComparer.OrdinalIgnoreCase).ToList() };
@@ -129,7 +129,7 @@ public sealed class MembersFunctions(
             var saved = await repo.UpsertMemberAsync(updated, IfMatch(req), ct);
             return await Ok(req, saved, saved.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("DeleteMember")]
@@ -145,7 +145,7 @@ public sealed class MembersFunctions(
 
         Member? existing;
         try { existing = await repo.GetMemberByIdAsync(id, ct); }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
         if (existing is null) return await NotFound(req, "Member not found.");
 
         if (existing.Oid is not null && existing.Oid == context.GetUserOid())
@@ -155,7 +155,7 @@ public sealed class MembersFunctions(
         {
             await repo.DeleteMemberAsync(id, IfMatch(req), ct);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
         // Best-effort: remove the Entra account so the user can no longer sign in.
         // Only possible once the member completed sign-up and has an OID.

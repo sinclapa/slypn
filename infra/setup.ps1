@@ -5,8 +5,8 @@
 .DESCRIPTION
   Five phases, each independently skippable:
 
-  BICEP   Deploy infra/main.bicep, capture outputs, store Cosmos key and
-          Storage connection string.
+  BICEP   Deploy infra/main.bicep, capture outputs, store the Storage
+          connection string (Table + Blob).
 
   ENTRA   Configure Entra External ID (CIAM):
             – API app (slypn-api): roles, scope
@@ -15,7 +15,7 @@
             – Custom auth extension: sign-up gate (created via Graph; 2 manual portal clicks remain)
 
   SWA     Wire both halves together: set all app settings on the Static Web App
-          (AzureAd, Graph, Cosmos, Storage) in one call.
+          (AzureAd, Graph, Storage) in one call.
 
   GITHUB  Set repository secrets needed by GitHub Actions:
             – AZURE_STATIC_WEB_APPS_API_TOKEN  (SWA deploy)
@@ -220,27 +220,16 @@ if (-not $SkipBicep) {
         --query 'properties.outputs' `
         -o json | ConvertFrom-Json
 
-    $s['swaName']            = $deployResult.swaName.value
-    $s['prodUrl']            = $deployResult.swaUrl.value.TrimEnd('/')
-    $s['cosmosEndpoint']     = $deployResult.cosmosEndpoint.value
-    $s['cosmosAccountName']  = $deployResult.cosmosAccountName.value
-    $s['storageAccountName'] = $deployResult.storageAccountName.value
-    $s['mediaContainerName'] = $deployResult.mediaContainerName.value
-    $s['swaPrincipalId']     = $deployResult.swaPrincipalId.value
+    $s['swaName']              = $deployResult.swaName.value
+    $s['prodUrl']              = $deployResult.swaUrl.value.TrimEnd('/')
+    $s['storageAccountName']   = $deployResult.storageAccountName.value
+    $s['mediaContainerName']   = $deployResult.mediaContainerName.value
+    $s['contentContainerName'] = $deployResult.contentContainerName.value
+    $s['swaPrincipalId']       = $deployResult.swaPrincipalId.value
     Save-Secrets $s
     Ok "SWA deployed: $($s['prodUrl'])"
 
-    # Cosmos primary key (used until managed-identity auth is wired up)
-    Info 'Fetching Cosmos primary key...'
-    $cosmosKey = az cosmosdb keys list `
-        --name $s['cosmosAccountName'] `
-        --resource-group $resourceGroup `
-        --query 'primaryMasterKey' -o tsv
-    $s['cosmosKey'] = $cosmosKey
-    Save-Secrets $s
-    Ok 'Cosmos key stored'
-
-    # Storage connection string (used for BlobService until managed-identity)
+    # Storage connection string (Table + Blob; used until managed-identity auth is wired up)
     Info 'Fetching Storage connection string...'
     $storageConn = az storage account show-connection-string `
         --name $s['storageAccountName'] `
@@ -763,11 +752,9 @@ if (-not $SkipSwa -and $swaName) {
                                                    $settings['AzureAd__SkipAuth']         = 'false'
     if ($graphSecret)                            { $settings['Graph__ClientSecret']       = $graphSecret }
     if ($prodUrl)                                { $settings['Graph__InviteRedirectUrl']  = "$prodUrl/" }
-    if ($s['cosmosEndpoint'])                    { $settings['Cosmos__Endpoint']          = $s['cosmosEndpoint'] }
-    if ($s['cosmosKey'])                         { $settings['Cosmos__Key']               = $s['cosmosKey'] }
-                                                   $settings['Cosmos__Database']          = 'slypn'
     if ($s['storageConnectionString'])           { $settings['Storage__ConnectionString'] = $s['storageConnectionString'] }
                                                    $settings['Storage__MediaContainer']   = 'media'
+                                                   $settings['Storage__ContentContainer'] = 'content'
                                                    $settings['Otel__ServiceName']         = 'slypn-api'
                                                    $settings['Otel__Env']                 = 'prod'
 
@@ -879,7 +866,7 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         $ls['Values']['Graph__InviteRedirectUrl'] = 'http://localhost:5173/'
 
         $ls | ConvertTo-Json -Depth 5 | Set-Content $localSettingsPath -Encoding UTF8
-        Ok "Updated $localSettingsPath (Entra/Graph fields; Cosmos/Storage unchanged)"
+        Ok "Updated $localSettingsPath (Entra/Graph fields; Storage unchanged)"
     }
 } elseif (-not $SkipLocal -and (-not $authority -or -not $spaClientId -or -not $apiScopeStr)) {
     Warn 'Entra values not available — skipping local dev config (run without -SkipEntra first)'

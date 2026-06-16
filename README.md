@@ -13,7 +13,7 @@ Early development. The build is tracked in **[GitHub Project #2](https://github.
 | Frontend | Vue 3 + TypeScript + Vite + Pinia + TailwindCSS |
 | API | ASP.NET Core 8 isolated-worker Functions (deployed as SWA managed Functions) |
 | Hosting | Azure Static Web Apps (Standard tier) |
-| Data | Cosmos DB (free tier) + Azure Blob Storage |
+| Data | Azure Table Storage (metadata) + Azure Blob Storage (bodies + media) |
 | Auth | Entra External ID (MSAL.js + JWT bearer) |
 | CMS | Custom in-app editor (TipTap) with draft/in-review/published workflow |
 | Observability | Grafana Cloud — Faro Web SDK (UI) + OpenTelemetry .NET OTLP (API) |
@@ -46,7 +46,7 @@ Local dev tooling lands in [issue #7 (`1.6 PowerShell setup/start/stop scripts`)
 .\scripts\stop.ps1    # tear down
 ```
 
-Prereqs (target): PowerShell 7+, Node 20+, .NET 8 SDK, Azure Functions Core Tools v4, Docker (for Azurite + Cosmos DB emulator in Phase 2).
+Prereqs (target): PowerShell 7+, Node 20+, .NET 8 SDK, Azure Functions Core Tools v4, Docker (for the Azurite storage emulator).
 
 ## Contributing
 

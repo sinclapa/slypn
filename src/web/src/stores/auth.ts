@@ -210,7 +210,7 @@ export const useAuthStore = defineStore('auth', () => {
       const decoded = decodeJwtPayload(result.accessToken)
       if (decoded.oid) apiOid.value = decoded.oid
 
-      // Roles are managed in Cosmos, not in Entra app roles — call /me to link
+      // Roles are managed in the members table, not in Entra app roles — call /me to link
       // the OID on first login and retrieve the member's actual role list.
       try {
         const meResp = await fetch('/api/me', {

@@ -50,17 +50,17 @@ histogram_quantile(
   ) > 0)
 ```
 
-### 4. Cosmos call duration (p95)
+### 4. Storage call duration (p95)
 
 **Visualisation:** Time series · **Unit:** seconds (s)
 
-Tempo gathers Cosmos SDK spans (we registered `Azure.*` as a source). Use this **TraceQL** in **Explore → Tempo**:
+Tempo gathers Table + Blob storage SDK spans (we registered `Azure.*` as a source). Use this **TraceQL** in **Explore → Tempo**:
 
 ```traceql
-{ resource.service.name="slypn-api" && span:db.system="cosmosdb" } | quantile_over_time(span:duration, 0.95) by (span:db.cosmosdb.container)
+{ resource.service.name="slypn-api" && span.az.namespace="Microsoft.Storage" } | quantile_over_time(span:duration, 0.95) by (name)
 ```
 
-(If TraceQL aggregations aren't enabled on the free tier, fall back to filtering spans by `db.system=cosmosdb` and reading p95 from the histogram in Explore.)
+(If TraceQL aggregations aren't enabled on the free tier, fall back to filtering spans by the `Azure.*` source name and reading p95 from the histogram in Explore.)
 
 ### 5. Runtime — GC + GC heap
 

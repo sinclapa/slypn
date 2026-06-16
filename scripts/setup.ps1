@@ -98,13 +98,13 @@ if ($funcCmd) {
 }
 
 # --- Docker (for local emulators) ------------------------------------------
-Write-Step 'Checking Docker (for Azurite + Cosmos emulator)'
+Write-Step 'Checking Docker (for Azurite)'
 if (Test-DockerRunning) {
     $dockerVersion = docker version --format '{{.Server.Version}}' 2>$null
     Write-Ok "Docker $dockerVersion"
 } else {
     Write-Warn 'Docker daemon is not reachable. Start Docker Desktop before running scripts/start.ps1.'
-    Write-Warn 'Without Docker, start.ps1 must be invoked with -NoEmulators (API will skip Cosmos/Blob).'
+    Write-Warn 'Without Docker, start.ps1 must be invoked with -NoEmulators (API will skip Table/Blob storage).'
 }
 
 # --- web deps ---------------------------------------------------------------

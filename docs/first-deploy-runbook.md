@@ -43,9 +43,8 @@ az deployment group create \
 Expected resources after ~5 min:
 
 - `swa-slypn-prod` (Static Web App)
-- `cosmos-slypn-prod-<suffix>` (Cosmos DB account, free tier — one free tier per subscription, this consumes it)
-- `slypnprodst<suffix>` (Storage account, with `media` container)
-- Two role assignments: SWA managed identity → Cosmos Data Contributor + Storage Blob Data Contributor.
+- `slypnprodst<suffix>` (Storage account, with `media` + `content` blob containers and the Table service; the six content tables are created at runtime by `TableBootstrapper`)
+- Two role assignments: SWA managed identity → Storage Blob Data Contributor + Storage Table Data Contributor.
 
 Capture the outputs:
 
@@ -73,7 +72,7 @@ Pull the values from outputs + your captured Entra/Grafana details, then paste i
 Critical settings to double-check:
 
 - `AzureAd__SkipAuth=false` (**not** `true`).
-- `Cosmos__Endpoint` matches the deployed Cosmos account.
+- `Storage__ConnectionString` points at the deployed storage account (Table + Blob endpoints).
 - `Otel__Headers` is the full `Authorization=Basic <base64>` string.
 - `Graph__ClientSecret` is set (annual rotation per `docs/deployment-secrets.md` §5).
 
@@ -111,8 +110,8 @@ gh pr create --title "chore: confirm first deploy" --body "Trivial change to exe
 
 - [ ] The SWA deploy workflow runs on the PR.
 - [ ] The action posts a comment on the PR with a `pr-<number>` preview URL.
-- [ ] Click the URL — site renders + reads from the production Cosmos (acceptable for read-only checks; **don't** create test data on prod from a preview).
-- [ ] Optional: override `Cosmos__Database` per-preview as `docs/deployment-secrets.md` §3 describes if you'd like the preview pointing at a sandbox DB.
+- [ ] Click the URL — site renders + reads from the production storage account (acceptable for read-only checks; **don't** create test data on prod from a preview).
+- [ ] Optional: override `Storage__ConnectionString` per-preview as `docs/deployment-secrets.md` §3 describes if you'd like the preview pointing at a sandbox storage account.
 
 ### E.3 Merge and verify prod
 
@@ -175,7 +174,7 @@ If at any phase prod is broken:
 2. **Or roll back via portal** — SWA → Environments → previous production deployment → **Restore**.
 3. For Bicep regressions: redeploy a previous `infra/main.bicep` commit against the same RG.
 
-Data (Cosmos + Blob) is unaffected by SWA rollbacks. Cosmos has its own restore-from-backup if you need it: portal → Cosmos DB → **Point in time restore**.
+Data (Table + Blob storage) is unaffected by SWA rollbacks. If you need point-in-time recovery, enable storage account backup / soft delete + versioning on the storage account.
 
 ---
 
@@ -183,7 +182,7 @@ Data (Cosmos + Blob) is unaffected by SWA rollbacks. Cosmos has its own restore-
 
 After this runbook completes you have:
 
-- A free-tier Cosmos DB + Blob Storage backing a Vue 3 + .NET 8 isolated Functions site.
+- Azure Table + Blob Storage backing a Vue 3 + .NET 8 isolated Functions site.
 - Per-PR preview environments with auto-tear-down.
 - Entra External ID sign-in (email + Google + Facebook) with three roles.
 - TipTap-authored articles + blog posts with draft autosave, optimistic concurrency, and admin approval.
