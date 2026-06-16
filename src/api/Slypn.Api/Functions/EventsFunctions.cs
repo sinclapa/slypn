@@ -1,4 +1,4 @@
-using Microsoft.Azure.Cosmos;
+using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -27,7 +27,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
             if (ev is null) return await NotFound(req, "Event not found.");
             return await Ok(req, ev, ev.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("GetEvents")]
@@ -64,7 +64,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
                 ct);
             return await Created(req, ev, ev.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("ReplaceEvent")]
@@ -94,7 +94,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
                 IfMatch(req), ct);
             return await Ok(req, ev, ev.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("DeleteEvent")]
@@ -118,6 +118,6 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
             await repo.DeleteEventAsync(id, existing.YearMonth, IfMatch(req), ct);
             return NoContent(req);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 }

@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Web;
-using Microsoft.Azure.Cosmos;
+using Azure;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using Slypn.Api.Services;
@@ -87,24 +87,24 @@ internal static class FunctionHelpers
     {
         var resp = req.CreateResponse(HttpStatusCode.ServiceUnavailable);
         await resp.WriteStringAsync(
-            "Writes require a configured Cosmos endpoint. Wire the emulator via scripts/start.ps1 (#17) or supply Cosmos__Endpoint/Cosmos__Key.");
+            "Writes require configured storage. Wire Azurite via scripts/start.ps1 or supply Storage__ConnectionString.");
         return resp;
     }
 
-    public static async Task<HttpResponseData> MapCosmosException(
-        HttpRequestData req, CosmosException ex, ILogger? log = null)
+    public static async Task<HttpResponseData> MapStorageException(
+        HttpRequestData req, RequestFailedException ex, ILogger? log = null)
     {
-        log?.LogWarning(ex, "Cosmos write failed with status {Status}", ex.StatusCode);
-        return ex.StatusCode switch
+        log?.LogWarning(ex, "Storage write failed with status {Status}", ex.Status);
+        return ex.Status switch
         {
-            HttpStatusCode.PreconditionFailed => await Reject(req, HttpStatusCode.PreconditionFailed,
+            (int)HttpStatusCode.PreconditionFailed => await Reject(req, HttpStatusCode.PreconditionFailed,
                 "ETag mismatch — refetch and retry."),
-            HttpStatusCode.NotFound           => await Reject(req, HttpStatusCode.NotFound,
-                "Item not found in this partition."),
-            HttpStatusCode.Conflict           => await Reject(req, HttpStatusCode.Conflict,
+            (int)HttpStatusCode.NotFound           => await Reject(req, HttpStatusCode.NotFound,
+                "Item not found."),
+            (int)HttpStatusCode.Conflict           => await Reject(req, HttpStatusCode.Conflict,
                 "An item with this id already exists."),
             _ => await Reject(req, HttpStatusCode.InternalServerError,
-                $"Cosmos error: {ex.Message}"),
+                $"Storage error: {ex.Message}"),
         };
     }
 

@@ -1,7 +1,8 @@
 // SLYPN infra — full resource-group deployment.
-// Phase 6.1 — adds managed identity on SWA + role assignments to Cosmos
-// (built-in Data Contributor) and Storage (Blob Data Contributor) so the
-// API can drop the connection-string fallback in prod.
+// Phase 6.1 — adds managed identity on SWA + role assignments to Storage
+// (Blob + Table Data Contributor) so the API can drop the connection-string
+// fallback in prod. Content persists in Table Storage (metadata) + Blob
+// Storage (article/draft bodies + media) on a single storage account.
 //
 // We run a single production environment; PR previews are handled by the
 // SWA action, not by a second resource group.
@@ -19,11 +20,8 @@ targetScope = 'resourceGroup'
 @maxLength(8)
 param env string = 'dev'
 
-@description('Azure region for Cosmos + Storage. SWA region is fixed (westeurope).')
+@description('Azure region for Storage. SWA region is fixed (westeurope).')
 param location string = resourceGroup().location
-
-@description('Set to false if this subscription already has a free-tier Cosmos account (only one allowed).')
-param enableCosmosFreeTier bool = true
 
 @description('GitHub repo to associate with the Static Web App.')
 param repositoryUrl string = 'https://github.com/sinclapa/slypn'
@@ -44,8 +42,8 @@ var prefixFlat = 'slypn${env}'
 var nameSuffix = uniqueString(resourceGroup().id)
 
 // Built-in role ids
-var cosmosDataContributorRoleId = '00000000-0000-0000-0000-000000000002'                       // Cosmos DB Built-in Data Contributor (data plane)
-var blobDataContributorRoleId   = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'                       // Storage Blob Data Contributor (Azure RBAC)
+var blobDataContributorRoleId  = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'                        // Storage Blob Data Contributor (Azure RBAC)
+var tableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'                         // Storage Table Data Contributor (Azure RBAC)
 
 // ---------------------------------------------------------------------------
 // Storage account + media container
@@ -77,29 +75,20 @@ resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containe
   }
 }
 
-// ---------------------------------------------------------------------------
-// Cosmos DB (free tier — 1000 RU/s + 25 GB free forever per subscription)
-// Free tier and serverless are mutually exclusive; we want free tier.
-// ---------------------------------------------------------------------------
-resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
-  name: 'cosmos-${prefixDash}-${nameSuffix}'
-  location: location
-  tags: tags
-  kind: 'GlobalDocumentDB'
+// Holds large article/draft HTML bodies (one blob per content id).
+resource contentContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
+  parent: blobService
+  name: 'content'
   properties: {
-    databaseAccountOfferType: 'Standard'
-    enableFreeTier: enableCosmosFreeTier
-    consistencyPolicy: {
-      defaultConsistencyLevel: 'Session'
-    }
-    locations: [
-      {
-        locationName: location
-        failoverPriority: 0
-        isZoneRedundant: false
-      }
-    ]
+    publicAccess: 'None'
   }
+}
+
+// Table service — the six content tables (articles, drafts, events, resources,
+// newsletters, members) are created at runtime by TableBootstrapper.
+resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2024-01-01' = {
+  parent: storage
+  name: 'default'
 }
 
 // ---------------------------------------------------------------------------
@@ -131,20 +120,8 @@ resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Role assignments — let the SWA managed identity reach Cosmos + Blob.
+// Role assignments — let the SWA managed identity reach Blob + Table.
 // ---------------------------------------------------------------------------
-
-// Cosmos DB Built-in Data Contributor (data-plane RBAC, not the control plane).
-// The role is referenced via the Cosmos account's sqlRoleDefinitions namespace.
-resource cosmosDataAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
-  parent: cosmos
-  name: guid(cosmos.id, swa.id, cosmosDataContributorRoleId)
-  properties: {
-    roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosDataContributorRoleId}'
-    principalId: swa.identity.principalId
-    scope: cosmos.id
-  }
-}
 
 // Storage Blob Data Contributor at the storage account scope.
 resource blobDataAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -157,13 +134,23 @@ resource blobDataAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+// Storage Table Data Contributor at the storage account scope.
+resource tableDataAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storage
+  name: guid(storage.id, swa.id, tableDataContributorRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', tableDataContributorRoleId)
+    principalId: swa.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Outputs — consumed by the deploy workflow in #41.
 // ---------------------------------------------------------------------------
 output swaUrl              string = 'https://${swa.properties.defaultHostname}'
 output swaName             string = swa.name
-output cosmosEndpoint      string = cosmos.properties.documentEndpoint
-output cosmosAccountName   string = cosmos.name
 output storageAccountName  string = storage.name
 output mediaContainerName  string = mediaContainer.name
+output contentContainerName string = contentContainer.name
 output swaPrincipalId      string = swa.identity.principalId

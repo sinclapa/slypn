@@ -1,12 +1,12 @@
 #requires -Version 7
 <#
 .SYNOPSIS
-  Seeds Cosmos DB with the sample newsletter parsed from brief/.
+  Seeds Table Storage with the sample newsletter parsed from brief/.
 
 .DESCRIPTION
-  Reads Cosmos__* values from src/api/Slypn.Api/local.settings.json, then
-  runs the Slypn.Seed console app against brief/SLYPN_Newsletter_MAY_2026.docx
-  and upserts a newsletter document into the configured database.
+  Reads Storage__ConnectionString from src/api/Slypn.Api/local.settings.json,
+  then runs the Slypn.Seed console app against brief/SLYPN_Newsletter_MAY_2026.docx
+  and upserts a newsletter entity into the newsletters table.
 
 .EXAMPLE
   .\scripts\seed.ps1
@@ -32,22 +32,20 @@ if (-not (Test-Path $localSettings)) {
     exit 1
 }
 
-$settings = Get-Content $localSettings -Raw | ConvertFrom-Json
-$endpoint = $settings.Values.'Cosmos__Endpoint'
-$key      = $settings.Values.'Cosmos__Key'
-$database = $settings.Values.'Cosmos__Database'
+$settings         = Get-Content $localSettings -Raw | ConvertFrom-Json
+$connectionString = $settings.Values.'Storage__ConnectionString'
 
-if (-not $endpoint -or -not $key -or -not $database) {
-    Write-Err 'Cosmos__Endpoint / Cosmos__Key / Cosmos__Database not set in local.settings.json.'
+if (-not $connectionString) {
+    Write-Err 'Storage__ConnectionString not set in local.settings.json.'
     Write-Err 'Re-copy from local.settings.sample.json (setup.ps1 only copies if local.settings.json is absent).'
     exit 1
 }
 
-Write-Step "Seeding newsletter from $Docx into $database"
+Write-Step "Seeding newsletter from $Docx into the newsletters table"
 
 Push-Location $SeedDir
 try {
-    dotnet run --configuration Release --no-launch-profile -- $Docx --endpoint $endpoint --key $key --database $database
+    dotnet run --configuration Release --no-launch-profile -- $Docx --connection-string $connectionString
     if ($LASTEXITCODE -ne 0) { throw "seed failed (exit $LASTEXITCODE)" }
 }
 finally { Pop-Location }

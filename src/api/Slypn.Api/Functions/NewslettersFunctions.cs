@@ -1,4 +1,4 @@
-using Microsoft.Azure.Cosmos;
+using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -42,7 +42,7 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
             var n = await repo.CreateNewsletterAsync(input!, ct);
             return await Created(req, n, n.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("ReplaceNewsletter")]
@@ -63,7 +63,7 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
             var n = await repo.ReplaceNewsletterAsync(id, input!, IfMatch(req), ct);
             return await Ok(req, n, n.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("DeleteNewsletter")]
@@ -85,7 +85,7 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
             await repo.DeleteNewsletterAsync(id, year, IfMatch(req), ct);
             return NoContent(req);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
 
         Member? existing;
         try { existing = await repo.GetMemberByEmailAsync(email, ct); }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
         var now = DateTime.UtcNow;
         var displayName = input.DisplayName?.Trim();
@@ -139,6 +139,6 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
             var saved = await repo.UpsertMemberAsync(record, existing?.Etag, ct);
             return await Created(req, new { saved.Email, saved.Status });
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 }

@@ -27,6 +27,11 @@ var host = new HostBuilder()
         context.Configuration.GetSection(OtelOptions.SectionName).Bind(otelOpts);
         if (!otelOpts.IsConfigured) return;
 
+        // Export our app's Information/Warning logs (e.g. AllowSignup gate decisions,
+        // role enrichment) to OTLP, not just errors — the breadcrumbs we need when
+        // diagnosing auth/data issues in prod.
+        logging.AddFilter("Slypn", LogLevel.Information);
+
         logging.AddOpenTelemetry(o =>
         {
             o.SetResourceBuilder(ResourceBuilder.CreateDefault()
@@ -56,15 +61,12 @@ var host = new HostBuilder()
         services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>();
 
         services
-            .AddOptions<CosmosOptions>()
-            .Bind(context.Configuration.GetSection(CosmosOptions.SectionName));
-        services.AddSingleton<ICosmosService, CosmosService>();
-        services.AddHostedService<CosmosBootstrapper>();
-
-        services
             .AddOptions<StorageOptions>()
             .Bind(context.Configuration.GetSection(StorageOptions.SectionName));
+        services.AddSingleton<ITableStore, TableStore>();
+        services.AddSingleton<IContentBodyStore, ContentBodyStore>();
         services.AddSingleton<IBlobService, BlobService>();
+        services.AddHostedService<TableBootstrapper>();
 
         services
             .AddOptions<EntraOptions>()
@@ -113,7 +115,7 @@ var host = new HostBuilder()
                     .AddAttributes(new[] { new KeyValuePair<string, object>("deployment.environment", otelOpts.Env) }))
                 .WithTracing(tracing => tracing
                     .AddSource(OtelSources.ApiName)
-                    .AddSource("Azure.*")
+                    .AddSource("Azure.*")  // captures Table + Blob storage SDK activities
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter(opts => ConfigureExporter("/v1/traces", opts)))
                 .WithMetrics(metrics => metrics

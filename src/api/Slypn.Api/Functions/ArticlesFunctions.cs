@@ -1,5 +1,5 @@
 using System.Net;
-using Microsoft.Azure.Cosmos;
+using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -56,7 +56,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
             var article = await repo.CreateArticleAsync(input, ct);
             return await Created(req, article, article.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("ReplaceArticle")]
@@ -78,7 +78,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
             var article = await repo.ReplaceArticleAsync(id, input, IfMatch(req), ct);
             return await Ok(req, article, article.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("DeleteArticle")]
@@ -100,7 +100,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
             await repo.DeleteArticleAsync(id, status, IfMatch(req), ct);
             return NoContent(req);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     /// <summary>
@@ -126,7 +126,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         {
             return await BadRequest(req, ex.Message);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     /// <summary>
@@ -157,6 +157,6 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         {
             return await BadRequest(req, ex.Message);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 }

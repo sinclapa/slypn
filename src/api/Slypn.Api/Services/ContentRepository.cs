@@ -1,14 +1,34 @@
-using Microsoft.Azure.Cosmos;
+using System.Text;
+using System.Text.Json;
+using Azure;
+using Azure.Data.Tables;
 using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
 
 namespace Slypn.Api.Services;
 
-public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mock) : IContentRepository
+/// <summary>
+/// Reads + writes for SLYPN content backed by Azure Table Storage (structured
+/// metadata) and Blob Storage (large article/draft HTML bodies). Falls back to
+/// <see cref="IMockDataService"/> for reads when storage is not configured.
+///
+/// Each table row stores the entity metadata as a single <c>Json</c> column;
+/// articles/drafts blank their <c>Body</c> in that JSON and keep the real body
+/// in a blob keyed by content id. Table Storage only orders by PartitionKey +
+/// RowKey, so list ordering/filtering is done in memory. Optimistic concurrency
+/// uses the native entity ETag, base64-encoded for HTTP transport.
+/// </summary>
+public sealed class ContentRepository(ITableStore store, IContentBodyStore body, IMockDataService mock) : IContentRepository
 {
-    public bool SupportsWrites => cosmos.IsConfigured;
+    public bool SupportsWrites => store.IsConfigured;
 
-    // ---- Reads ----------------------------------------------------------------
+    private const string ArticleBodyPrefix = "articles";
+    private const string DraftBodyPrefix   = "drafts";
+    private const string MembersPartition  = "member";
+
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    // ---- Articles reads -------------------------------------------------------
     public async Task<IReadOnlyList<Article>> ListArticlesAsync(string? status, CancellationToken ct)
         => await ListArticlesAsync(status, type: "article", ct);
 
@@ -17,13 +37,7 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
 
     private async Task<IReadOnlyList<Article>> ListArticlesAsync(string? status, string type, CancellationToken ct)
     {
-        // Rows that predate the Type field deserialise with Type="article" (record default),
-        // so we treat IS_DEFINED missing-or-equals-"article" as the article bucket.
-        var typeClause = type == "article"
-            ? "(c.type = @type OR NOT IS_DEFINED(c.type))"
-            : "c.type = @type";
-
-        if (!cosmos.IsConfigured)
+        if (!store.IsConfigured)
         {
             IEnumerable<Article> source = mock.Articles.Where(a =>
                 string.Equals(a.Type, type, StringComparison.OrdinalIgnoreCase));
@@ -32,69 +46,36 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             return source.OrderByDescending(a => a.PublishedAt).ToList();
         }
 
-        var sql = status is null
-            ? $"SELECT * FROM c WHERE {typeClause} ORDER BY c.publishedAt DESC"
-            : $"SELECT * FROM c WHERE c.status = @status AND {typeClause} ORDER BY c.publishedAt DESC";
-        var query = new QueryDefinition(sql).WithParameter("@type", type);
-        if (status is not null) query = query.WithParameter("@status", status);
+        var filter = status is null ? null : TableClient.CreateQueryFilter($"PartitionKey eq {status}");
+        var entities = await QueryAsync(store.Articles, filter, ct);
 
-        var options = new QueryRequestOptions
-        {
-            PartitionKey = status is null ? null : new PartitionKey(status),
-        };
-        return await CollectAsync<Article>(cosmos.Articles, query, options, ct);
+        // Rows that predate the Type field deserialise with Type="article" (record default),
+        // so missing-or-"article" counts as the article bucket.
+        bool MatchesType(Article a) => type == "article"
+            ? string.Equals(a.Type, "article", StringComparison.OrdinalIgnoreCase)
+            : string.Equals(a.Type, type, StringComparison.OrdinalIgnoreCase);
+
+        var articles = entities
+            .Select(e => Deserialize<Article>(e) with { Etag = EncodeEtag(e.ETag) })
+            .Where(MatchesType)
+            .OrderByDescending(a => a.PublishedAt)
+            .ToList();
+
+        return await WithBodiesAsync(articles, ArticleBodyPrefix, ct);
     }
 
     public async Task<Article?> GetArticleBySlugAsync(string slug, CancellationToken ct)
     {
-        if (!cosmos.IsConfigured)
+        if (!store.IsConfigured)
             return mock.Articles.FirstOrDefault(a =>
                 string.Equals(a.Slug, slug, StringComparison.OrdinalIgnoreCase));
 
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.slug = @slug")
-            .WithParameter("@slug", slug);
-        var results = await CollectAsync<Article>(cosmos.Articles, query, new QueryRequestOptions(), ct);
-        return results.FirstOrDefault();
-    }
-
-    public async Task<IReadOnlyList<CommunityEvent>> ListEventsAsync(bool upcomingOnly, CancellationToken ct)
-    {
-        if (!cosmos.IsConfigured)
-        {
-            IEnumerable<CommunityEvent> source = mock.Events;
-            if (upcomingOnly)
-                source = source.Where(e => e.StartsAt >= DateTimeOffset.UtcNow);
-            return source.OrderBy(e => e.StartsAt).ToList();
-        }
-
-        var query = upcomingOnly
-            ? new QueryDefinition("SELECT * FROM c WHERE c.startsAt >= @now ORDER BY c.startsAt")
-                .WithParameter("@now", DateTimeOffset.UtcNow)
-            : new QueryDefinition("SELECT * FROM c ORDER BY c.startsAt");
-        return await CollectAsync<CommunityEvent>(cosmos.Events, query, new QueryRequestOptions(), ct);
-    }
-
-    public async Task<CommunityEvent?> GetEventByIdAsync(string id, CancellationToken ct)
-    {
-        if (!cosmos.IsConfigured) return null;
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id")
-            .WithParameter("@id", id);
-        var results = await CollectAsync<CommunityEvent>(cosmos.Events, query, new QueryRequestOptions(), ct);
-        return results.FirstOrDefault();
-    }
-
-    public async Task<IReadOnlyList<Resource>> ListResourcesAsync(CancellationToken ct)
-    {
-        if (!cosmos.IsConfigured) return mock.Resources;
-        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.category, c.title");
-        return await CollectAsync<Resource>(cosmos.Resources, query, new QueryRequestOptions(), ct);
-    }
-
-    public async Task<IReadOnlyList<Newsletter>> ListNewslettersAsync(CancellationToken ct)
-    {
-        if (!cosmos.IsConfigured) return mock.Newsletters.OrderByDescending(n => n.IssueDate).ToList();
-        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.issueDate DESC");
-        return await CollectAsync<Newsletter>(cosmos.Newsletters, query, new QueryRequestOptions(), ct);
+        var filter = TableClient.CreateQueryFilter($"Slug eq {slug}");
+        var entities = await QueryAsync(store.Articles, filter, ct);
+        if (entities.Count == 0) return null;
+        var first = entities[0];
+        var article = Deserialize<Article>(first) with { Etag = EncodeEtag(first.ETag) };
+        return article with { Body = await body.GetAsync(ArticleBodyPrefix, article.Id, ct) };
     }
 
     // ---- Articles writes ------------------------------------------------------
@@ -113,8 +94,10 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             Category:       input.Category,
             Tags:           input.Tags,
             Status:         input.Status);
-        var resp = await cosmos.Articles.CreateItemAsync(article, new PartitionKey(article.Status), cancellationToken: ct);
-        return resp.Resource with { Etag = resp.ETag };
+
+        await body.PutAsync(ArticleBodyPrefix, article.Id, article.Body, ct);
+        var resp = await store.Articles.AddEntityAsync(ArticleEntity(article), ct);
+        return article with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task<Article> ReplaceArticleAsync(string id, ArticleInput input, string? ifMatch, CancellationToken ct)
@@ -132,23 +115,48 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             Category:       input.Category,
             Tags:           input.Tags,
             Status:         input.Status);
-        var resp = await cosmos.Articles.ReplaceItemAsync(article, id,
-            new PartitionKey(article.Status),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
-        return resp.Resource with { Etag = resp.ETag };
+
+        await body.PutAsync(ArticleBodyPrefix, article.Id, article.Body, ct);
+        var resp = await store.Articles.UpdateEntityAsync(
+            ArticleEntity(article), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        return article with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task DeleteArticleAsync(string id, string status, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        await cosmos.Articles.DeleteItemAsync<Article>(id,
-            new PartitionKey(status),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
+        await store.Articles.DeleteEntityAsync(status, id, DecodeEtag(ifMatch), ct);
+        await body.DeleteAsync(ArticleBodyPrefix, id, ct);
     }
 
-    // ---- Events writes --------------------------------------------------------
+    // ---- Events ---------------------------------------------------------------
+    public async Task<IReadOnlyList<CommunityEvent>> ListEventsAsync(bool upcomingOnly, CancellationToken ct)
+    {
+        if (!store.IsConfigured)
+        {
+            IEnumerable<CommunityEvent> source = mock.Events;
+            if (upcomingOnly)
+                source = source.Where(e => e.StartsAt >= DateTimeOffset.UtcNow);
+            return source.OrderBy(e => e.StartsAt).ToList();
+        }
+
+        var entities = await QueryAsync(store.Events, filter: null, ct);
+        IEnumerable<CommunityEvent> events = entities
+            .Select(e => Deserialize<CommunityEvent>(e) with { Etag = EncodeEtag(e.ETag) });
+        if (upcomingOnly)
+            events = events.Where(e => e.StartsAt >= DateTimeOffset.UtcNow);
+        return events.OrderBy(e => e.StartsAt).ToList();
+    }
+
+    public async Task<CommunityEvent?> GetEventByIdAsync(string id, CancellationToken ct)
+    {
+        if (!store.IsConfigured) return null;
+        var filter = TableClient.CreateQueryFilter($"RowKey eq {id}");
+        var entities = await QueryAsync(store.Events, filter, ct);
+        if (entities.Count == 0) return null;
+        return Deserialize<CommunityEvent>(entities[0]) with { Etag = EncodeEtag(entities[0].ETag) };
+    }
+
     public async Task<CommunityEvent> CreateEventAsync(EventInput input, string? createdByOid, string? createdByName, CancellationToken ct)
     {
         EnsureWrites();
@@ -163,8 +171,8 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             SignupUrl:     input.SignupUrl,
             CreatedBy:     createdByOid,
             CreatedByName: createdByName);
-        var resp = await cosmos.Events.CreateItemAsync(ev, new PartitionKey(ev.YearMonth), cancellationToken: ct);
-        return resp.Resource with { Etag = resp.ETag };
+        var resp = await store.Events.AddEntityAsync(Entity(ev.YearMonth, ev.Id, ev), ct);
+        return ev with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task<CommunityEvent> ReplaceEventAsync(string id, string oldYearMonth, EventInput input, string? createdByOid, string? createdByName, string? ifMatch, CancellationToken ct)
@@ -184,115 +192,112 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
 
         if (ev.YearMonth == oldYearMonth)
         {
-            // Same partition — in-place replace
-            var resp = await cosmos.Events.ReplaceItemAsync(ev, id,
-                new PartitionKey(oldYearMonth),
-                new ItemRequestOptions { IfMatchEtag = ifMatch }, ct);
-            return resp.Resource with { Etag = resp.ETag };
+            var resp = await store.Events.UpdateEntityAsync(
+                Entity(oldYearMonth, id, ev), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+            return ev with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
         }
-        else
-        {
-            // Partition key changed — delete old doc, create new one
-            await cosmos.Events.DeleteItemAsync<CommunityEvent>(id,
-                new PartitionKey(oldYearMonth),
-                new ItemRequestOptions { IfMatchEtag = ifMatch }, ct);
-            var resp = await cosmos.Events.CreateItemAsync(ev, new PartitionKey(ev.YearMonth), cancellationToken: ct);
-            return resp.Resource with { Etag = resp.ETag };
-        }
+
+        // Partition key changed — delete the old row, create one in the new partition.
+        await store.Events.DeleteEntityAsync(oldYearMonth, id, DecodeEtag(ifMatch), ct);
+        var created = await store.Events.AddEntityAsync(Entity(ev.YearMonth, id, ev), ct);
+        return ev with { Etag = EncodeEtag(created.Headers.ETag!.Value) };
     }
 
     public async Task DeleteEventAsync(string id, string yearMonth, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        await cosmos.Events.DeleteItemAsync<CommunityEvent>(id,
-            new PartitionKey(yearMonth),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
+        await store.Events.DeleteEntityAsync(yearMonth, id, DecodeEtag(ifMatch), ct);
     }
 
-    // ---- Resources writes -----------------------------------------------------
+    // ---- Resources ------------------------------------------------------------
+    public async Task<IReadOnlyList<Resource>> ListResourcesAsync(CancellationToken ct)
+    {
+        if (!store.IsConfigured) return mock.Resources;
+        var entities = await QueryAsync(store.Resources, filter: null, ct);
+        return entities
+            .Select(e => Deserialize<Resource>(e) with { Etag = EncodeEtag(e.ETag) })
+            .OrderBy(r => r.Category).ThenBy(r => r.Title)
+            .ToList();
+    }
+
     public async Task<Resource> CreateResourceAsync(ResourceInput input, CancellationToken ct)
     {
         EnsureWrites();
         var r = new Resource(Guid.NewGuid().ToString("N"), input.Title, input.Description, input.Url, input.Category);
-        var resp = await cosmos.Resources.CreateItemAsync(r, new PartitionKey(r.Category), cancellationToken: ct);
-        return resp.Resource with { Etag = resp.ETag };
+        var resp = await store.Resources.AddEntityAsync(Entity(r.Category, r.Id, r), ct);
+        return r with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task<Resource> ReplaceResourceAsync(string id, ResourceInput input, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
         var r = new Resource(id, input.Title, input.Description, input.Url, input.Category);
-        var resp = await cosmos.Resources.ReplaceItemAsync(r, id,
-            new PartitionKey(r.Category),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
-        return resp.Resource with { Etag = resp.ETag };
+        var resp = await store.Resources.UpdateEntityAsync(
+            Entity(r.Category, r.Id, r), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        return r with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task DeleteResourceAsync(string id, string category, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        await cosmos.Resources.DeleteItemAsync<Resource>(id,
-            new PartitionKey(category),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
+        await store.Resources.DeleteEntityAsync(category, id, DecodeEtag(ifMatch), ct);
     }
 
-    // ---- Newsletters writes ---------------------------------------------------
+    // ---- Newsletters ----------------------------------------------------------
+    public async Task<IReadOnlyList<Newsletter>> ListNewslettersAsync(CancellationToken ct)
+    {
+        if (!store.IsConfigured) return mock.Newsletters.OrderByDescending(n => n.IssueDate).ToList();
+        var entities = await QueryAsync(store.Newsletters, filter: null, ct);
+        return entities
+            .Select(e => Deserialize<Newsletter>(e) with { Etag = EncodeEtag(e.ETag) })
+            .OrderByDescending(n => n.IssueDate)
+            .ToList();
+    }
+
     public async Task<Newsletter> CreateNewsletterAsync(NewsletterInput input, CancellationToken ct)
     {
         EnsureWrites();
         var n = new Newsletter(Guid.NewGuid().ToString("N"), input.Title, input.IssueDate, input.Summary, input.Topics);
-        var resp = await cosmos.Newsletters.CreateItemAsync(n, new PartitionKey(n.Year), cancellationToken: ct);
-        return resp.Resource with { Etag = resp.ETag };
+        var resp = await store.Newsletters.AddEntityAsync(Entity(n.Year, n.Id, n), ct);
+        return n with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task<Newsletter> ReplaceNewsletterAsync(string id, NewsletterInput input, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
         var n = new Newsletter(id, input.Title, input.IssueDate, input.Summary, input.Topics);
-        var resp = await cosmos.Newsletters.ReplaceItemAsync(n, id,
-            new PartitionKey(n.Year),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
-        return resp.Resource with { Etag = resp.ETag };
+        var resp = await store.Newsletters.UpdateEntityAsync(
+            Entity(n.Year, n.Id, n), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        return n with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task DeleteNewsletterAsync(string id, string year, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        await cosmos.Newsletters.DeleteItemAsync<Newsletter>(id,
-            new PartitionKey(year),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
+        await store.Newsletters.DeleteEntityAsync(year, id, DecodeEtag(ifMatch), ct);
     }
 
-    // ---- Members -------------------------------------------------------------
+    // ---- Members --------------------------------------------------------------
     public async Task<Member?> GetMemberByEmailAsync(string email, CancellationToken ct)
     {
         EnsureWrites();
-        var normalized = email.Trim().ToLowerInvariant();
-        var query = new QueryDefinition("SELECT * FROM c WHERE LOWER(c.email) = @email")
-            .WithParameter("@email", normalized);
-        var results = await CollectAsync<Member>(cosmos.Members, query, new QueryRequestOptions(), ct);
-        return results.FirstOrDefault();
+        var normalized = email.Trim();
+        var members = await AllMembersAsync(ct);
+        return members.FirstOrDefault(m => string.Equals(m.Email, normalized, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<Member?> GetMemberByOidAsync(string oid, CancellationToken ct)
     {
         EnsureWrites();
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.oid = @oid")
-            .WithParameter("@oid", oid);
-        var results = await CollectAsync<Member>(cosmos.Members, query, new QueryRequestOptions(), ct);
-        return results.FirstOrDefault();
+        var members = await AllMembersAsync(ct);
+        return members.FirstOrDefault(m => string.Equals(m.Oid, oid, StringComparison.Ordinal));
     }
 
     public async Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct)
     {
         EnsureWrites();
-        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.invitedAt DESC");
-        return await CollectAsync<Member>(cosmos.Members, query, new QueryRequestOptions(), ct);
+        var members = await AllMembersAsync(ct);
+        return members.OrderByDescending(m => m.InvitedAt).ToList();
     }
 
     public async Task<Member?> GetMemberByIdAsync(string id, CancellationToken ct)
@@ -300,10 +305,10 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         EnsureWrites();
         try
         {
-            var resp = await cosmos.Members.ReadItemAsync<Member>(id, new PartitionKey(id), cancellationToken: ct);
-            return resp.Resource with { Etag = resp.ETag };
+            var resp = await store.Members.GetEntityAsync<TableEntity>(MembersPartition, id, cancellationToken: ct);
+            return Deserialize<Member>(resp.Value) with { Etag = EncodeEtag(resp.Value.ETag) };
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (RequestFailedException ex) when (ex.Status == 404)
         {
             return null;
         }
@@ -312,30 +317,37 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
     public async Task<Member> UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        var resp = await cosmos.Members.UpsertItemAsync(member,
-            new PartitionKey(member.Id),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
-        return resp.Resource with { Etag = resp.ETag };
+        var entity = Entity(MembersPartition, member.Id, member);
+        var resp = ifMatch is null
+            ? await store.Members.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct)
+            : await store.Members.UpdateEntityAsync(entity, DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        return member with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task DeleteMemberAsync(string id, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        await cosmos.Members.DeleteItemAsync<Member>(id, new PartitionKey(id),
-            new ItemRequestOptions { IfMatchEtag = ifMatch }, ct);
+        await store.Members.DeleteEntityAsync(MembersPartition, id, DecodeEtag(ifMatch), ct);
     }
 
-    // ---- Drafts --------------------------------------------------------------
+    private async Task<List<Member>> AllMembersAsync(CancellationToken ct)
+    {
+        var filter = TableClient.CreateQueryFilter($"PartitionKey eq {MembersPartition}");
+        var entities = await QueryAsync(store.Members, filter, ct);
+        return entities.Select(e => Deserialize<Member>(e) with { Etag = EncodeEtag(e.ETag) }).ToList();
+    }
+
+    // ---- Drafts ---------------------------------------------------------------
     public async Task<Draft?> GetDraftAsync(string id, string authorId, CancellationToken ct)
     {
         EnsureWrites();
         try
         {
-            var resp = await cosmos.Drafts.ReadItemAsync<Draft>(id, new PartitionKey(authorId), cancellationToken: ct);
-            return resp.Resource with { Etag = resp.ETag };
+            var resp = await store.Drafts.GetEntityAsync<TableEntity>(authorId, id, cancellationToken: ct);
+            var draft = Deserialize<Draft>(resp.Value) with { Etag = EncodeEtag(resp.Value.ETag) };
+            return draft with { Body = await body.GetAsync(DraftBodyPrefix, draft.Id, ct) };
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (RequestFailedException ex) when (ex.Status == 404)
         {
             return null;
         }
@@ -344,31 +356,34 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
     public async Task<IReadOnlyList<Draft>> ListDraftsByAuthorAsync(string authorId, CancellationToken ct)
     {
         EnsureWrites();
-        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.updatedAt DESC");
-        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(authorId) };
-        return await CollectAsync<Draft>(cosmos.Drafts, query, options, ct);
+        var filter = TableClient.CreateQueryFilter($"PartitionKey eq {authorId}");
+        var entities = await QueryAsync(store.Drafts, filter, ct);
+        var drafts = entities
+            .Select(e => Deserialize<Draft>(e) with { Etag = EncodeEtag(e.ETag) })
+            .OrderByDescending(d => d.UpdatedAt)
+            .ToList();
+        return await WithBodiesAsync(drafts, DraftBodyPrefix, ct);
     }
 
     public async Task<Draft> UpsertDraftAsync(Draft draft, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        var resp = await cosmos.Drafts.UpsertItemAsync(draft,
-            new PartitionKey(draft.AuthorId),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
-        return resp.Resource with { Etag = resp.ETag };
+        await body.PutAsync(DraftBodyPrefix, draft.Id, draft.Body, ct);
+        var entity = DraftEntity(draft);
+        var resp = ifMatch is null
+            ? await store.Drafts.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct)
+            : await store.Drafts.UpdateEntityAsync(entity, DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        return draft with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
     public async Task DeleteDraftAsync(string id, string authorId, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        await cosmos.Drafts.DeleteItemAsync<Draft>(id,
-            new PartitionKey(authorId),
-            new ItemRequestOptions { IfMatchEtag = ifMatch },
-            ct);
+        await store.Drafts.DeleteEntityAsync(authorId, id, DecodeEtag(ifMatch), ct);
+        await body.DeleteAsync(DraftBodyPrefix, id, ct);
     }
 
-    // ---- Workflow ------------------------------------------------------------
+    // ---- Workflow -------------------------------------------------------------
     public async Task<Article> SubmitDraftAsync(string draftId, string authorId, CancellationToken ct)
     {
         EnsureWrites();
@@ -376,20 +391,22 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         Draft draft;
         try
         {
-            var read = await cosmos.Drafts.ReadItemAsync<Draft>(draftId, new PartitionKey(authorId), cancellationToken: ct);
-            draft = read.Resource;
+            var read = await store.Drafts.GetEntityAsync<TableEntity>(authorId, draftId, cancellationToken: ct);
+            draft = Deserialize<Draft>(read.Value);
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (RequestFailedException ex) when (ex.Status == 404)
         {
             throw new InvalidOperationException($"Draft {draftId} not found for author {authorId}.");
         }
+
+        var draftBody = await body.GetAsync(DraftBodyPrefix, draftId, ct);
 
         var article = new Article(
             Id:             draft.Id,
             Slug:           draft.Slug,
             Title:          draft.Title,
             Summary:        draft.Summary,
-            Body:           draft.Body,
+            Body:           draftBody,
             Author:         draft.AuthorName,
             PublishedAt:    DateTime.UtcNow, // submission time; updated on publish
             ReadingMinutes: draft.ReadingMinutes,
@@ -401,9 +418,11 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             AuthorId = draft.AuthorId,
         };
 
-        var upserted = await cosmos.Articles.UpsertItemAsync(article, new PartitionKey("in-review"), cancellationToken: ct);
-        await cosmos.Drafts.DeleteItemAsync<Draft>(draft.Id, new PartitionKey(authorId), cancellationToken: ct);
-        return upserted.Resource with { Etag = upserted.ETag };
+        await body.PutAsync(ArticleBodyPrefix, article.Id, draftBody, ct);
+        var upserted = await store.Articles.UpsertEntityAsync(ArticleEntity(article), TableUpdateMode.Replace, ct);
+        await store.Drafts.DeleteEntityAsync(authorId, draft.Id, ETag.All, ct);
+        await body.DeleteAsync(DraftBodyPrefix, draft.Id, ct);
+        return article with { Etag = EncodeEtag(upserted.Headers.ETag!.Value) };
     }
 
     public async Task<Article?> GetArticleAsync(string id, string status, CancellationToken ct)
@@ -411,10 +430,11 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         EnsureWrites();
         try
         {
-            var resp = await cosmos.Articles.ReadItemAsync<Article>(id, new PartitionKey(status), cancellationToken: ct);
-            return resp.Resource with { Etag = resp.ETag };
+            var resp = await store.Articles.GetEntityAsync<TableEntity>(status, id, cancellationToken: ct);
+            var article = Deserialize<Article>(resp.Value) with { Etag = EncodeEtag(resp.Value.ETag) };
+            return article with { Body = await body.GetAsync(ArticleBodyPrefix, article.Id, ct) };
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (RequestFailedException ex) when (ex.Status == 404)
         {
             return null;
         }
@@ -430,10 +450,10 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         Article source;
         try
         {
-            var read = await cosmos.Articles.ReadItemAsync<Article>(id, new PartitionKey("in-review"), cancellationToken: ct);
-            source = read.Resource;
+            var read = await store.Articles.GetEntityAsync<TableEntity>("in-review", id, cancellationToken: ct);
+            source = Deserialize<Article>(read.Value);
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (RequestFailedException ex) when (ex.Status == 404)
         {
             throw new InvalidOperationException($"Article {id} not found in in-review status.");
         }
@@ -441,6 +461,7 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
         if (string.IsNullOrEmpty(source.AuthorId))
             throw new InvalidOperationException("Article has no AuthorId — cannot create revision draft.");
 
+        var articleBody = await body.GetAsync(ArticleBodyPrefix, id, ct);
         var now = DateTime.UtcNow;
         var draft = new Draft(
             Id:               source.Id,
@@ -450,7 +471,7 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             Title:            source.Title,
             Slug:             source.Slug,
             Summary:          source.Summary,
-            Body:             source.Body,
+            Body:             articleBody,
             Category:         source.Category,
             Tags:             source.Tags,
             ReadingMinutes:   source.ReadingMinutes,
@@ -458,56 +479,109 @@ public sealed class ContentRepository(ICosmosService cosmos, IMockDataService mo
             UpdatedAt:        now,
             RevisionFeedback: feedback);
 
-        var upserted = await cosmos.Drafts.UpsertItemAsync(draft, new PartitionKey(source.AuthorId), cancellationToken: ct);
-        await cosmos.Articles.DeleteItemAsync<Article>(id, new PartitionKey("in-review"), cancellationToken: ct);
-        return upserted.Resource with { Etag = upserted.ETag };
+        await body.PutAsync(DraftBodyPrefix, draft.Id, articleBody, ct);
+        var upserted = await store.Drafts.UpsertEntityAsync(DraftEntity(draft), TableUpdateMode.Replace, ct);
+        await store.Articles.DeleteEntityAsync("in-review", id, ETag.All, ct);
+        await body.DeleteAsync(ArticleBodyPrefix, id, ct);
+        return draft with { Etag = EncodeEtag(upserted.Headers.ETag!.Value) };
     }
 
     private async Task<Article> TransitionAsync(
         string id, string fromStatus, string toStatus, Func<Article, Article> update, CancellationToken ct)
     {
         EnsureWrites();
-        // Cosmos doesn't permit changing a document's partition-key value, so
-        // we read from the source partition, create in the target, then delete
-        // the source. Not atomic; admin actions are rare and re-runs are
-        // idempotent (re-doing publish on an already-published article is a
-        // no-op because the source is gone — the 404 surfaces as a clean error).
+        // Status is the partition key, so we read from the source partition, write
+        // to the target, then delete the source. Not atomic; admin actions are rare
+        // and re-runs are idempotent (the source is gone, surfacing a clean 404).
+        // The body blob is keyed by id, not status, so it never moves.
         Article source;
         try
         {
-            var read = await cosmos.Articles.ReadItemAsync<Article>(id, new PartitionKey(fromStatus), cancellationToken: ct);
-            source = read.Resource;
+            var read = await store.Articles.GetEntityAsync<TableEntity>(fromStatus, id, cancellationToken: ct);
+            source = Deserialize<Article>(read.Value);
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (RequestFailedException ex) when (ex.Status == 404)
         {
             throw new InvalidOperationException($"Article {id} is not in '{fromStatus}'.");
         }
 
         var transitioned = update(source with { Status = toStatus, Etag = null });
 
-        var created = await cosmos.Articles.UpsertItemAsync(transitioned, new PartitionKey(toStatus), cancellationToken: ct);
-        await cosmos.Articles.DeleteItemAsync<Article>(id, new PartitionKey(fromStatus), cancellationToken: ct);
-        return created.Resource with { Etag = created.ETag };
+        var created = await store.Articles.UpsertEntityAsync(ArticleEntity(transitioned), TableUpdateMode.Replace, ct);
+        await store.Articles.DeleteEntityAsync(fromStatus, id, ETag.All, ct);
+        return transitioned with
+        {
+            Etag = EncodeEtag(created.Headers.ETag!.Value),
+            Body = await body.GetAsync(ArticleBodyPrefix, id, ct),
+        };
     }
 
     // ---- helpers --------------------------------------------------------------
     private void EnsureWrites()
     {
-        if (!cosmos.IsConfigured)
+        if (!store.IsConfigured)
             throw new InvalidOperationException(
-                "ContentRepository cannot write: Cosmos is not configured. Run setup.ps1 + start.ps1 after Phase 2 emulator wiring (#17), or supply Cosmos__Endpoint/Cosmos__Key.");
+                "ContentRepository cannot write: storage is not configured. Run setup.ps1 + start.ps1, " +
+                "or supply Storage__ConnectionString.");
     }
 
-    private static async Task<IReadOnlyList<T>> CollectAsync<T>(
-        Container container, QueryDefinition query, QueryRequestOptions options, CancellationToken ct)
+    /// <summary>Build a metadata entity. The model's <c>Etag</c> is blanked in the
+    /// stored JSON (the table tracks ETag natively).</summary>
+    private static TableEntity Entity<T>(string partitionKey, string rowKey, T model) =>
+        new(partitionKey, rowKey) { ["Json"] = Serialize(model) };
+
+    /// <summary>Article entity: body blanked (lives in a blob), slug exposed as a
+    /// queryable column for slug lookups.</summary>
+    private static TableEntity ArticleEntity(Article article)
     {
-        var results = new List<T>();
-        using var iterator = container.GetItemQueryIterator<T>(query, requestOptions: options);
-        while (iterator.HasMoreResults)
+        var e = new TableEntity(article.Status, article.Id)
         {
-            var page = await iterator.ReadNextAsync(ct);
-            results.AddRange(page);
-        }
+            ["Json"] = Serialize(article with { Body = string.Empty, Etag = null }),
+            ["Slug"] = article.Slug,
+        };
+        return e;
+    }
+
+    private static TableEntity DraftEntity(Draft draft) =>
+        new(draft.AuthorId, draft.Id) { ["Json"] = Serialize(draft with { Body = string.Empty, Etag = null }) };
+
+    private async Task<IReadOnlyList<Article>> WithBodiesAsync(List<Article> articles, string prefix, CancellationToken ct)
+    {
+        var bodies = await Task.WhenAll(articles.Select(a => body.GetAsync(prefix, a.Id, ct)));
+        for (var i = 0; i < articles.Count; i++) articles[i] = articles[i] with { Body = bodies[i] };
+        return articles;
+    }
+
+    private async Task<IReadOnlyList<Draft>> WithBodiesAsync(List<Draft> drafts, string prefix, CancellationToken ct)
+    {
+        var bodies = await Task.WhenAll(drafts.Select(d => body.GetAsync(prefix, d.Id, ct)));
+        for (var i = 0; i < drafts.Count; i++) drafts[i] = drafts[i] with { Body = bodies[i] };
+        return drafts;
+    }
+
+    private static string Serialize<T>(T model) => JsonSerializer.Serialize(model, JsonOpts);
+
+    private static T Deserialize<T>(TableEntity entity) =>
+        JsonSerializer.Deserialize<T>(entity.GetString("Json") ?? "{}", JsonOpts)!;
+
+    private static string EncodeEtag(ETag etag) =>
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(etag.ToString()));
+
+    private static ETag DecodeEtag(string? ifMatch)
+    {
+        if (string.IsNullOrEmpty(ifMatch)) return ETag.All;
+        try { return new ETag(Encoding.UTF8.GetString(Convert.FromBase64String(ifMatch))); }
+        catch (FormatException) { return new ETag(ifMatch); }
+    }
+
+    private static async Task<List<TableEntity>> QueryAsync(TableClient table, string? filter, CancellationToken ct)
+    {
+        var results = new List<TableEntity>();
+        var pageable = filter is null
+            ? table.QueryAsync<TableEntity>(cancellationToken: ct)
+            : table.QueryAsync<TableEntity>(filter: filter, cancellationToken: ct);
+        await foreach (var entity in pageable.WithCancellation(ct))
+            results.Add(entity);
         return results;
     }
 }

@@ -1,11 +1,11 @@
 #requires -Version 7
 <#
 .SYNOPSIS
-  Removes the SLYPN emulator Docker containers (data is lost).
+  Removes the SLYPN emulator Docker container (data is lost).
 
 .DESCRIPTION
-  Use this when you want a fresh Cosmos / Azurite. The next `start.ps1`
-  will re-create them. Vite + func are not touched — run `stop.ps1` first
+  Use this when you want a fresh Azurite. The next `start.ps1` will
+  re-create it. Vite + func are not touched — run `stop.ps1` first
   if they're still up.
 
 .EXAMPLE
@@ -23,7 +23,7 @@ if (-not (Test-DockerRunning)) {
     exit 1
 }
 
-foreach ($name in @($AzuriteContainer, $CosmosContainer)) {
+foreach ($name in @($AzuriteContainer)) {
     if (Test-ContainerExists $name) {
         if (Test-ContainerRunning $name) {
             docker stop $name | Out-Null

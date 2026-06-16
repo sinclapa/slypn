@@ -17,7 +17,7 @@ External ID lives in its own tenant — you can't mix customers with workforce u
 5. **Configuration** — choose **Customer**. Pick the closest Azure region (UK South).
 6. **Subscription + resource group** — External ID tenants are billed against an Azure subscription, so the portal asks for both:
    - **Subscription**: the same one you'll deploy SLYPN to so the billing consolidates.
-   - **Resource group**: create a new one called **`rg-slypn-identity`**. Keeping identity in its own RG is a convention — the SWA / Cosmos / Storage RG (`rg-slypn-prod`) can be torn down and re-deployed without losing the tenant. Reusing `rg-slypn-prod` also works but is harder to reason about later.
+   - **Resource group**: create a new one called **`rg-slypn-identity`**. Keeping identity in its own RG is a convention — the SWA / Storage RG (`rg-slypn-prod`) can be torn down and re-deployed without losing the tenant. Reusing `rg-slypn-prod` also works but is harder to reason about later.
 
    The tenant itself doesn't consume RG resources; the RG just anchors the billing line item.
 7. **Review + create**. The tenant takes a couple of minutes to provision.
@@ -159,7 +159,7 @@ After registration:
 
 ### 6.4 Custom authentication extension — sign-up gate
 
-The sign-up gate blocks uninvited email addresses at the point of account creation. When a new user reaches the sign-up form, Entra calls our `/api/auth/allow-signup` endpoint before creating their account. The API checks whether the email exists in Cosmos as an invited member; if not, it returns a block-page response and no Entra account is created.
+The sign-up gate blocks uninvited email addresses at the point of account creation. When a new user reaches the sign-up form, Entra calls our `/api/auth/allow-signup` endpoint before creating their account. The API checks whether the email exists in the `members` table as an invited member; if not, it returns a block-page response and no Entra account is created.
 
 `infra/setup.ps1` handles the prerequisites automatically:
 
@@ -231,13 +231,30 @@ Once granted, `setup.ps1` will report `✓ CustomAuthenticationExtensions.Receiv
 
 #### Smoke test
 
-Open the user flow and click **Run user flow**. Use an email address that is **not** in Cosmos as an invited member. After entering the email and clicking Next, you should see the block page: *"You haven't been invited to SLYPN. Please ask an admin to invite you."*
+Open the user flow and click **Run user flow**. Use an email address that is **not** in the `members` table as an invited member. After entering the email and clicking Next, you should see the block page: *"You haven't been invited to SLYPN. Please ask an admin to invite you."*
+
+#### Verifying the gate is actually enforced
+
+> **The gate only runs if the extension is associated with the user flow (Step 4).** Creating the extension (Step 2) is not enough — without the association in *Before collecting information from the user*, CIAM never calls `/api/auth/allow-signup` and **any email can register**. This is the single most common failure mode.
+
+To confirm enforcement after any tenant change:
+
+1. **Association check** — User flow → *Custom authentication extensions* → confirm **SLYPN sign-up gate** is listed under *Before collecting information from the user* (not blank).
+2. **Live-traffic check (Grafana)** — when someone hits the sign-up form, the API logs an `AllowSignup: …` line. Query Loki (datasource `grafanacloud-logs`):
+   ```logql
+   {service_name="slypn-api"} |= "AllowSignup"
+   ```
+   - **No `AllowSignup` lines while sign-ups are happening ⇒ the extension is not wired** (or points at the wrong URL). Re-check Step 4 and the Target URL in Step 2.
+   - A line like `AllowSignup: blocking uninvited email …` confirms the gate ran and blocked.
+   - `AllowSignup: storage not configured — allowing …` means the API can't reach storage and is failing open in dev mode — check `Storage__ConnectionString` on the SWA.
+
+   > These are `Information`/`Warning` logs. Prod must export them — `Program.cs` raises the `Slypn` log category to `Information` for the OTLP exporter, so don't filter it back down to `Error` only.
 
 ---
 
 ### 6.5 Member invitations — CIAM sign-up link
 
-Member invitations no longer use the Microsoft Graph B2B invitation API. Instead, when an admin invites a member the app saves the member record in Cosmos and returns the app's base URL for the admin to share. The invitee visits the link, clicks **Sign in**, and creates their account through the CIAM **Sign up and sign in** flow (email + password). On first login `GET /me` automatically links their Entra OID to their Cosmos member record and activates their status.
+Member invitations no longer use the Microsoft Graph B2B invitation API. Instead, when an admin invites a member the app saves the member record in the `members` table and returns the app's base URL for the admin to share. The invitee visits the link, clicks **Sign in**, and creates their account through the CIAM **Sign up and sign in** flow (email + password). On first login `GET /me` automatically links their Entra OID to their member record and activates their status.
 
 When an admin **deletes** a member, the API also deletes their Entra account via Graph so they can no longer sign in. This requires `User.ReadWrite.All` (application permission) and a client secret.
 
@@ -271,4 +288,4 @@ Sample placeholder values land in `src/web/.env.example` and `src/api/Slypn.Api/
 
 ## 8. Local dev against External ID
 
-Local sign-in talks to the real External ID tenant via MSAL — there's no offline emulator for External ID, but the free tier handles dev traffic comfortably. The Cosmos emulator (#17) still serves the data layer offline, so local dev only needs internet access for the OAuth dance.
+Local sign-in talks to the real External ID tenant via MSAL — there's no offline emulator for External ID, but the free tier handles dev traffic comfortably. The Azurite storage emulator still serves the data layer offline, so local dev only needs internet access for the OAuth dance.

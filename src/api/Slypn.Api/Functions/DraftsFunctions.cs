@@ -1,4 +1,4 @@
-using Microsoft.Azure.Cosmos;
+using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -32,7 +32,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
             var drafts = await repo.ListDraftsByAuthorAsync(authorId, ct);
             return await Ok(req, drafts);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("GetDraft")]
@@ -55,7 +55,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
             if (draft is null) return req.CreateResponse(System.Net.HttpStatusCode.NotFound);
             return await Ok(req, draft, draft.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     /// <summary>
@@ -88,7 +88,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
         var now = DateTime.UtcNow;
         Draft? existing;
         try { existing = await repo.GetDraftAsync(id, authorId, ct); }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
         var draft = new Draft(
             Id:               id,
@@ -113,7 +113,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
                 : await repo.UpsertDraftAsync(draft, IfMatch(req), ct);
             return await Ok(req, saved, saved.Etag);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     [Function("DeleteDraft")]
@@ -135,7 +135,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
             await repo.DeleteDraftAsync(id, authorId, IfMatch(req), ct);
             return NoContent(req);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
     /// <summary>
@@ -167,6 +167,6 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
         {
             return await BadRequest(req, ex.Message);
         }
-        catch (CosmosException ex) { return await MapCosmosException(req, ex, log); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 }

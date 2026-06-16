@@ -85,7 +85,7 @@ onMounted(load)
       <div>
         <h2 class="font-display text-xl font-bold text-slypn-700">Published content</h2>
         <p class="mt-1 text-sm text-slypn-900/75">
-          Everything live on /articles and /blog. Delete removes from Cosmos &mdash; can&rsquo;t be undone.
+          Everything live on /articles and /blog. Delete is permanent &mdash; can&rsquo;t be undone.
         </p>
       </div>
       <button
