@@ -183,6 +183,14 @@ if (-not $SkipEntra) {
     $s['tenantDomain'] = $tenantDomain
 }
 
+# Grafana Cloud OTLP inputs (optional — skip by pressing Enter).
+$grafanaOtlpUrl    = Ask $s 'grafanaOtlpUrl'    'Grafana OTLP endpoint (Enter to skip)' ''
+$grafanaInstanceId = Ask $s 'grafanaInstanceId'  'Grafana instance ID   (Enter to skip)' ''
+$grafanaApiToken   = Ask $s 'grafanaApiToken'    'Grafana API token     (Enter to skip)' ''
+if (-not [string]::IsNullOrWhiteSpace($grafanaOtlpUrl))    { $s['grafanaOtlpUrl']    = $grafanaOtlpUrl }
+if (-not [string]::IsNullOrWhiteSpace($grafanaInstanceId)) { $s['grafanaInstanceId'] = $grafanaInstanceId }
+if (-not [string]::IsNullOrWhiteSpace($grafanaApiToken))   { $s['grafanaApiToken']   = $grafanaApiToken }
+
 # Prod URL — known after Bicep, but can be entered manually if skipping Bicep.
 if ($SkipBicep) {
     $prodUrl = Ask $s 'prodUrl' 'Production SWA URL (https://... — blank if not yet deployed)'
@@ -746,6 +754,14 @@ $swaName       = $s['swaName']
 $graphSecret   = if ($s.Contains('graphClientSecret')) { $s['graphClientSecret'] } else { '' }
 $authority     = if ($tenantId -and $tenantDomain) { "https://$tenantDomain/$tenantId/v2.0" } else { '' }
 $apiScopeStr   = if ($apiClientId) { "api://$apiClientId/access_as_user" } else { '' }
+$grafanaOtlpUrl = if ($s.Contains('grafanaOtlpUrl'))  { $s['grafanaOtlpUrl']  } else { '' }
+$grafanaHeaders = ''
+if (-not [string]::IsNullOrWhiteSpace($s['grafanaInstanceId']) -and
+    -not [string]::IsNullOrWhiteSpace($s['grafanaApiToken'])) {
+    $b64 = [Convert]::ToBase64String(
+               [Text.Encoding]::UTF8.GetBytes("$($s['grafanaInstanceId']):$($s['grafanaApiToken'])"))
+    $grafanaHeaders = "Authorization=Basic $b64"
+}
 
 # ── Phase 3 · SWA app settings ────────────────────────────────────────────────
 
@@ -769,6 +785,8 @@ if (-not $SkipSwa -and $swaName) {
                                                    $settings['Storage__ContentContainer'] = 'content'
                                                    $settings['Otel__ServiceName']         = 'slypn-api'
                                                    $settings['Otel__Env']                 = 'prod'
+    if ($grafanaOtlpUrl)                          { $settings['Otel__Endpoint']           = $grafanaOtlpUrl }
+    if ($grafanaHeaders)                          { $settings['Otel__Headers']            = $grafanaHeaders }
 
     $settingArgs = $settings.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
     az staticwebapp appsettings set `
@@ -876,6 +894,8 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         $ls['Values']['AzureAd__SkipAuth']  = 'false'
         if ($graphSecret) { $ls['Values']['Graph__ClientSecret'] = $graphSecret }
         $ls['Values']['Graph__InviteRedirectUrl'] = 'http://localhost:5173/'
+        if ($grafanaOtlpUrl) { $ls['Values']['Otel__Endpoint'] = $grafanaOtlpUrl }
+        if ($grafanaHeaders) { $ls['Values']['Otel__Headers']  = $grafanaHeaders }
 
         $ls | ConvertTo-Json -Depth 5 | Set-Content $localSettingsPath -Encoding UTF8
         Ok "Updated $localSettingsPath (Entra/Graph fields; Storage unchanged)"

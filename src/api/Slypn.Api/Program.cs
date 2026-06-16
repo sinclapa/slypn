@@ -19,6 +19,36 @@ var host = new HostBuilder()
     {
         builder.UseMiddleware<JwtMiddleware>();
     })
+    .ConfigureLogging((context, logging) =>
+    {
+        // Logs must be wired through ConfigureLogging, not ConfigureServices,
+        // so they attach to the Functions host's ILoggerFactory in isolated worker.
+        var otelOpts = new OtelOptions();
+        context.Configuration.GetSection(OtelOptions.SectionName).Bind(otelOpts);
+        if (!otelOpts.IsConfigured) return;
+
+        // Export our app's Information/Warning logs (e.g. AllowSignup gate decisions,
+        // role enrichment) to OTLP, not just errors — the breadcrumbs we need when
+        // diagnosing auth/data issues in prod.
+        logging.AddFilter("Slypn", LogLevel.Information);
+
+        logging.AddOpenTelemetry(o =>
+        {
+            o.SetResourceBuilder(ResourceBuilder.CreateDefault()
+                .AddService(otelOpts.ServiceName,
+                    serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.1")
+                .AddAttributes(new[] { new KeyValuePair<string, object>("deployment.environment", otelOpts.Env) }));
+            o.IncludeScopes = true;
+            o.IncludeFormattedMessage = true;
+            o.AddOtlpExporter(opts =>
+            {
+                opts.Endpoint = new Uri(otelOpts.Endpoint!.TrimEnd('/') + "/v1/logs");
+                opts.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
+                if (!string.IsNullOrWhiteSpace(otelOpts.Headers))
+                    opts.Headers = otelOpts.Headers;
+            });
+        });
+    })
     .ConfigureServices((context, services) =>
     {
         services.Configure<WorkerOptions>(options =>
@@ -56,7 +86,7 @@ var host = new HostBuilder()
         });
         services.AddSingleton<IEntraUserService, EntraUserService>();
 
-        // ---- OpenTelemetry ---------------------------------------------------
+        // ---- OpenTelemetry (traces + metrics only — logs handled in ConfigureLogging) ---
         services
             .AddOptions<OtelOptions>()
             .Bind(context.Configuration.GetSection(OtelOptions.SectionName));
@@ -66,18 +96,16 @@ var host = new HostBuilder()
 
         if (otelOpts.IsConfigured)
         {
-            var resourceBuilder = ResourceBuilder.CreateDefault()
-                .AddService(otelOpts.ServiceName, serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.1")
-                .AddAttributes(new[] { new KeyValuePair<string, object>("deployment.environment", otelOpts.Env) });
+            // OTel .NET 1.9+: setting Endpoint programmatically disables auto path-appending,
+            // so each signal needs its explicit /v1/* suffix.
+            var baseEndpoint = otelOpts.Endpoint!.TrimEnd('/');
 
-            void ConfigureExporter(OpenTelemetry.Exporter.OtlpExporterOptions options)
+            void ConfigureExporter(string signalPath, OpenTelemetry.Exporter.OtlpExporterOptions options)
             {
-                options.Endpoint = new Uri(otelOpts.Endpoint!);
+                options.Endpoint = new Uri(baseEndpoint + signalPath);
                 options.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
                 if (!string.IsNullOrWhiteSpace(otelOpts.Headers))
-                {
                     options.Headers = otelOpts.Headers;
-                }
             }
 
             services
@@ -89,27 +117,12 @@ var host = new HostBuilder()
                     .AddSource(OtelSources.ApiName)
                     .AddSource("Azure.*")  // captures Table + Blob storage SDK activities
                     .AddHttpClientInstrumentation()
-                    .AddOtlpExporter(ConfigureExporter))
+                    .AddOtlpExporter(opts => ConfigureExporter("/v1/traces", opts)))
                 .WithMetrics(metrics => metrics
                     .AddMeter("Slypn.Api")
                     .AddRuntimeInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddOtlpExporter(ConfigureExporter));
-
-            services.AddLogging(logging =>
-            {
-                // Export our app's Information/Warning logs (e.g. AllowSignup gate
-                // decisions, role enrichment) to OTLP, not just errors — these are
-                // the breadcrumbs we need when diagnosing auth/data issues in prod.
-                logging.AddFilter("Slypn", LogLevel.Information);
-                logging.AddOpenTelemetry(o =>
-                {
-                    o.SetResourceBuilder(resourceBuilder);
-                    o.IncludeScopes = true;
-                    o.IncludeFormattedMessage = true;
-                    o.AddOtlpExporter(ConfigureExporter);
-                });
-            });
+                    .AddOtlpExporter(opts => ConfigureExporter("/v1/metrics", opts)));
         }
     })
     .Build();
