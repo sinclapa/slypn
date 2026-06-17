@@ -47,17 +47,25 @@ public sealed class AuthExtensionFunctions(
         }
 
         // 2. Parse the CIAM event body — identity checks + the email to gate on.
-        // onAttributeCollectionStart fires before the form is submitted, so
-        // data.attributes is empty — the email lives in data.userDetails.mail.
+        // For onAttributeCollectionStart the registering email lives under
+        // data.authenticationContext.user (mail, or the email identity's
+        // issuerAssignedId). Older/other shapes are kept as fallbacks.
         string? email, calloutTenant, calloutExtensionId;
+        string body;
         try
         {
-            var body = await req.ReadAsStringAsync() ?? string.Empty;
+            body = await req.ReadAsStringAsync() ?? string.Empty;
             var data = JsonNode.Parse(body)?["data"];
-            calloutTenant      = data?["tenantId"]?.GetValue<string>();
-            calloutExtensionId = data?["customAuthenticationExtensionId"]?.GetValue<string>();
-            email = data?["userDetails"]?["mail"]?.GetValue<string>()
-                 ?? data?["attributes"]?["email"]?.GetValue<string>();
+            calloutTenant      = Str(data?["tenantId"]);
+            calloutExtensionId = Str(data?["customAuthenticationExtensionId"]);
+
+            var user = data?["authenticationContext"]?["user"];
+            email = Str(user?["mail"])
+                 ?? FirstIdentityEmail(user?["identities"])
+                 ?? Str(data?["userSignUpInfo"]?["attributes"]?["email"]?["value"])
+                 ?? FirstIdentityEmail(data?["userSignUpInfo"]?["identities"])
+                 ?? Str(data?["userDetails"]?["mail"])
+                 ?? Str(data?["attributes"]?["email"]);
             log.LogInformation("AllowSignup: parsed email={Email} tenant={Tenant}", email, calloutTenant);
         }
         catch (Exception ex)
@@ -83,7 +91,10 @@ public sealed class AuthExtensionFunctions(
 
         if (string.IsNullOrWhiteSpace(email))
         {
-            log.LogWarning("AllowSignup: email not found in CIAM payload — blocking");
+            // Log the raw payload (truncated) so an unexpected shape can be
+            // pinpointed without another deploy. Tenant/extension already verified.
+            log.LogWarning("AllowSignup: email not found in CIAM payload — blocking. payload={Payload}",
+                body.Length > 4000 ? body[..4000] : body);
             return await Block(req, "Sign-up unavailable. Please try again later.");
         }
 
@@ -113,6 +124,26 @@ public sealed class AuthExtensionFunctions(
         return await Block(req,
             "You haven't been invited to SLYPN yet. Ask a SLYPN admin to send you an invite, then sign up with the same email address.",
             title: "You need an invite");
+    }
+
+    /// <summary>Reads a JSON node as a string, returning null for missing/non-string nodes.</summary>
+    private static string? Str(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+
+    /// <summary>Returns the first identity's email-bearing issuerAssignedId, if any.</summary>
+    private static string? FirstIdentityEmail(JsonNode? identities)
+    {
+        if (identities is not JsonArray arr) return null;
+        foreach (var id in arr)
+        {
+            var signInType = Str(id?["signInType"]);
+            var value = Str(id?["issuerAssignedId"]);
+            if (value is null) continue;
+            if (string.Equals(signInType, "emailAddress", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains('@'))
+                return value;
+        }
+        return null;
     }
 
     /// <summary>Constant-time string comparison to avoid leaking the secret via timing.</summary>
