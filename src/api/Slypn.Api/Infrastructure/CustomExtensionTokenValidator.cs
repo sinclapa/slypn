@@ -56,15 +56,22 @@ public sealed class CustomExtensionTokenValidator : ICustomExtensionTokenValidat
         if (!IsConfigured)
             throw new InvalidOperationException("CustomExtensionTokenValidator is not configured.");
 
+        // Always record the token's (non-secret) header + identity claims so we can
+        // see exactly which key source / issuer the callout token uses.
+        LogTokenMetadata(token, ex: null);
+
         ClaimsPrincipal principal;
         try
         {
-            principal = await ValidateAgainstAllKeysAsync(token, refresh: false, ct);
-        }
-        catch (SecurityTokenSignatureKeyNotFoundException)
-        {
-            // Keys may have rotated since we last fetched the JWKS — refresh and retry once.
-            principal = await ValidateAgainstAllKeysAsync(token, refresh: true, ct);
+            try
+            {
+                principal = await ValidateAgainstAllKeysAsync(token, refresh: false, ct);
+            }
+            catch (SecurityTokenSignatureKeyNotFoundException)
+            {
+                // Keys may have rotated since we last fetched the JWKS — refresh and retry once.
+                principal = await ValidateAgainstAllKeysAsync(token, refresh: true, ct);
+            }
         }
         catch (Exception ex)
         {
@@ -121,23 +128,31 @@ public sealed class CustomExtensionTokenValidator : ICustomExtensionTokenValidat
     private IEnumerable<string> MetadataAddresses()
     {
         yield return $"https://login.microsoftonline.com/{_opts.TenantId}/v2.0/.well-known/openid-configuration";
+        // CIAM exposes metadata under both the friendly host and the tenant-GUID host,
+        // which can publish different signing-key sets — include both.
+        yield return $"https://{_opts.TenantId}.ciamlogin.com/{_opts.TenantId}/v2.0/.well-known/openid-configuration";
         if (!string.IsNullOrWhiteSpace(_opts.Authority))
             yield return $"{_opts.Authority!.TrimEnd('/')}/.well-known/openid-configuration";
     }
 
     /// <summary>Logs non-secret token metadata (kid/iss/aud/azp) to pinpoint a validation failure.</summary>
-    private void LogTokenMetadata(string token, Exception ex)
+    private void LogTokenMetadata(string token, Exception? ex)
     {
         try
         {
             var jwt = _handler.ReadJwtToken(token);
-            _log.LogWarning(
-                "AllowSignup token rejected ({Error}). kid={Kid} iss={Iss} aud={Aud} azp={Azp}",
-                ex.GetType().Name,
-                jwt.Header.Kid,
-                jwt.Issuer,
-                string.Join(",", jwt.Audiences),
-                jwt.Claims.FirstOrDefault(c => c.Type is "azp" or "appid")?.Value);
+            var kid = jwt.Header.Kid;
+            var alg = jwt.Header.Alg;
+            var aud = string.Join(",", jwt.Audiences);
+            var azp = jwt.Claims.FirstOrDefault(c => c.Type is "azp" or "appid")?.Value;
+            if (ex is null)
+                _log.LogInformation(
+                    "AllowSignup token received. kid={Kid} alg={Alg} iss={Iss} aud={Aud} azp={Azp}",
+                    kid, alg, jwt.Issuer, aud, azp);
+            else
+                _log.LogWarning(
+                    "AllowSignup token rejected ({Error}). kid={Kid} alg={Alg} iss={Iss} aud={Aud} azp={Azp}",
+                    ex.GetType().Name, kid, alg, jwt.Issuer, aud, azp);
         }
         catch
         {
