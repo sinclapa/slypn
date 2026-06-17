@@ -690,9 +690,22 @@ if (-not $SkipEntra) {
     # using the steps below; the extension ID is then saved to secrets.json.
 
     Step 'Entra · Custom auth extension — sign-up gate'
+
+    # Shared secret that authenticates the CIAM → allow-signup callout. SWA strips
+    # the OAuth Authorization header from managed-Functions calls, so we can't
+    # validate the CIAM token; instead the secret travels in the Target URL (?k=)
+    # and the API checks it (plus the callout's tenant + extension id).
+    if (-not $s.Contains('signupGateSecret') -or [string]::IsNullOrWhiteSpace($s['signupGateSecret'])) {
+        $s['signupGateSecret'] = [Convert]::ToBase64String(
+            [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+        ).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        Save-Secrets $s
+        Ok 'Generated sign-up gate shared secret'
+    }
+
     $extApiUrl = if ($s.Contains('prodUrl') -and -not [string]::IsNullOrWhiteSpace($s['prodUrl'])) {
-        "$($s['prodUrl'])/api/auth/allow-signup"
-    } else { '<prodUrl>/api/auth/allow-signup (re-run after first deploy)' }
+        "$($s['prodUrl'])/api/auth/allow-signup?k=$($s['signupGateSecret'])"
+    } else { '<prodUrl>/api/auth/allow-signup?k=<signupGateSecret> (re-run after first deploy)' }
 
     if (-not $s.Contains('signupExtensionId') -or [string]::IsNullOrWhiteSpace($s['signupExtensionId'])) {
         Warn 'Sign-up gate extension not yet created. Follow these steps in the CIAM portal:'
@@ -783,6 +796,9 @@ if (-not $SkipSwa -and $swaName) {
     if ($s['storageConnectionString'])           { $settings['Storage__ConnectionString'] = $s['storageConnectionString'] }
                                                    $settings['Storage__MediaContainer']   = 'media'
                                                    $settings['Storage__ContentContainer'] = 'content'
+    if ($s['signupGateSecret'])                  { $settings['SignupGate__Secret']        = $s['signupGateSecret'] }
+    if ($tenantId)                               { $settings['SignupGate__TenantId']      = $tenantId }
+    if ($s['signupExtensionId'])                 { $settings['SignupGate__ExtensionId']   = $s['signupExtensionId'] }
                                                    $settings['Otel__ServiceName']         = 'slypn-api'
                                                    $settings['Otel__Env']                 = 'prod'
     if ($grafanaOtlpUrl)                          { $settings['Otel__Endpoint']           = $grafanaOtlpUrl }

@@ -161,6 +161,8 @@ After registration:
 
 The sign-up gate blocks uninvited email addresses at the point of account creation. When a new user reaches the sign-up form, Entra calls our `/api/auth/allow-signup` endpoint before creating their account. The API checks whether the email exists in the `members` table as an invited member; if not, it returns a block-page response and no Entra account is created.
 
+> **How the callout is authenticated.** The API runs as a SWA-managed Function, and SWA strips/replaces the OAuth `Authorization` header before the request reaches it — so the CIAM bearer token can't be validated (it arrives as SWA's own internal HS256 token). Instead the callout is authenticated by a **shared secret in the Target URL** (`?k=<signupGateSecret>`) plus a check that the callout body's `tenantId` and `customAuthenticationExtensionId` match ours. `setup.ps1` generates `signupGateSecret`, sets `SignupGate__Secret` / `SignupGate__TenantId` / `SignupGate__ExtensionId` on the SWA, and bakes the secret into the Target URL it prints. The portal wizard still forces you to pick an app registration for "API Authentication" (Step 2) — that's fine, we just don't rely on it.
+
 `infra/setup.ps1` handles the prerequisites automatically:
 
 - Sets the two required identifier URIs on `slypn-api`:
@@ -186,11 +188,11 @@ This ensures the identifier URIs are set on `slypn-api` before you open the port
    - Description: *Blocks uninvited emails at sign-up*
 3. **Endpoint configuration**:
    - Event type: **AttributeCollectionStart**
-   - Target URL: `https://<swa-hostname>/api/auth/allow-signup`
-     (e.g. `https://thankful-tree-090006c03.7.azurestaticapps.net/api/auth/allow-signup`)
+   - Target URL: `https://<swa-hostname>/api/auth/allow-signup?k=<signupGateSecret>`
+     (use the exact URL **including the `?k=` secret** that `setup.ps1` prints — e.g. `https://thankful-tree-090006c03.7.azurestaticapps.net/api/auth/allow-signup?k=AbCd…`)
    - Timeout: `2000` ms
    - Max retries: `1`
-4. **API Authentication**:
+4. **API Authentication** (required by the wizard, but not relied on — see the note above):
    - Select **Select an existing app registration in this directory**
    - Search for and select **slypn-api**
    - App name and App ID will populate automatically

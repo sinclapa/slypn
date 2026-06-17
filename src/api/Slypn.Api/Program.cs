@@ -72,7 +72,10 @@ var host = new HostBuilder()
             .AddOptions<EntraOptions>()
             .Bind(context.Configuration.GetSection(EntraOptions.SectionName));
         services.AddSingleton<IJwtValidator, EntraJwtValidator>();
-        services.AddSingleton<ICustomExtensionTokenValidator, CustomExtensionTokenValidator>();
+
+        services
+            .AddOptions<SignupGateOptions>()
+            .Bind(context.Configuration.GetSection(SignupGateOptions.SectionName));
 
         services
             .AddOptions<GraphOptions>()
