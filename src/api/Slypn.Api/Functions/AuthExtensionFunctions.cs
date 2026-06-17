@@ -16,7 +16,7 @@ namespace Slypn.Api.Functions;
 /// </summary>
 public sealed class AuthExtensionFunctions(
     IContentRepository repo,
-    IJwtValidator validator,
+    ICustomExtensionTokenValidator validator,
     ILogger<AuthExtensionFunctions> log)
 {
     [Function("AllowSignup")]
