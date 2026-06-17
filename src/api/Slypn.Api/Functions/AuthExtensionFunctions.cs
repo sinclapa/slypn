@@ -1,8 +1,11 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
+using System.Web;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Services;
 
@@ -13,10 +16,16 @@ namespace Slypn.Api.Functions;
 /// Called by CIAM during sign-up (onAttributeCollectionStart) to check whether
 /// the registering email has been invited. Non-invited emails are blocked before
 /// an Entra account is created.
+///
+/// The CIAM OAuth bearer can't be validated here: this runs as a SWA-managed
+/// Function, and SWA strips/replaces the Authorization header before the request
+/// reaches us. Instead the callout is authenticated by a shared secret in the
+/// Target URL (<c>?k=</c>) plus the callout body's tenant + extension id. Each
+/// check is skipped when its expected value is unconfigured (local dev).
 /// </summary>
 public sealed class AuthExtensionFunctions(
     IContentRepository repo,
-    ICustomExtensionTokenValidator validator,
+    IOptions<SignupGateOptions> gateOptions,
     ILogger<AuthExtensionFunctions> log)
 {
     [Function("AllowSignup")]
@@ -24,40 +33,52 @@ public sealed class AuthExtensionFunctions(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "auth/allow-signup")] HttpRequestData req,
         CancellationToken ct)
     {
-        // CIAM authenticates extension calls with a bearer token issued for our API app.
-        var rawToken = ExtractBearer(req);
-        if (rawToken is null || !validator.IsConfigured)
+        var gate = gateOptions.Value;
+
+        // 1. Shared-secret check. Skipped when no secret is configured (local dev).
+        if (!string.IsNullOrEmpty(gate.Secret))
         {
-            log.LogWarning("AllowSignup: missing bearer token or validator not configured — blocking");
-            return await Block(req, "Unauthorised.");
+            var provided = HttpUtility.ParseQueryString(req.Url.Query)["k"];
+            if (!FixedTimeEquals(provided, gate.Secret))
+            {
+                log.LogWarning("AllowSignup: shared-secret missing or mismatched — blocking");
+                return await Block(req, "Unauthorised.");
+            }
         }
 
-        try
-        {
-            await validator.ValidateAsync(rawToken, ct);
-        }
-        catch (Exception ex)
-        {
-            log.LogWarning(ex, "AllowSignup: token validation failed — blocking");
-            return await Block(req, "Unauthorised.");
-        }
-
-        // Extract the email from the CIAM event body.
+        // 2. Parse the CIAM event body — identity checks + the email to gate on.
         // onAttributeCollectionStart fires before the form is submitted, so
         // data.attributes is empty — the email lives in data.userDetails.mail.
-        string? email;
+        string? email, calloutTenant, calloutExtensionId;
         try
         {
             var body = await req.ReadAsStringAsync() ?? string.Empty;
-            var node = JsonNode.Parse(body);
-            email = node?["data"]?["userDetails"]?["mail"]?.GetValue<string>()
-                 ?? node?["data"]?["attributes"]?["email"]?.GetValue<string>();
-            log.LogInformation("AllowSignup: parsed email={Email}", email);
+            var data = JsonNode.Parse(body)?["data"];
+            calloutTenant      = data?["tenantId"]?.GetValue<string>();
+            calloutExtensionId = data?["customAuthenticationExtensionId"]?.GetValue<string>();
+            email = data?["userDetails"]?["mail"]?.GetValue<string>()
+                 ?? data?["attributes"]?["email"]?.GetValue<string>();
+            log.LogInformation("AllowSignup: parsed email={Email} tenant={Tenant}", email, calloutTenant);
         }
         catch (Exception ex)
         {
             log.LogError(ex, "AllowSignup: failed to parse request body — blocking");
             return await Block(req, "Sign-up unavailable. Please try again later.");
+        }
+
+        // 3. Defence in depth: the callout must come from our tenant + extension.
+        // Each comparison is skipped when the expected value isn't configured.
+        if (!string.IsNullOrEmpty(gate.TenantId) &&
+            !string.Equals(calloutTenant, gate.TenantId, StringComparison.OrdinalIgnoreCase))
+        {
+            log.LogWarning("AllowSignup: unexpected callout tenant {Tenant} — blocking", calloutTenant);
+            return await Block(req, "Unauthorised.");
+        }
+        if (!string.IsNullOrEmpty(gate.ExtensionId) &&
+            !string.Equals(calloutExtensionId, gate.ExtensionId, StringComparison.OrdinalIgnoreCase))
+        {
+            log.LogWarning("AllowSignup: unexpected extension id {ExtId} — blocking", calloutExtensionId);
+            return await Block(req, "Unauthorised.");
         }
 
         if (string.IsNullOrWhiteSpace(email))
@@ -94,14 +115,12 @@ public sealed class AuthExtensionFunctions(
             title: "You need an invite");
     }
 
-    private static string? ExtractBearer(HttpRequestData req)
+    /// <summary>Constant-time string comparison to avoid leaking the secret via timing.</summary>
+    private static bool FixedTimeEquals(string? provided, string expected)
     {
-        if (!req.Headers.TryGetValues("Authorization", out var vals)) return null;
-        var raw = vals.FirstOrDefault();
-        const string prefix = "Bearer ";
-        return raw?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) == true
-            ? raw[prefix.Length..].Trim()
-            : null;
+        if (string.IsNullOrEmpty(provided)) return false;
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(provided), Encoding.UTF8.GetBytes(expected));
     }
 
     private static async Task<HttpResponseData> Continue(HttpRequestData req)
