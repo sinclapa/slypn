@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import MonthRangePicker from '@/components/common/MonthRangePicker.vue'
 import EventFormDialog from '@/components/common/EventFormDialog.vue'
@@ -16,7 +17,7 @@ const { data: events, loading, error: loadError, refresh } = useAsyncData(
   () => apiJson<CommunityEvent[]>('/events'),
 )
 
-// ── date range — default −2 / +2 months ──────────────────────────────────────
+// ── date range — default previous month / +12 months ─────────────────────────
 
 function monthOffset(n: number): Date {
   const d = new Date()
@@ -24,19 +25,47 @@ function monthOffset(n: number): Date {
   return d
 }
 
-const rangeStart = ref(monthOffset(-2))
-const rangeEnd   = ref(monthOffset(2))
+function ymStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function parseYm(s: unknown): Date | null {
+  const m = typeof s === 'string' && /^(\d{4})-(\d{2})$/.exec(s)
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : null
+}
 
-function onRangeChange(start: Date, end: Date) {
+// ── filter state, initialised from the URL query so it survives navigation ────
+
+const route  = useRoute()
+const router = useRouter()
+
+const searchQuery = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const allDates    = ref(route.query.all === '1')
+const rangeStart  = ref<Date>(parseYm(route.query.from) ?? monthOffset(-1))
+const rangeEnd    = ref<Date | null>(
+  route.query.to === 'any' ? null : (parseYm(route.query.to) ?? monthOffset(12)),
+) // null = open-ended (no end)
+
+function onRangeChange(start: Date, end: Date | null) {
   rangeStart.value = start
   rangeEnd.value   = end
+  allDates.value   = false // picking a range re-enables date filtering
 }
 
 function ym(d: Date) { return d.getFullYear() * 12 + d.getMonth() }
 
-// ── search + filter ───────────────────────────────────────────────────────────
-
-const searchQuery = ref('')
+// Mirror the filter state into the URL (replace = no history spam; the back
+// button still returns here with these params intact).
+watch([searchQuery, allDates, rangeStart, rangeEnd], () => {
+  const query: Record<string, string> = {}
+  if (searchQuery.value.trim()) query.q = searchQuery.value.trim()
+  if (allDates.value) {
+    query.all = '1'
+  } else {
+    query.from = ymStr(rangeStart.value)
+    query.to   = rangeEnd.value ? ymStr(rangeEnd.value) : 'any'
+  }
+  router.replace({ query }).catch(() => { /* ignore duplicated navigation */ })
+})
 
 const currentYear = new Date().getFullYear()
 
@@ -58,11 +87,11 @@ const isSameDay = (a: string, b: string) => {
 const filtered = computed(() => {
   const q  = searchQuery.value.trim().toLowerCase()
   const lo = ym(rangeStart.value)
-  const hi = ym(rangeEnd.value)
+  const hi = rangeEnd.value ? ym(rangeEnd.value) : Infinity
   return [...(events.value ?? [])]
     .filter(e => {
       const d = new Date(e.startsAt)
-      if (ym(d) < lo || ym(d) > hi) return false
+      if (!allDates.value && (ym(d) < lo || ym(d) > hi)) return false
       if (!q) return true
       return (
         e.title.toLowerCase().includes(q)       ||
@@ -133,7 +162,7 @@ async function deleteEvent(event: CommunityEvent) {
     subtitle="Add, edit, and remove community events. Contributors may manage their own events; admins can manage all."
   />
 
-  <section class="mx-auto w-full max-w-3xl space-y-6 px-6 py-16">
+  <section class="page-container space-y-6 py-16">
 
     <!-- Manage events -->
     <article class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
@@ -158,11 +187,15 @@ async function deleteEvent(event: CommunityEvent) {
           class="w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
         />
         <div class="flex items-center gap-2">
-          <div class="flex-1">
+          <div class="flex-1" :class="allDates ? 'pointer-events-none opacity-40' : ''">
             <MonthRangePicker :start="rangeStart" :end="rangeEnd" @change="onRangeChange" />
           </div>
           <span class="shrink-0 text-xs text-slypn-400">{{ filtered.length }} event{{ filtered.length === 1 ? '' : 's' }}</span>
         </div>
+        <label class="flex items-center gap-2 text-xs font-medium text-slypn-600">
+          <input v-model="allDates" type="checkbox" class="rounded border-slypn-300 text-slypn-600 focus:ring-slypn-600" />
+          All dates (ignore range)
+        </label>
       </div>
 
       <!-- Event list -->
@@ -180,10 +213,16 @@ async function deleteEvent(event: CommunityEvent) {
           class="flex items-center justify-between gap-4 py-3"
         >
           <div class="min-w-0 flex-1">
-            <RouterLink
-              :to="{ name: 'event-detail', params: { id: event.id } }"
-              class="block truncate text-sm font-medium text-slypn-800 hover:text-slypn-600 hover:underline"
-            >{{ event.title }}</RouterLink>
+            <div class="flex items-center gap-2">
+              <RouterLink
+                :to="{ name: 'event-detail', params: { id: event.id } }"
+                class="truncate text-sm font-medium text-slypn-800 hover:text-slypn-600 hover:underline"
+              >{{ event.title }}</RouterLink>
+              <span
+                v-if="event.type"
+                class="shrink-0 rounded-full bg-slypn-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slypn-700"
+              >{{ event.type }}</span>
+            </div>
             <p class="mt-0.5 text-xs text-slypn-500">
               <template v-if="isSameDay(event.startsAt, event.endsAt)">
                 {{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}

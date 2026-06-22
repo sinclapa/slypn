@@ -3,8 +3,8 @@ import { computed, ref } from 'vue'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-const props = defineProps<{ start: Date; end: Date }>()
-const emit  = defineEmits<{ change: [start: Date, end: Date] }>()
+const props = defineProps<{ start: Date; end: Date | null }>()
+const emit  = defineEmits<{ change: [start: Date, end: Date | null] }>()
 
 const now = new Date()
 const thisYear  = now.getFullYear()
@@ -27,7 +27,8 @@ const hoverYM    = ref<number | null>(null)
 // ── effective range (committed or live preview) ───────────────────────────────
 
 const committedS = computed(() => ymOfDate(props.start))
-const committedE = computed(() => ymOfDate(props.end))
+// No end date → highlight just the start month (open-ended is conveyed by the label).
+const committedE = computed(() => props.end ? ymOfDate(props.end) : ymOfDate(props.start))
 
 const previewS = computed(() => {
   if (phase.value !== 'end') return committedS.value
@@ -102,15 +103,22 @@ function selectThisMonth() {
   pick(thisYear, thisMonth)
 }
 
+// Commit an open-ended range: from the chosen start month onwards (no end).
+function pickNoEnd() {
+  const start = phase.value === 'end' ? anchorYM.value : committedS.value
+  emit('change', dateOfYM(start), null)
+  closePicker()
+}
+
 // ── trigger label ─────────────────────────────────────────────────────────────
 
 const label = computed(() => {
   const fmt = (d: Date) => d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
-  return `${fmt(props.start)} – ${fmt(props.end)}`
+  return props.end ? `${fmt(props.start)} – ${fmt(props.end)}` : `${fmt(props.start)} onwards`
 })
 
 const hint = computed(() =>
-  phase.value === 'end' ? 'Select end month' : 'Select start month',
+  phase.value === 'end' ? 'Select end month, or no end date' : 'Select start month',
 )
 </script>
 
@@ -203,14 +211,21 @@ const hint = computed(() =>
 
       </div>
 
-      <!-- Footer: hint + this-month shortcut -->
-      <div class="flex items-center justify-between border-t border-slypn-100 px-4 py-2.5">
+      <!-- Footer: hint + shortcuts -->
+      <div class="flex items-center justify-between gap-2 border-t border-slypn-100 px-4 py-2.5">
         <span class="text-xs text-slypn-400">{{ hint }}</span>
-        <button
-          type="button"
-          class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100"
-          @click="selectThisMonth"
-        >This month</button>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100"
+            @click="pickNoEnd"
+          >No end date</button>
+          <button
+            type="button"
+            class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100"
+            @click="selectThisMonth"
+          >This month</button>
+        </div>
       </div>
     </div>
   </div>

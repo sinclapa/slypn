@@ -14,6 +14,11 @@ import {
   isDevSkipAuth,
   msalInstance,
 } from '@/lib/msal'
+import {
+  getActivePersona,
+  setActivePersonaKey,
+  type DevPersonaKey,
+} from '@/lib/devPersonas'
 
 type IdTokenClaims = Record<string, unknown> & { roles?: string[] }
 
@@ -41,18 +46,24 @@ function decodeJwtPayload(token: string): { roles: string[]; oid: string | null 
   }
 }
 
+/**
+ * Build the synthetic account for the active dev persona (admin/contributor/
+ * member). Roles park on idTokenClaims since there's no real access token to
+ * decode in dev-skip mode — the `roles` computed reads them from there.
+ */
 function makeDevAccount(): AccountInfo {
+  const persona = getActivePersona()
   return {
-    homeAccountId:  'dev-skip-auth',
+    homeAccountId:  `dev-skip-auth-${persona.key}`,
     environment:    'localhost',
     tenantId:       '00000000-0000-0000-0000-000000000000',
-    username:       'dev@slypn.local',
-    localAccountId: 'dev-skip-auth',
-    name:           'Dev Admin',
+    username:       persona.username,
+    localAccountId: `dev-skip-auth-${persona.key}`,
+    name:           persona.name,
     idTokenClaims: {
-      name:  'Dev Admin',
-      oid:   '00000000-0000-0000-0000-000000000000',
-      roles: ['Admin', 'Contributor', 'Member'],
+      name:  persona.name,
+      oid:   persona.oid,
+      roles: persona.roles,
     } as Record<string, unknown>,
   } as AccountInfo
 }
@@ -89,7 +100,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // OID from the API access token — matches what the API stores in CreatedBy
   const oid = computed<string | null>(() => {
-    if (isDevSkipAuth) return '00000000-0000-0000-0000-000000000000'
+    if (isDevSkipAuth) return getActivePersona().oid
     return apiOid.value ?? ((account.value?.idTokenClaims as Record<string, unknown>)?.oid as string | undefined) ?? null
   })
 
@@ -195,6 +206,17 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * Dev-skip only: switch the active test persona. Persists the choice and
+   * reloads so every Pinia store + fetched dataset is rebuilt under the new
+   * identity (simpler and more reliable than re-running each store's loaders).
+   */
+  function setPersona(key: DevPersonaKey) {
+    if (!isDevSkipAuth) return
+    setActivePersonaKey(key)
+    window.location.reload()
+  }
+
+  /**
    * Silently fetch an access token for the SLYPN API and harvest its `roles`
    * claim. Failures (no cached account, interaction required, etc.) leave
    * apiRoles empty rather than throw — the UI just degrades to no-role view.
@@ -274,5 +296,6 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     acquireToken,
+    setPersona,
   }
 })

@@ -17,16 +17,23 @@ interface PendingArticle {
   status: string
   readingMinutes: number
   type?: 'article' | 'blog'
+  replacesArticleId?: string | null
+  deletionRequestedBy?: string | null
 }
 
 const approvalsStore = useApprovalsStore()
 
 const articles  = ref<PendingArticle[]>([])
+const deletions = ref<PendingArticle[]>([])
 const loading   = ref(false)
 const loadError = ref<string | null>(null)
 const expanded  = ref<Record<string, boolean>>({})
-const busy      = ref<Record<string, 'publishing' | 'revising' | null>>({})
+const busy      = ref<Record<string, 'publishing' | 'revising' | 'deleting' | 'keeping' | null>>({})
 const errors    = ref<Record<string, string | null>>({})
+
+function syncPendingCount() {
+  approvalsStore.pendingCount = articles.value.length + deletions.value.length
+}
 
 const reviseDialog = ref<{ show: boolean; article: PendingArticle | null; feedback: string }>({
   show: false, article: null, feedback: '',
@@ -46,9 +53,11 @@ async function load() {
   loading.value = true
   loadError.value = null
   try {
-    const [articlesResp, blogResp] = await Promise.all([
+    const [articlesResp, blogResp, pubArtResp, pubBlogResp] = await Promise.all([
       apiFetch('/articles?status=in-review'),
       apiFetch('/blog?status=in-review'),
+      apiFetch('/articles?status=published'),
+      apiFetch('/blog?status=published'),
     ])
     if (!articlesResp.ok) throw new Error(`/articles: ${articlesResp.status} ${articlesResp.statusText}`)
     if (!blogResp.ok)     throw new Error(`/blog: ${blogResp.status} ${blogResp.statusText}`)
@@ -59,7 +68,18 @@ async function load() {
     articles.value = [...a, ...b].sort(
       (x, y) => +new Date(y.publishedAt) - +new Date(x.publishedAt),
     )
-    approvalsStore.pendingCount = articles.value.length
+
+    if (pubArtResp.ok && pubBlogResp.ok) {
+      const [pa, pb] = await Promise.all([
+        pubArtResp.json()  as Promise<PendingArticle[]>,
+        pubBlogResp.json() as Promise<PendingArticle[]>,
+      ])
+      deletions.value = [...pa, ...pb]
+        .filter(x => x.deletionRequestedBy)
+        .sort((x, y) => +new Date(y.publishedAt) - +new Date(x.publishedAt))
+    }
+
+    syncPendingCount()
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -77,11 +97,48 @@ async function publish(article: PendingArticle) {
       throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
     }
     articles.value = articles.value.filter(a => a.id !== article.id)
-    approvalsStore.pendingCount = articles.value.length
+    syncPendingCount()
   } catch (err) {
     errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
   } finally {
     busy.value = { ...busy.value, [article.id]: null }
+  }
+}
+
+// ── Deletion requests ────────────────────────────────────────────────────────
+async function approveDeletion(item: PendingArticle) {
+  busy.value = { ...busy.value, [item.id]: 'deleting' }
+  errors.value = { ...errors.value, [item.id]: null }
+  try {
+    const resp = await apiFetch(`/articles/${item.id}?status=published`, { method: 'DELETE' })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
+    }
+    deletions.value = deletions.value.filter(d => d.id !== item.id)
+    syncPendingCount()
+  } catch (err) {
+    errors.value = { ...errors.value, [item.id]: err instanceof Error ? err.message : String(err) }
+  } finally {
+    busy.value = { ...busy.value, [item.id]: null }
+  }
+}
+
+async function keepArticle(item: PendingArticle) {
+  busy.value = { ...busy.value, [item.id]: 'keeping' }
+  errors.value = { ...errors.value, [item.id]: null }
+  try {
+    const resp = await apiFetch(`/articles/${item.id}/cancel-deletion`, { method: 'POST' })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
+    }
+    deletions.value = deletions.value.filter(d => d.id !== item.id)
+    syncPendingCount()
+  } catch (err) {
+    errors.value = { ...errors.value, [item.id]: err instanceof Error ? err.message : String(err) }
+  } finally {
+    busy.value = { ...busy.value, [item.id]: null }
   }
 }
 
@@ -110,7 +167,7 @@ async function confirmRevise() {
       throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
     }
     articles.value = articles.value.filter(a => a.id !== article.id)
-    approvalsStore.pendingCount = articles.value.length
+    syncPendingCount()
   } catch (err) {
     errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
   } finally {
@@ -153,8 +210,8 @@ onMounted(load)
       {{ loadError }}
     </p>
 
-    <p v-if="!loading && !loadError && articles.length === 0" class="mt-6 text-sm text-slypn-900/65">
-      No submissions waiting. Contributors&rsquo; new submissions will land here.
+    <p v-if="!loading && !loadError && articles.length === 0 && deletions.length === 0" class="mt-6 text-sm text-slypn-900/65">
+      No submissions waiting. Contributors&rsquo; new submissions and deletion requests will land here.
     </p>
 
     <ol v-if="articles.length > 0" class="mt-6 space-y-6">
@@ -179,6 +236,12 @@ onMounted(load)
                     'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
                     article.type === 'blog' ? 'bg-violet-100 text-violet-800' : 'bg-slypn-100 text-slypn-700',
                   ]">{{ article.type === 'blog' ? 'Blog' : 'Article' }}</span>
+                  <span
+                    :class="[
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                      article.replacesArticleId ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700',
+                    ]"
+                  >{{ article.replacesArticleId ? 'Revision' : 'New' }}</span>
                   <button
                     type="button"
                     class="text-left font-display text-lg font-bold text-slypn-700 hover:text-slypn-600"
@@ -221,6 +284,64 @@ onMounted(load)
         </ul>
       </li>
     </ol>
+
+    <!-- Deletion requests -->
+    <div v-if="deletions.length > 0" class="mt-8">
+      <h3 class="font-display text-sm font-semibold uppercase tracking-widest text-rose-500">
+        Deletion requests
+      </h3>
+      <ul class="mt-3 space-y-3">
+        <li
+          v-for="item in deletions"
+          :key="item.id"
+          class="rounded-md border border-rose-100 bg-rose-50/40 p-4"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span :class="[
+                  'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                  item.type === 'blog' ? 'bg-violet-100 text-violet-800' : 'bg-slypn-100 text-slypn-700',
+                ]">{{ item.type === 'blog' ? 'Blog' : 'Article' }}</span>
+                <button
+                  type="button"
+                  class="text-left font-display text-lg font-bold text-slypn-700 hover:text-slypn-600"
+                  @click="toggle(item.id)"
+                >{{ item.title || '(untitled)' }}</button>
+              </div>
+              <p class="mt-1 text-xs text-slypn-900/60">
+                {{ item.author }} &middot; published {{ formatDateTime(item.publishedAt) }}
+              </p>
+              <p class="mt-2 text-sm text-slypn-900/85">{{ item.summary }}</p>
+            </div>
+            <div class="flex shrink-0 gap-2">
+              <button
+                type="button"
+                class="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                :disabled="busy[item.id] !== null && busy[item.id] !== undefined"
+                @click="approveDeletion(item)"
+              >{{ busy[item.id] === 'deleting' ? '…' : 'Approve deletion' }}</button>
+              <button
+                type="button"
+                class="rounded-md border border-slypn-200 bg-white px-3 py-1.5 text-sm font-semibold text-slypn-700 hover:bg-slypn-50 disabled:opacity-50"
+                :disabled="busy[item.id] !== null && busy[item.id] !== undefined"
+                @click="keepArticle(item)"
+              >{{ busy[item.id] === 'keeping' ? '…' : 'Keep' }}</button>
+            </div>
+          </div>
+
+          <div
+            v-if="expanded[item.id]"
+            class="prose prose-slypn mt-4 max-w-none border-t border-rose-100 pt-4 text-sm"
+            v-html="item.body"
+          />
+
+          <p v-if="errors[item.id]" class="mt-3 rounded-md bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
+            {{ errors[item.id] }}
+          </p>
+        </li>
+      </ul>
+    </div>
   </article>
 
   <!-- Revise dialog -->

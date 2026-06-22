@@ -1,4 +1,6 @@
 import { useAuthStore } from '@/stores/auth'
+import { isDevSkipAuth } from '@/lib/msal'
+import { getActivePersonaKey } from '@/lib/devPersonas'
 
 /**
  * Thin fetch wrapper for the SLYPN API.
@@ -23,6 +25,11 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       // X-Slypn-Token bypasses that interception — the middleware reads this first.
       headers.set('X-Slypn-Token', `Bearer ${token}`)
     }
+  }
+  // Dev-skip mode issues no token; tell the API which test persona to assume so
+  // its synthesised principal (roles, OID) matches the frontend.
+  if (isDevSkipAuth) {
+    headers.set('X-Slypn-Dev-User', getActivePersonaKey())
   }
   if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')

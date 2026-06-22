@@ -74,7 +74,7 @@ async function subscribe() {
     </template>
   </HeroBanner>
 
-  <section class="mx-auto max-w-4xl px-6 py-16">
+  <section class="page-container py-16">
     <h2 class="font-display text-2xl font-bold text-slypn-700">Past issues</h2>
 
     <p v-if="loading && !newsletters" class="mt-6 text-slypn-900/70">Loading&hellip;</p>

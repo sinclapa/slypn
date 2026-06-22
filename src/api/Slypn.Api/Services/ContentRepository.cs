@@ -64,18 +64,28 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         return await WithBodiesAsync(articles, ArticleBodyPrefix, ct);
     }
 
-    public async Task<Article?> GetArticleBySlugAsync(string slug, CancellationToken ct)
+    public async Task<Article?> GetArticleBySlugAsync(string slugOrId, CancellationToken ct)
     {
         if (!store.IsConfigured)
             return mock.Articles.FirstOrDefault(a =>
-                string.Equals(a.Slug, slug, StringComparison.OrdinalIgnoreCase));
+                string.Equals(a.Slug, slugOrId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a.Id,   slugOrId, StringComparison.OrdinalIgnoreCase));
 
-        var filter = TableClient.CreateQueryFilter($"Slug eq {slug}");
-        var entities = await QueryAsync(store.Articles, filter, ct);
-        if (entities.Count == 0) return null;
-        var first = entities[0];
-        var article = Deserialize<Article>(first) with { Etag = EncodeEtag(first.ETag) };
-        return article with { Body = await body.GetAsync(ArticleBodyPrefix, article.Id, ct) };
+        if (!string.IsNullOrWhiteSpace(slugOrId))
+        {
+            var filter = TableClient.CreateQueryFilter($"Slug eq {slugOrId}");
+            var entities = await QueryAsync(store.Articles, filter, ct);
+            if (entities.Count > 0)
+            {
+                var first = entities[0];
+                var article = Deserialize<Article>(first) with { Etag = EncodeEtag(first.ETag) };
+                return article with { Body = await body.GetAsync(ArticleBodyPrefix, article.Id, ct) };
+            }
+        }
+
+        // Fallback: treat the value as an article id. Covers content created before
+        // hybrid slugs existed (empty/blank slug) so it stays addressable.
+        return await GetArticleAsync(slugOrId, "published", ct);
     }
 
     // ---- Articles writes ------------------------------------------------------
@@ -403,7 +413,9 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
 
         var article = new Article(
             Id:             draft.Id,
-            Slug:           draft.Slug,
+            // Public URL is a {slug}-{shortId} hybrid: readable base from the title
+            // plus a stable, collision-proof fragment of the content id.
+            Slug:           BuildPublicSlug(draft.Title, draft.Id),
             Title:          draft.Title,
             Summary:        draft.Summary,
             Body:           draftBody,
@@ -416,6 +428,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         {
             Type = string.Equals(draft.Type, "blog", StringComparison.OrdinalIgnoreCase) ? "blog" : "article",
             AuthorId = draft.AuthorId,
+            ReplacesArticleId = draft.ReplacesArticleId,
         };
 
         await body.PutAsync(ArticleBodyPrefix, article.Id, draftBody, ct);
@@ -440,9 +453,116 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         }
     }
 
+    public async Task<Draft> CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct)
+    {
+        EnsureWrites();
+
+        var published = await GetArticleAsync(articleId, "published", ct)
+            ?? throw new InvalidOperationException($"Published article {articleId} not found.");
+
+        // Resume an in-progress revision the editor already started for this article,
+        // otherwise mint a fresh draft id (distinct from the live article's id so their
+        // body blobs never collide).
+        var existing = (await ListDraftsByAuthorAsync(editorOid, ct))
+            .FirstOrDefault(d => d.ReplacesArticleId == articleId);
+
+        var now = DateTime.UtcNow;
+        var draft = new Draft(
+            Id:                existing?.Id ?? Guid.NewGuid().ToString("N"),
+            AuthorId:          editorOid,
+            AuthorName:        editorName,
+            Type:              published.Type,
+            Title:             published.Title,
+            Slug:              published.Slug,
+            Summary:           published.Summary,
+            Body:              published.Body,
+            Category:          published.Category,
+            Tags:              published.Tags,
+            ReadingMinutes:    published.ReadingMinutes,
+            CreatedAt:         existing?.CreatedAt ?? now,
+            UpdatedAt:         now,
+            ReplacesArticleId: articleId);
+
+        return await UpsertDraftAsync(draft, existing?.Etag, ct);
+    }
+
     public async Task<Article> PublishArticleAsync(string id, CancellationToken ct)
-        => await TransitionAsync(id, fromStatus: "in-review", toStatus: "published",
-            update: a => a with { PublishedAt = DateTime.UtcNow, RejectionReason = null }, ct);
+    {
+        EnsureWrites();
+
+        // Read the in-review article first so we can tell a fresh publish from a revision
+        // that must replace an existing published article in place.
+        var review = await GetArticleAsync(id, "in-review", ct)
+            ?? throw new InvalidOperationException($"Article {id} is not in 'in-review'.");
+
+        if (string.IsNullOrEmpty(review.ReplacesArticleId))
+            return await TransitionAsync(id, fromStatus: "in-review", toStatus: "published",
+                update: a => a with { PublishedAt = DateTime.UtcNow, RejectionReason = null }, ct);
+
+        // Revision: overwrite the target published article's content in place, keeping its
+        // id, slug and original published date so the public URL never changes.
+        var target = await GetArticleAsync(review.ReplacesArticleId, "published", ct)
+            ?? throw new InvalidOperationException($"Target published article {review.ReplacesArticleId} not found.");
+
+        var replacement = target with
+        {
+            Title          = review.Title,
+            Summary        = review.Summary,
+            Category       = review.Category,
+            Tags           = review.Tags,
+            ReadingMinutes = review.ReadingMinutes,
+            Type           = review.Type,
+            Status         = "published",
+            RejectionReason     = null,
+            ReplacesArticleId   = null,
+            DeletionRequestedBy = null,
+            DeletionRequestedAt = null,
+            Etag           = null,
+        };
+
+        await body.PutAsync(ArticleBodyPrefix, target.Id, review.Body, ct);
+        var saved = await store.Articles.UpsertEntityAsync(ArticleEntity(replacement), TableUpdateMode.Replace, ct);
+
+        // Remove the in-review revision and its (now redundant) body blob.
+        await store.Articles.DeleteEntityAsync("in-review", id, ETag.All, ct);
+        await body.DeleteAsync(ArticleBodyPrefix, id, ct);
+
+        return replacement with
+        {
+            Etag = EncodeEtag(saved.Headers.ETag!.Value),
+            Body = review.Body,
+        };
+    }
+
+    public Task<Article> RequestArticleDeletionAsync(string id, string requesterOid, CancellationToken ct)
+        => UpdatePublishedInPlaceAsync(id,
+            a => a with { DeletionRequestedBy = requesterOid, DeletionRequestedAt = DateTime.UtcNow }, ct);
+
+    public Task<Article> CancelArticleDeletionAsync(string id, CancellationToken ct)
+        => UpdatePublishedInPlaceAsync(id,
+            a => a with { DeletionRequestedBy = null, DeletionRequestedAt = null }, ct);
+
+    // Reads + rewrites a published row in place (same partition) without the
+    // read-write-delete dance of TransitionAsync, which would delete the row it
+    // just wrote when source and target status match. Body blob is left untouched.
+    private async Task<Article> UpdatePublishedInPlaceAsync(string id, Func<Article, Article> update, CancellationToken ct)
+    {
+        EnsureWrites();
+        Article source;
+        try
+        {
+            var read = await store.Articles.GetEntityAsync<TableEntity>("published", id, cancellationToken: ct);
+            source = Deserialize<Article>(read.Value);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            throw new InvalidOperationException($"Published article {id} not found.");
+        }
+
+        var updated = update(source with { Etag = null });
+        var saved = await store.Articles.UpsertEntityAsync(ArticleEntity(updated), TableUpdateMode.Replace, ct);
+        return updated with { Etag = EncodeEtag(saved.Headers.ETag!.Value) };
+    }
 
     public async Task<Draft> ReviseArticleAsync(string id, string feedback, CancellationToken ct)
     {
@@ -477,7 +597,8 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             ReadingMinutes:   source.ReadingMinutes,
             CreatedAt:        now,
             UpdatedAt:        now,
-            RevisionFeedback: feedback);
+            RevisionFeedback: feedback,
+            ReplacesArticleId: source.ReplacesArticleId);
 
         await body.PutAsync(DraftBodyPrefix, draft.Id, articleBody, ct);
         var upserted = await store.Drafts.UpsertEntityAsync(DraftEntity(draft), TableUpdateMode.Replace, ct);
@@ -517,6 +638,46 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     }
 
     // ---- helpers --------------------------------------------------------------
+
+    /// <summary>
+    /// Builds the public URL slug as <c>{slug}-{shortId}</c> — a readable base
+    /// derived from the title plus the first 8 chars of the content id. The id
+    /// fragment keeps the slug unique (no collision handling needed) and stable
+    /// across edits (the id never changes), while staying human-friendly.
+    /// </summary>
+    private static string BuildPublicSlug(string title, string id)
+    {
+        var baseSlug = Slugify(title);
+        if (baseSlug.Length == 0) baseSlug = "post";
+        var shortId = id.Length >= 8 ? id[..8] : id;
+        return $"{baseSlug}-{shortId}";
+    }
+
+    /// <summary>Lower-cases, keeps a–z/0–9, collapses every other run of
+    /// characters to a single dash, trims dashes, and caps the length so the
+    /// final hybrid slug fits the 120-char column.</summary>
+    private static string Slugify(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var sb = new StringBuilder(text.Length);
+        var lastDash = false;
+        foreach (var ch in text.Trim().ToLowerInvariant())
+        {
+            if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9'))
+            {
+                sb.Append(ch);
+                lastDash = false;
+            }
+            else if (!lastDash && sb.Length > 0)
+            {
+                sb.Append('-');
+                lastDash = true;
+            }
+        }
+        var slug = sb.ToString().Trim('-');
+        return slug.Length > 100 ? slug[..100].Trim('-') : slug;
+    }
+
     private void EnsureWrites()
     {
         if (!store.IsConfigured)

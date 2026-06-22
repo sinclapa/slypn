@@ -4,12 +4,12 @@
   Removes the SLYPN emulator Docker container (data is lost).
 
 .DESCRIPTION
-  Use this when you want a fresh Azurite. The next `start.ps1` will
-  re-create it. Vite + func are not touched — run `stop.ps1` first
+  Use this when you want a fresh Azurite. The next `startLocal.ps1` will
+  re-create it. Vite + func are not touched — run `stopLocal.ps1` first
   if they're still up.
 
 .EXAMPLE
-  .\scripts\clean.ps1
+  .\scripts\cleanLocal.ps1
 #>
 
 [CmdletBinding()]

@@ -14,7 +14,7 @@ const formatDate = (iso: string) =>
       {{ article.category }}
     </p>
     <h3 class="mt-2 text-xl font-bold text-slypn-700">
-      <RouterLink :to="`/articles/${article.slug}`" class="hover:text-slypn-600">
+      <RouterLink :to="`/articles/${article.slug || article.id}`" class="hover:text-slypn-600">
         {{ article.title }}
       </RouterLink>
     </h3>

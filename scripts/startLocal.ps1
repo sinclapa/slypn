@@ -10,13 +10,13 @@
     - func (Functions Core)     .NET API host on http://localhost:7071/
 
   Emulator containers persist between start/stop cycles so seeded data
-  survives. Use scripts/clean.ps1 to wipe them. Vite + func PIDs are
-  written to scripts/.runtime/pids.json for stop.ps1.
+  survives. Use scripts/cleanLocal.ps1 to wipe them. Vite + func PIDs are
+  written to scripts/.runtime/pids.json for stopLocal.ps1.
 
-  Ctrl+C does NOT stop anything — use scripts/stop.ps1.
+  Ctrl+C does NOT stop anything — use scripts/stopLocal.ps1.
 
 .EXAMPLE
-  .\scripts\start.ps1
+  .\scripts\startLocal.ps1
 #>
 
 [CmdletBinding()]
@@ -37,18 +37,18 @@ $pidFile = Join-Path $runtimeDir 'pids.json'
 # are handled below — those map onto existing containers).
 foreach ($p in @($WebPort, $ApiPort)) {
     if (Test-Port $p) {
-        Write-Err "Port $p is already in use. Run .\scripts\stop.ps1 first."
+        Write-Err "Port $p is already in use. Run .\scripts\stopLocal.ps1 first."
         exit 1
     }
 }
 
-# Ensure local.settings.json exists (don't fail noisily — setup.ps1 covers this).
+# Ensure local.settings.json exists (don't fail noisily — setupLocal.ps1 covers this).
 $localSettings = Join-Path $ApiDir 'local.settings.json'
 if (-not (Test-Path $localSettings)) {
     $sample = Join-Path $ApiDir 'local.settings.sample.json'
     if (Test-Path $sample) {
         Copy-Item $sample $localSettings
-        Write-Warn 'Created local.settings.json from sample (run setup.ps1 if anything else looks off).'
+        Write-Warn 'Created local.settings.json from sample (run setupLocal.ps1 if anything else looks off).'
     }
 }
 
@@ -128,7 +128,7 @@ if (-not $funcExe) {
     if (Test-Path $candidate) { $funcExe = $candidate }
 }
 if (-not $funcExe) {
-    Write-Err 'func not on PATH. Run setup.ps1 first.'
+    Write-Err 'func not on PATH. Run setupLocal.ps1 first.'
     Stop-Process -Id $webProc.Id -Force -ErrorAction SilentlyContinue
     exit 1
 }
@@ -165,5 +165,5 @@ if (-not $NoEmulators) {
 }
 Write-Host ''
 Write-Host "Logs:  $runtimeDir"           -ForegroundColor DarkGray
-Write-Host "Seed:  .\scripts\seed.ps1"    -ForegroundColor DarkGray
-Write-Host "Stop:  .\scripts\stop.ps1"    -ForegroundColor DarkGray
+Write-Host "Seed:  .\scripts\seedLocal.ps1"    -ForegroundColor DarkGray
+Write-Host "Stop:  .\scripts\stopLocal.ps1"    -ForegroundColor DarkGray

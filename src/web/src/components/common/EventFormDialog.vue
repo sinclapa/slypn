@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { apiFetch } from '@/lib/api'
+import { EVENT_TYPES } from '@/lib/eventTypes'
 import type { CommunityEvent } from '@/types/content'
 
 const props = defineProps<{
@@ -12,8 +13,6 @@ const emit = defineEmits<{
   close: []
   saved: [event: CommunityEvent]
 }>()
-
-const EVENT_TYPES = ['Coffee meet-up', 'Drinks', 'Fundraising', 'Q&A', 'Carer session', 'Activity'] as const
 
 // ── form state ────────────────────────────────────────────────────────────────
 

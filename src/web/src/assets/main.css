@@ -6,11 +6,26 @@
   html {
     @apply font-sans text-slypn-900 antialiased;
     text-rendering: optimizeLegibility;
+    /* Always reserve the vertical scrollbar gutter so centered (mx-auto) content
+       keeps the same width whether or not the page scrolls — e.g. when the
+       Members invite panel expands and adds a scrollbar. */
+    scrollbar-gutter: stable;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
   }
   body {
     @apply bg-slypn-50;
+  }
+}
+
+@layer components {
+  /* Wide tier: listings, grids, dashboards, admin, home, nav, footer, hero. */
+  .page-container {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+  /* Reading tier: long-form article/blog/about prose. */
+  .page-container-prose {
+    @apply mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8;
   }
 }

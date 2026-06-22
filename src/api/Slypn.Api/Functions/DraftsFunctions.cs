@@ -104,7 +104,8 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
             ReadingMinutes:   input.ReadingMinutes,
             CreatedAt:        existing?.CreatedAt ?? now,
             UpdatedAt:        now,
-            RevisionFeedback: input.RevisionFeedback?.Trim() ?? existing?.RevisionFeedback);
+            RevisionFeedback: input.RevisionFeedback?.Trim() ?? existing?.RevisionFeedback,
+            ReplacesArticleId: existing?.ReplacesArticleId);
 
         try
         {

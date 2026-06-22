@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
-import TulipIcon from '@/components/common/TulipIcon.vue'
+import logoWhiteUrl from '@/assets/logo-white.svg'
 
 const year = new Date().getFullYear()
 </script>
 
 <template>
   <footer class="mt-24 border-t border-slypn-100 bg-slypn-700 text-slypn-50">
-    <div class="mx-auto grid max-w-6xl gap-10 px-6 py-12 md:grid-cols-3">
+    <div class="page-container grid gap-10 py-12 md:grid-cols-3">
       <div>
-        <div class="flex items-center gap-2 font-display text-xl font-extrabold">
-          <TulipIcon class="h-7 w-7 text-tulip" />
-          <span>SLYPN</span>
-        </div>
+        <img :src="logoWhiteUrl" alt="SLYPN" class="h-16 w-auto" width="684" height="488" />
         <p class="mt-3 text-sm text-slypn-100/85">
           South London Younger Parkinson&rsquo;s Network &mdash; a community for
           working-age people living with Parkinson&rsquo;s in South London.
@@ -26,6 +23,7 @@ const year = new Date().getFullYear()
         <ul class="mt-4 space-y-2 text-sm">
           <li><RouterLink to="/about" class="hover:text-tulip">About</RouterLink></li>
           <li><RouterLink to="/articles" class="hover:text-tulip">Articles</RouterLink></li>
+          <li><RouterLink to="/blog" class="hover:text-tulip">Blog</RouterLink></li>
           <li><RouterLink to="/events" class="hover:text-tulip">Events</RouterLink></li>
           <li><RouterLink to="/resources" class="hover:text-tulip">Resources</RouterLink></li>
           <li><RouterLink to="/newsletter" class="hover:text-tulip">Newsletter</RouterLink></li>
@@ -60,7 +58,7 @@ const year = new Date().getFullYear()
     </div>
 
     <div class="border-t border-slypn-600/60">
-      <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-3 px-6 py-5 text-xs text-slypn-100/70 sm:flex-row sm:items-center">
+      <div class="page-container flex flex-col items-start justify-between gap-3 py-5 text-xs text-slypn-100/70 sm:flex-row sm:items-center">
         <p>&copy; {{ year }} South London Younger Parkinson&rsquo;s Network.</p>
         <p>
           Built with care &mdash;

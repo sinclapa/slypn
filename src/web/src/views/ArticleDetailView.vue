@@ -20,7 +20,7 @@ const formatDate = (iso: string) =>
 </script>
 
 <template>
-  <article v-if="article" class="mx-auto max-w-3xl px-6 py-16">
+  <article v-if="article" class="page-container-prose py-16">
     <RouterLink to="/articles" class="text-sm text-slypn-600 hover:text-slypn-700">
       &larr; All articles
     </RouterLink>
@@ -48,11 +48,11 @@ const formatDate = (iso: string) =>
     </ul>
   </article>
 
-  <section v-else-if="loading" class="mx-auto max-w-3xl px-6 py-20 text-center">
+  <section v-else-if="loading" class="page-container-prose py-20 text-center">
     <p class="text-slypn-900/70">Loading&hellip;</p>
   </section>
 
-  <section v-else-if="error" class="mx-auto max-w-3xl px-6 py-20 text-center">
+  <section v-else-if="error" class="page-container-prose py-20 text-center">
     <h1 class="font-display text-2xl font-bold text-slypn-700">Couldn&rsquo;t load this article</h1>
     <p class="mt-3 text-sm text-rose-700">{{ error }}</p>
     <RouterLink to="/articles" class="mt-6 inline-block text-slypn-600 underline underline-offset-4 hover:text-slypn-700">
@@ -60,7 +60,7 @@ const formatDate = (iso: string) =>
     </RouterLink>
   </section>
 
-  <section v-else class="mx-auto max-w-3xl px-6 py-20 text-center">
+  <section v-else class="page-container-prose py-20 text-center">
     <h1 class="font-display text-3xl font-bold text-slypn-700">Article not found</h1>
     <RouterLink to="/articles" class="mt-6 inline-block text-slypn-600 underline underline-offset-4 hover:text-slypn-700">
       Back to articles

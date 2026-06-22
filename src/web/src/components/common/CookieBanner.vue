@@ -13,7 +13,7 @@ const { choice, accept, decline } = useCookieConsent()
       aria-describedby="cookie-desc"
       class="fixed inset-x-0 bottom-0 z-50 border-t border-slypn-100 bg-white/95 shadow-lg backdrop-blur"
     >
-      <div class="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
+      <div class="page-container flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
         <div class="text-sm text-slypn-900/85">
           <p id="cookie-title" class="font-display font-semibold text-slypn-700">
             We&rsquo;d like to use cookies

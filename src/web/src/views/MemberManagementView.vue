@@ -129,13 +129,13 @@ const fmtDate = (iso: string) =>
   >
     <template #actions>
       <RouterLink
-        :to="{ name: 'admin' }"
+        :to="{ name: 'dashboard' }"
         class="text-sm font-semibold text-white/80 hover:text-white"
-      >&larr; Admin</RouterLink>
+      >&larr; Dashboard</RouterLink>
     </template>
   </HeroBanner>
 
-  <section class="mx-auto max-w-5xl space-y-6 px-6 py-16">
+  <section class="page-container space-y-6 py-16">
 
     <!-- Invite panel -->
     <article class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
@@ -155,7 +155,7 @@ const fmtDate = (iso: string) =>
         </p>
 
         <form class="mt-4 space-y-4" @submit.prevent="submitInvite">
-          <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-slypn-800">Email</label>
               <input
