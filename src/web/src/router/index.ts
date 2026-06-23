@@ -12,12 +12,11 @@ import NotFoundView from '@/views/NotFoundView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 // Auth-gated views are dynamically imported so TipTap (used only by EditorView),
-// the Approvals queue (AdminView), and the dashboard never ship to anonymous
-// public visitors. Each import becomes its own chunk via Vite's code-splitting.
+// the Approvals queue, and the dashboard never ship to anonymous public visitors.
+// Each import becomes its own chunk via Vite's code-splitting.
 const AuthCallbackView = () => import('@/views/AuthCallbackView.vue')
 const DashboardView    = () => import('@/views/DashboardView.vue')
 const EditorView       = () => import('@/views/EditorView.vue')
-const AdminView             = () => import('@/views/AdminView.vue')
 const EventManagementView   = () => import('@/views/EventManagementView.vue')
 
 declare module 'vue-router' {
@@ -31,7 +30,14 @@ declare module 'vue-router' {
 
 const router = createRouter({
   history: createWebHistory(),
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: (to, _from, savedPosition) => {
+    if (savedPosition) return savedPosition
+    // Honour deep links like /blog#post-<id>. The 96px offset clears the
+    // sticky header. If the target isn't in the DOM yet (async-loaded lists),
+    // the destination view scrolls to it once its data arrives.
+    if (to.hash) return { el: to.hash, top: 96, behavior: 'smooth' }
+    return { top: 0 }
+  },
   routes: [
     { path: '/',                  name: 'home',            component: HomeView },
     { path: '/about',             name: 'about',           component: AboutView },
@@ -50,9 +56,11 @@ const router = createRouter({
       meta: { requiresAuth: true } },
     { path: '/editor', name: 'editor', component: EditorView,
       meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
-    { path: '/admin', name: 'admin', component: AdminView,
-      meta: { requiresAuth: true, requiresRole: ['Admin'] } },
     { path: '/admin/members', name: 'admin-members', component: () => import('@/views/MemberManagementView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['Admin'] } },
+    { path: '/admin/content', name: 'admin-content', component: () => import('@/views/ManageContentView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
+    { path: '/admin/resources', name: 'admin-resources', component: () => import('@/views/ResourceManagementView.vue'),
       meta: { requiresAuth: true, requiresRole: ['Admin'] } },
     { path: '/admin/approvals', name: 'admin-approvals', component: () => import('@/views/ApprovalsView.vue'),
       meta: { requiresAuth: true, requiresRole: ['Admin'] } },

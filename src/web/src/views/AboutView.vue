@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import SkylineIcon from '@/components/common/SkylineIcon.vue'
 
 const founders = [
   { name: 'Helen Stoinanov', role: 'Co-founder, 2011' },
@@ -13,9 +14,13 @@ const founders = [
     eyebrow="About"
     title="A community for working-age South Londoners with Parkinson's"
     subtitle="Founded in 2011 because the daytime support that existed back then didn't fit around jobs, family, or school runs. Fifteen years on, SLYPN still meets in the evenings — and is now a couple of hundred members strong."
-  />
+  >
+    <template #brand>
+      <SkylineIcon class="w-64 text-slypn-700 sm:w-72 md:w-80" />
+    </template>
+  </HeroBanner>
 
-  <section class="mx-auto max-w-3xl px-6 py-16">
+  <section class="page-container-prose py-16">
     <h2 class="font-display text-2xl font-bold text-slypn-700">Who we are</h2>
     <p class="mt-4 text-slypn-900/85">
       Around 1 in 20 people diagnosed with Parkinson&rsquo;s is under 40. South London Younger

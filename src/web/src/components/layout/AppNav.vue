@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import TulipIcon from '@/components/common/TulipIcon.vue'
+import logoUrl from '@/assets/logo.svg'
 import { useAuthStore } from '@/stores/auth'
 import { useApprovalsStore } from '@/stores/approvals'
 
@@ -49,14 +49,14 @@ async function onSignOut() {
 
 <template>
   <header class="sticky top-0 z-40 border-b border-slypn-100 bg-white/85 backdrop-blur">
-    <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
+    <div class="page-container flex items-center justify-between gap-6 py-4">
       <RouterLink
         to="/"
-        class="flex items-center gap-2 font-display text-lg font-extrabold text-slypn-700"
+        class="flex items-center gap-2"
+        aria-label="SLYPN — Home"
         @click="mobileOpen = false"
       >
-        <TulipIcon class="h-7 w-7 text-slypn-500" />
-        <span>SLYPN</span>
+        <img :src="logoUrl" alt="SLYPN" class="h-16 w-auto" width="684" height="488" />
       </RouterLink>
 
       <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
@@ -76,6 +76,7 @@ async function onSignOut() {
         <button
           v-if="auth.isAuthenticated"
           type="button"
+          data-testid="user-menu-trigger"
           class="flex items-center gap-2 rounded-full bg-slypn-50 px-3 py-1.5 text-sm font-semibold text-slypn-700 hover:bg-slypn-100"
           :aria-expanded="userMenuOpen"
           @click="userMenuOpen = !userMenuOpen"
@@ -107,6 +108,19 @@ async function onSignOut() {
             <li>
               <RouterLink to="/dashboard" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Dashboard</RouterLink>
             </li>
+            <li class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></li>
+            <li v-if="auth.isAdmin">
+              <RouterLink to="/admin/approvals" class="flex items-center justify-between px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">
+                Approvals
+                <span
+                  v-if="approvalsStore.pendingCount > 0"
+                  class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+                >{{ approvalsStore.pendingCount }}</span>
+              </RouterLink>
+            </li>
+            <li v-if="auth.isContributor || auth.isAdmin">
+              <RouterLink to="/admin/content" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Content management</RouterLink>
+            </li>
             <li v-if="auth.isContributor || auth.isAdmin">
               <RouterLink to="/editor" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Editor</RouterLink>
             </li>
@@ -117,13 +131,7 @@ async function onSignOut() {
               <RouterLink to="/admin/members" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Members</RouterLink>
             </li>
             <li v-if="auth.isAdmin">
-              <RouterLink to="/admin" class="flex items-center justify-between px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">
-                Admin
-                <span
-                  v-if="approvalsStore.pendingCount > 0"
-                  class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
-                >{{ approvalsStore.pendingCount }}</span>
-              </RouterLink>
+              <RouterLink to="/admin/resources" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Resources</RouterLink>
             </li>
             <li>
               <button class="block w-full px-4 py-2 text-left hover:bg-slypn-50" @click="onSignOut">Sign out</button>
@@ -155,7 +163,7 @@ async function onSignOut() {
       class="border-t border-slypn-100 bg-white md:hidden"
       aria-label="Mobile primary"
     >
-      <div class="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3">
+      <div class="page-container flex flex-col gap-1 py-3">
         <RouterLink
           v-for="item in navItems"
           :key="item.to"
@@ -175,24 +183,38 @@ async function onSignOut() {
         >Event management</RouterLink>
         <RouterLink
           v-if="auth.isAdmin"
+          to="/admin/approvals"
+          class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+          active-class="bg-slypn-50"
+          @click="mobileOpen = false"
+        >
+          Approvals
+          <span
+            v-if="approvalsStore.pendingCount > 0"
+            class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+          >{{ approvalsStore.pendingCount }}</span>
+        </RouterLink>
+        <RouterLink
+          v-if="auth.isAdmin"
           to="/admin/members"
           class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
           active-class="bg-slypn-50"
           @click="mobileOpen = false"
         >Members</RouterLink>
         <RouterLink
-          v-if="auth.isAdmin"
-          to="/admin"
-          class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+          v-if="auth.isContributor || auth.isAdmin"
+          to="/admin/content"
+          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
           active-class="bg-slypn-50"
           @click="mobileOpen = false"
-        >
-          Admin
-          <span
-            v-if="approvalsStore.pendingCount > 0"
-            class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
-          >{{ approvalsStore.pendingCount }}</span>
-        </RouterLink>
+        >Content management</RouterLink>
+        <RouterLink
+          v-if="auth.isAdmin"
+          to="/admin/resources"
+          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+          active-class="bg-slypn-50"
+          @click="mobileOpen = false"
+        >Resources</RouterLink>
         <button
           v-if="!auth.isAuthenticated"
           class="mt-1 rounded-md bg-slypn-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-slypn-700"

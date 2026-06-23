@@ -24,6 +24,16 @@ public sealed record Article(
     /// <summary>Set when an admin rejects an in-review article. Null otherwise.</summary>
     public string? RejectionReason { get; init; }
 
+    /// <summary>On an in-review revision, the id of the published article it will replace on
+    /// approval. Null for brand-new content.</summary>
+    public string? ReplacesArticleId { get; init; }
+
+    /// <summary>Set on a published article when a contributor requests its deletion (pending
+    /// admin approval). The article stays live until an admin approves the deletion.</summary>
+    public string? DeletionRequestedBy { get; init; }
+
+    public DateTime? DeletionRequestedAt { get; init; }
+
     /// <summary>Cosmos optimistic-concurrency token. Echoed in the ETag HTTP header for clients.</summary>
     [JsonPropertyName("_etag")]
     [Newtonsoft.Json.JsonProperty("_etag")]

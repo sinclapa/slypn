@@ -2,6 +2,7 @@
 import AppNav from '@/components/layout/AppNav.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import CookieBanner from '@/components/common/CookieBanner.vue'
+import DevPersonaSwitcher from '@/components/common/DevPersonaSwitcher.vue'
 </script>
 
 <template>
@@ -10,5 +11,6 @@ import CookieBanner from '@/components/common/CookieBanner.vue'
     <RouterView class="flex-1" />
     <AppFooter />
     <CookieBanner />
+    <DevPersonaSwitcher />
   </div>
 </template>

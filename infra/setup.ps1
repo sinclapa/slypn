@@ -868,8 +868,25 @@ if (-not $SkipGitHub) {
 
 # ── Phase 5 · Local dev configuration ─────────────────────────────────────────
 
+# Default for the summary when Phase 5 is skipped; resolved from existing config below.
+$localSkipAuth = 'true'
+
 if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
     Step 'Phase 5 · Local dev configuration'
+
+    # This phase configures the *capability* to use Entra locally (it writes the
+    # MSAL client id / authority / scope). The on/off toggle itself
+    # (VITE_DEV_SKIP_AUTH / AzureAd__SkipAuth) is owned by scripts/setupLocal.ps1
+    # — so here we PRESERVE whatever the toggle is currently set to and never
+    # stomp it. Fresh machines default to skip-auth on (dev persona switcher).
+    $localSkipAuth = 'true'
+    if (Test-Path $envLocalPath) {
+        $flagLine = Get-Content $envLocalPath |
+            Where-Object { $_ -match '^\s*VITE_DEV_SKIP_AUTH\s*=' } |
+            Select-Object -Last 1
+        if ($flagLine -match '=\s*(true|false)\s*$') { $localSkipAuth = $Matches[1] }
+    }
+    Info "Local Entra login toggle preserved: skip-auth=$localSkipAuth (change with scripts/setupLocal.ps1 -EntraLogin on|off)"
 
     # .env.local
     $envLines = @(
@@ -877,7 +894,7 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         "VITE_MSAL_AUTHORITY=$authority"
         "VITE_MSAL_CLIENT_ID=$spaClientId"
         "VITE_API_SCOPE=$apiScopeStr"
-        'VITE_DEV_SKIP_AUTH=false'
+        "VITE_DEV_SKIP_AUTH=$localSkipAuth"
     )
 
     # Preserve any non-VITE_ vars already in the file (e.g. VITE_FARO_*).
@@ -907,7 +924,7 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         $ls['Values']['AzureAd__Authority'] = $authority
         $ls['Values']['AzureAd__Audience']  = "api://$apiClientId"
         $ls['Values']['AzureAd__TenantId']  = $tenantId
-        $ls['Values']['AzureAd__SkipAuth']  = 'false'
+        $ls['Values']['AzureAd__SkipAuth']  = $localSkipAuth
         if ($graphSecret) { $ls['Values']['Graph__ClientSecret'] = $graphSecret }
         $ls['Values']['Graph__InviteRedirectUrl'] = 'http://localhost:5173/'
         if ($grafanaOtlpUrl) { $ls['Values']['Otel__Endpoint'] = $grafanaOtlpUrl }
@@ -935,7 +952,7 @@ if ($authority) {
     Write-Host "   VITE_MSAL_AUTHORITY=$authority"
     Write-Host "   VITE_MSAL_CLIENT_ID=$spaClientId"
     Write-Host "   VITE_API_SCOPE=$apiScopeStr"
-    Write-Host "   VITE_DEV_SKIP_AUTH=false"
+    Write-Host "   VITE_DEV_SKIP_AUTH=$localSkipAuth  (toggle: .\scripts\setupLocal.ps1 -EntraLogin on|off)"
 }
 
 if ($swaName -and $authority) {

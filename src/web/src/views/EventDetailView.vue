@@ -29,7 +29,7 @@ const isSameDay = computed(() => {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-6 py-12">
+  <div class="page-container-prose py-12">
 
     <button
       type="button"

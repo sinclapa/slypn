@@ -8,19 +8,20 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using Slypn.Seed;
 
 // Args:
-//   <docx-path>  --connection-string <cs>  [--table <name>]
+//   [<docx-path>]  --connection-string <cs>  [--table <name>]  [--demo]
 //
+// At least one of <docx-path> (seed the newsletter) or --demo (seed demo
+// events/articles/blogs/resources) is required.
 // Defaults: table = "newsletters".
 // Exit codes: 0 success, 1 bad args, 2 docx error, 3 storage error.
 
-if (args.Length < 1)
-{
-    Console.Error.WriteLine("usage: dotnet run -- <docx-path> --connection-string <cs> [--table <name>]");
-    return 1;
-}
+var argList = args.ToList();
+var demo = argList.Remove("--demo");
 
-string docxPath = args[0];
-var named = ParseNamed(args.Skip(1).ToArray());
+// Optional positional docx path = first arg that isn't a --flag.
+string? docxPath = argList.Count > 0 && !argList[0].StartsWith("--") ? argList[0] : null;
+var named = ParseNamed((docxPath is null ? argList : argList.Skip(1)).ToArray());
+
 if (!named.TryGetValue("connection-string", out var connectionString))
 {
     Console.Error.WriteLine("Missing --connection-string.");
@@ -28,36 +29,62 @@ if (!named.TryGetValue("connection-string", out var connectionString))
 }
 var table = named.GetValueOrDefault("table", "newsletters");
 
-if (!File.Exists(docxPath))
+if (docxPath is null && !demo)
 {
-    Console.Error.WriteLine($"docx not found: {docxPath}");
-    return 2;
+    Console.Error.WriteLine("usage: dotnet run -- [<docx-path>] --connection-string <cs> [--table <name>] [--demo]");
+    Console.Error.WriteLine("Pass a docx path to seed the newsletter and/or --demo to seed demo content.");
+    return 1;
 }
 
-SeedNewsletter newsletter;
-try
+// ----- newsletter (from docx) -------------------------------------------------
+if (docxPath is not null)
 {
-    newsletter = BuildFromDocx(docxPath);
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"docx parse failed: {ex.Message}");
-    return 2;
+    if (!File.Exists(docxPath))
+    {
+        Console.Error.WriteLine($"docx not found: {docxPath}");
+        return 2;
+    }
+
+    SeedNewsletter newsletter;
+    try
+    {
+        newsletter = BuildFromDocx(docxPath);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"docx parse failed: {ex.Message}");
+        return 2;
+    }
+
+    Console.WriteLine($"Parsed newsletter: id={newsletter.Id} title='{newsletter.Title}' issue={newsletter.IssueDate} year={newsletter.Year} topics={newsletter.Topics.Count}");
+
+    try
+    {
+        await UpsertAsync(connectionString, table, newsletter);
+        Console.WriteLine($"Upserted into table {table}.");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Table upsert failed: {ex.Message}");
+        return 3;
+    }
 }
 
-Console.WriteLine($"Parsed newsletter: id={newsletter.Id} title='{newsletter.Title}' issue={newsletter.IssueDate} year={newsletter.Year} topics={newsletter.Topics.Count}");
+// ----- demo content -----------------------------------------------------------
+if (demo)
+{
+    try
+    {
+        await SeedDemo.SeedAsync(connectionString, Console.Out);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Demo seed failed: {ex.Message}");
+        return 3;
+    }
+}
 
-try
-{
-    await UpsertAsync(connectionString, table, newsletter);
-    Console.WriteLine($"Upserted into table {table}.");
-    return 0;
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Table upsert failed: {ex.Message}");
-    return 3;
-}
+return 0;
 
 // ----- helpers ----------------------------------------------------------------
 

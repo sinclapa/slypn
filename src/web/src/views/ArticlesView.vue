@@ -2,22 +2,22 @@
 import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import ArticleCard from '@/components/common/ArticleCard.vue'
+import PillFilter from '@/components/common/PillFilter.vue'
 import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
-import type { Article, ArticleCategory } from '@/types/content'
+import type { Article } from '@/types/content'
 
-const categories: Array<'All' | ArticleCategory> = [
-  'All',
-  "Living with Parkinson's",
-  'Treatment',
-  'Community',
-  'Lifestyle',
-]
-const selected = ref<typeof categories[number]>('All')
+const selected = ref('All')
 
 const { data: articles, loading, error, refresh } = useAsyncData(
   () => apiJson<Article[]>('/articles?status=published'),
 )
+
+const categories = computed(() => {
+  const set = new Set<string>()
+  for (const a of articles.value ?? []) if (a.category) set.add(a.category)
+  return [...set].sort((a, b) => a.localeCompare(b))
+})
 
 const visible = computed(() => {
   const list = articles.value ?? []
@@ -37,23 +37,8 @@ const visible = computed(() => {
     subtitle="Longer-form writing from the SLYPN community on living with Parkinson's, navigating treatment, and the small daily things that make a difference."
   />
 
-  <section class="mx-auto max-w-6xl px-6 py-16">
-    <div class="flex flex-wrap gap-2">
-      <button
-        v-for="cat in categories"
-        :key="cat"
-        type="button"
-        :class="[
-          'rounded-full border px-4 py-1.5 text-sm font-medium transition-colors',
-          selected === cat
-            ? 'border-slypn-600 bg-slypn-600 text-white'
-            : 'border-slypn-200 bg-white text-slypn-700 hover:bg-slypn-50',
-        ]"
-        @click="selected = cat"
-      >
-        {{ cat }}
-      </button>
-    </div>
+  <section class="page-container py-16">
+    <PillFilter v-model="selected" :options="categories" />
 
     <p v-if="loading && !articles" class="mt-12 text-center text-slypn-900/70">
       Loading articles&hellip;

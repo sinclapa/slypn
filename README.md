@@ -41,9 +41,10 @@ slypn/
 Local dev tooling lands in [issue #7 (`1.6 PowerShell setup/start/stop scripts`)](https://github.com/sinclapa/slypn/issues/7). Once merged, the flow will be:
 
 ```powershell
-.\scripts\setup.ps1   # one-time: install prereqs, restore packages
-.\scripts\start.ps1   # boot vite (web) + func (api) locally
-.\scripts\stop.ps1    # tear down
+.\scripts\setupLocal.ps1   # one-time: install prereqs, restore packages
+.\scripts\startLocal.ps1   # boot vite (web) + func (api) locally
+.\scripts\stopLocal.ps1    # tear down
+.\scripts\testLocal.ps1    # run API + UI tests with branch/total coverage report
 ```
 
 Prereqs (target): PowerShell 7+, Node 20+, .NET 8 SDK, Azure Functions Core Tools v4, Docker (for the Azurite storage emulator).

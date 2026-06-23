@@ -10,6 +10,7 @@ import { apiFetch } from '@/lib/api'
 const props = defineProps<{
   modelValue: string
   placeholder?: string
+  readonly?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
@@ -21,6 +22,7 @@ const uploading = ref(false)
 
 const editor = new Editor({
   content: props.modelValue,
+  editable: !props.readonly,
   extensions: [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -48,6 +50,8 @@ watch(() => props.modelValue, (value) => {
   if (value === editor.getHTML()) return
   editor.commands.setContent(value, false)
 })
+
+watch(() => props.readonly, (ro) => editor.setEditable(!ro))
 
 onBeforeUnmount(() => editor.destroy())
 
@@ -153,7 +157,7 @@ const buttons: ToolbarButton[] = [
 
 <template>
   <div class="rounded-xl border border-slypn-100 bg-white shadow-sm">
-    <div class="flex flex-wrap items-center gap-1 border-b border-slypn-100 px-2 py-2">
+    <div v-if="!readonly" class="flex flex-wrap items-center gap-1 border-b border-slypn-100 px-2 py-2">
       <button
         v-for="b in buttons"
         :key="b.key"

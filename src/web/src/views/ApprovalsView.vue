@@ -11,13 +11,13 @@ import ApprovalsQueue from '@/components/common/ApprovalsQueue.vue'
   >
     <template #actions>
       <RouterLink
-        :to="{ name: 'admin' }"
+        :to="{ name: 'dashboard' }"
         class="text-sm font-semibold text-white/80 hover:text-white"
-      >&larr; Admin</RouterLink>
+      >&larr; Dashboard</RouterLink>
     </template>
   </HeroBanner>
 
-  <section class="mx-auto max-w-3xl px-6 py-16">
+  <section class="page-container py-16">
     <ApprovalsQueue />
   </section>
 </template>

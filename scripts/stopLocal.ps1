@@ -7,13 +7,13 @@
   - Kills the vite + func process trees recorded in scripts/.runtime/pids.json
     and sweeps ports 5173 + 7071 as a safety net.
   - Stops the slypn-azurite Docker container (it remains so data persists
-    across start/stop cycles — use scripts/clean.ps1 to remove it).
+    across start/stop cycles — use scripts/cleanLocal.ps1 to remove it).
   - Pass -KeepEmulators to leave the Docker containers running (useful when
     you want to seed or run the API on its own).
 
 .EXAMPLE
-  .\scripts\stop.ps1
-  .\scripts\stop.ps1 -KeepEmulators
+  .\scripts\stopLocal.ps1
+  .\scripts\stopLocal.ps1 -KeepEmulators
 #>
 
 [CmdletBinding()]

@@ -83,3 +83,14 @@ tmp/
 
 # ---- dev scripts ----
 scripts/.runtime/
+
+# ---- Playwright ----
+src/web/test-results/
+src/web/playwright-report/
+src/web/blob-report/
+src/web/.playwright/
+playwright/.cache/
+
+# ---- test results / coverage ----
+.testresults/
+src/web/coverage/

@@ -60,6 +60,16 @@ public interface IContentRepository
     /// <summary>Promote a draft to an in-review article and remove the draft.</summary>
     Task<Article>             SubmitDraftAsync(string draftId, string authorId, CancellationToken ct);
 
+    /// <summary>Create (or resume) a draft revision of a published article. The published
+    /// article stays live; on approval the revision replaces it in place.</summary>
+    Task<Draft>               CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct);
+
+    /// <summary>Flag a published article for deletion (pending admin approval). Stays live.</summary>
+    Task<Article>             RequestArticleDeletionAsync(string id, string requesterOid, CancellationToken ct);
+
+    /// <summary>Clear a pending deletion request, keeping the article published.</summary>
+    Task<Article>             CancelArticleDeletionAsync(string id, CancellationToken ct);
+
     /// <summary>Read an article addressed by id + current status (partition key).</summary>
     Task<Article?>            GetArticleAsync(string id, string status, CancellationToken ct);
 

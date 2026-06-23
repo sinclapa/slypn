@@ -42,16 +42,29 @@ public sealed class JwtMiddleware(
             throw new InvalidOperationException("[RequireRole] is only supported on HTTP-triggered functions.");
         }
 
-        // Local-dev escape hatch — synthesise an Admin principal when SkipAuth=true.
+        // Local-dev escape hatch — synthesise a principal for the requested test
+        // persona when SkipAuth=true. The role gate is still enforced below so the
+        // member persona correctly gets 403 on Admin-only endpoints.
         if (options.Value.SkipAuth)
         {
             logger.LogWarning("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
+            var persona = DevPersonas.Resolve(GetHeader(httpReq, DevPersonas.HeaderName));
             var identity = new ClaimsIdentity("dev", "name", "roles");
-            identity.AddClaim(new Claim("name", "dev-admin"));
-            identity.AddClaim(new Claim("oid",  "00000000-0000-0000-0000-000000000000"));
-            foreach (var role in new[] { "Admin", "Contributor", "Member" })
+            identity.AddClaim(new Claim("name",  persona.Name));
+            identity.AddClaim(new Claim("oid",   persona.Oid));
+            identity.AddClaim(new Claim("email", persona.Email));
+            foreach (var role in persona.Roles)
                 identity.AddClaim(new Claim("roles", role));
-            context.Items[PrincipalContextKey] = new ClaimsPrincipal(identity);
+            var devPrincipal = new ClaimsPrincipal(identity);
+
+            if (attr.Roles.Length > 0 && !attr.Roles.Any(r => devPrincipal.IsInRole(r)))
+            {
+                await ShortCircuit(context, httpReq, HttpStatusCode.Forbidden,
+                    $"Required role: {string.Join(" or ", attr.Roles)}.");
+                return;
+            }
+
+            context.Items[PrincipalContextKey] = devPrincipal;
             await next(context);
             return;
         }
@@ -162,6 +175,9 @@ public sealed class JwtMiddleware(
         }
         return null;
     }
+
+    private static string? GetHeader(HttpRequestData req, string name) =>
+        req.Headers.TryGetValues(name, out var vals) ? vals.FirstOrDefault() : null;
 
     private static async Task ShortCircuit(FunctionContext context, HttpRequestData req, HttpStatusCode code, string message)
     {

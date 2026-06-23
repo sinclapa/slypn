@@ -9,7 +9,7 @@
   and upserts a newsletter entity into the newsletters table.
 
 .EXAMPLE
-  .\scripts\seed.ps1
+  .\scripts\seedLocal.ps1
 #>
 
 [CmdletBinding()]
@@ -28,7 +28,7 @@ if (-not (Test-Path $Docx)) { Write-Err "docx not found: $Docx"; exit 1 }
 
 $localSettings = Join-Path $ApiDir 'local.settings.json'
 if (-not (Test-Path $localSettings)) {
-    Write-Err 'local.settings.json missing. Run scripts/setup.ps1 first.'
+    Write-Err 'local.settings.json missing. Run scripts/setupLocal.ps1 first.'
     exit 1
 }
 
@@ -37,15 +37,15 @@ $connectionString = $settings.Values.'Storage__ConnectionString'
 
 if (-not $connectionString) {
     Write-Err 'Storage__ConnectionString not set in local.settings.json.'
-    Write-Err 'Re-copy from local.settings.sample.json (setup.ps1 only copies if local.settings.json is absent).'
+    Write-Err 'Re-copy from local.settings.sample.json (setupLocal.ps1 only copies if local.settings.json is absent).'
     exit 1
 }
 
-Write-Step "Seeding newsletter from $Docx into the newsletters table"
+Write-Step "Seeding newsletter (from $Docx) + demo content (events, articles, blogs, resources)"
 
 Push-Location $SeedDir
 try {
-    dotnet run --configuration Release --no-launch-profile -- $Docx --connection-string $connectionString
+    dotnet run --configuration Release --no-launch-profile -- $Docx --connection-string $connectionString --demo
     if ($LASTEXITCODE -ne 0) { throw "seed failed (exit $LASTEXITCODE)" }
 }
 finally { Pop-Location }

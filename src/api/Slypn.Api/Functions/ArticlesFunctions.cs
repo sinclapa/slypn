@@ -130,6 +130,79 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     }
 
     /// <summary>
+    /// Create a draft revision of a published article. The published version stays live;
+    /// on approval the revision replaces it in place. Returns the editable draft.
+    /// </summary>
+    [Function("EditPublishedArticle")]
+    [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "articles.edit", tags: new[] { "articles" }, Summary = "Edit published", Description = "Creates a draft revision of a published article for approval.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
+    public async Task<HttpResponseData> Edit(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/edit")] HttpRequestData req,
+        FunctionContext context,
+        string id, CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+        var editorOid = context.GetUserOid();
+        if (editorOid is null) return await BadRequest(req, "Token missing oid claim.");
+        var editorName = context.GetUserName() ?? "Member";
+        try
+        {
+            var draft = await repo.CreateRevisionDraftAsync(id, editorOid, editorName, ct);
+            return await Created(req, draft, draft.Etag);
+        }
+        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+    }
+
+    /// <summary>
+    /// Request deletion of a published article (pending admin approval). The article stays
+    /// live until an admin approves the deletion via DELETE.
+    /// </summary>
+    [Function("RequestArticleDeletion")]
+    [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "articles.requestDeletion", tags: new[] { "articles" }, Summary = "Request deletion", Description = "Flags a published article for deletion, pending admin approval.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
+    public async Task<HttpResponseData> RequestDeletion(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/request-deletion")] HttpRequestData req,
+        FunctionContext context,
+        string id, CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+        var requesterOid = context.GetUserOid();
+        if (requesterOid is null) return await BadRequest(req, "Token missing oid claim.");
+        try
+        {
+            var article = await repo.RequestArticleDeletionAsync(id, requesterOid, ct);
+            return await Ok(req, article, article.Etag);
+        }
+        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+    }
+
+    /// <summary>Admin clears a pending deletion request, keeping the article published.</summary>
+    [Function("CancelArticleDeletion")]
+    [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "articles.cancelDeletion", tags: new[] { "articles" }, Summary = "Keep article", Description = "Clears a pending deletion request.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
+    public async Task<HttpResponseData> CancelDeletion(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/cancel-deletion")] HttpRequestData req,
+        string id, CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+        try
+        {
+            var article = await repo.CancelArticleDeletionAsync(id, ct);
+            return await Ok(req, article, article.Etag);
+        }
+        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+    }
+
+    /// <summary>
     /// Admin returns an in-review article to the author as a draft with revision feedback.
     /// The in-review article is deleted and a draft is created so the author can edit and resubmit.
     /// </summary>
