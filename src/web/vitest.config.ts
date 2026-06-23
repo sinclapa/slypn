@@ -12,6 +12,7 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['src/**/*.{test,spec}.ts'],
+    setupFiles: ['./src/test/setup.ts'],
     // Run unit tests as if the dev-skip persona switcher is active.
     env: { VITE_DEV_SKIP_AUTH: 'true' },
     coverage: {
@@ -21,6 +22,7 @@ export default defineConfig({
       include: ['src/**/*.{ts,vue}'],
       exclude: [
         'src/**/*.{test,spec}.ts',
+        'src/test/**',
         'src/main.ts',
         'src/env.d.ts',
         'src/**/*.d.ts',

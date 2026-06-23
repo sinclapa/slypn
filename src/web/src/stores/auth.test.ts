@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from './auth'
 import { DEV_PERSONA_STORAGE_KEY } from '@/lib/devPersonas'
@@ -32,5 +32,73 @@ describe('auth store · dev-skip personas', () => {
     expect(auth.isAdmin).toBe(false)
     expect(auth.isMember).toBe(true)
     expect(auth.displayName).toBe('Test Member')
+  })
+})
+
+describe('auth store · getters and actions (dev-skip)', () => {
+  let origLocation: Location
+
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    origLocation = window.location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: 'http://localhost/', origin: 'http://localhost', reload: vi.fn() },
+    })
+  })
+  afterEach(() => {
+    Object.defineProperty(window, 'location', { configurable: true, value: origLocation })
+  })
+
+  it('isConfigured is true in dev-skip mode', () => {
+    expect(useAuthStore().isConfigured).toBe(true)
+  })
+
+  it('displayName falls back to "Member" before sign-in', () => {
+    const auth = useAuthStore()
+    expect(auth.isAuthenticated).toBe(false)
+    expect(auth.displayName).toBe('Member')
+  })
+
+  it('oid resolves to the active persona oid', () => {
+    const auth = useAuthStore()
+    expect(auth.oid).toBe('11111111-1111-1111-1111-111111111111')
+  })
+
+  it('acquireToken returns null in dev-skip mode', async () => {
+    const auth = useAuthStore()
+    await auth.initialize()
+    await expect(auth.acquireToken()).resolves.toBeNull()
+  })
+
+  it('login signs in as the dev account', async () => {
+    const auth = useAuthStore()
+    await auth.login()
+    expect(auth.isAuthenticated).toBe(true)
+    expect(auth.displayName).toBe('Test Admin')
+  })
+
+  it('logout clears the account', async () => {
+    const auth = useAuthStore()
+    await auth.initialize()
+    expect(auth.isAuthenticated).toBe(true)
+    await auth.logout()
+    expect(auth.isAuthenticated).toBe(false)
+    expect(auth.roles).toEqual([])
+  })
+
+  it('setPersona persists the key and reloads', () => {
+    const auth = useAuthStore()
+    auth.setPersona('contributor')
+    expect(localStorage.getItem(DEV_PERSONA_STORAGE_KEY)).toBe('contributor')
+    expect(window.location.reload).toHaveBeenCalled()
+  })
+
+  it('initialize is idempotent', async () => {
+    const auth = useAuthStore()
+    await auth.initialize()
+    await auth.initialize()
+    expect(auth.initialized).toBe(true)
   })
 })
