@@ -29,6 +29,7 @@ vi.mock('@/lib/msal', () => ({
   msalInstance: msal.instance,
 }))
 
+import { BrowserAuthError, InteractionRequiredAuthError } from '@azure/msal-browser'
 import { useAuthStore } from './auth'
 
 const account = {
@@ -89,6 +90,35 @@ describe('auth store · MSAL mode', () => {
   it('setPersona is a no-op outside dev-skip', () => {
     const auth = useAuthStore()
     expect(() => auth.setPersona('member')).not.toThrow()
+  })
+
+  it('clears stale interaction state and retries login once', async () => {
+    msal.instance.loginRedirect
+      .mockRejectedValueOnce(new BrowserAuthError('interaction_in_progress'))
+      .mockResolvedValueOnce(undefined)
+    const auth = useAuthStore()
+    await auth.login()
+    expect(msal.clearMsalInteractionState).toHaveBeenCalled()
+    expect(msal.instance.loginRedirect).toHaveBeenCalledTimes(2)
+  })
+
+  it('falls back to interactive token acquisition when interaction is required', async () => {
+    msal.instance.getAllAccounts.mockReturnValue([account])
+    const auth = useAuthStore()
+    await auth.initialize()
+    msal.instance.acquireTokenSilent.mockRejectedValueOnce(new InteractionRequiredAuthError('interaction_required'))
+    await expect(auth.acquireToken()).resolves.toBeNull()
+    expect(msal.instance.acquireTokenRedirect).toHaveBeenCalled()
+  })
+
+  it('uses decoded token roles when /me is not ok', async () => {
+    msal.instance.getAllAccounts.mockReturnValue([account])
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: () => Promise.resolve({}) }))
+    const auth = useAuthStore()
+    await auth.initialize()
+    // /me failed and the access token has no decodable roles, so it falls back
+    // to the id-token claim roles.
+    expect(auth.roles).toEqual(['Member'])
   })
 
   it('falls back to id-token claim roles when token acquisition fails', async () => {

@@ -7,6 +7,7 @@ vi.mock('@/lib/api', () => ({ apiFetch, apiJson: vi.fn() }))
 
 import PublishedContent from './PublishedContent.vue'
 import { useAuthStore } from '@/stores/auth'
+import { DEV_PERSONA_STORAGE_KEY } from '@/lib/devPersonas'
 
 const stubs = { teleport: true, DraftEditor: { template: '<div class="draft-editor-stub" />' } }
 let pinia: Pinia
@@ -111,6 +112,29 @@ describe('PublishedContent', () => {
     const w = mountC()
     await flushPromises()
     expect(w.text()).toContain('Nothing published yet')
+  })
+
+  it('lets a contributor request deletion of their own item', async () => {
+    const memberOid = '33333333-3333-3333-3333-333333333333'
+    localStorage.setItem(DEV_PERSONA_STORAGE_KEY, 'member')
+    pinia = createPinia()
+    setActivePinia(pinia)
+    await useAuthStore().initialize() // member persona
+    mockLoad([item({ authorId: memberOid })])
+    apiFetch.mockImplementation((url: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/request-deletion') && method === 'POST') return Promise.resolve(ok(item({ authorId: memberOid, deletionRequestedBy: memberOid })))
+      if (method === 'GET' && url === '/articles?status=published') return Promise.resolve(ok([item({ authorId: memberOid })]))
+      if (method === 'GET') return Promise.resolve(ok([]))
+      return Promise.resolve(ok({}))
+    })
+    const w = mountC()
+    await flushPromises()
+    const reqBtn = w.findAll('button').find(b => b.text() === 'Request deletion')!
+    expect(reqBtn).toBeTruthy()
+    await reqBtn.trigger('click')
+    await flushPromises()
+    expect(apiFetch).toHaveBeenCalledWith('/articles/i1/request-deletion', { method: 'POST' })
   })
 
   it('shows a load error', async () => {

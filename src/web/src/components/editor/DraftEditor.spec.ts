@@ -89,6 +89,20 @@ describe('DraftEditor', () => {
     expect(w.findAll('button').find(b => b.text() === 'Blog post')!.classes().join(' ')).toContain('bg-slypn-600')
   })
 
+  it('shows a conflict banner on a 412 and resolves by discarding local', async () => {
+    mockApi((url, method) => {
+      if (url.startsWith('/drafts/') && method === 'PUT') return resp({}, { ok: false, status: 412 })
+      return undefined
+    })
+    const w = mountEditor()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text()?.includes('Submit for review'))!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('This draft was updated elsewhere')
+    await w.findAll('button').find(b => b.text()?.includes('Discard mine'))!.trigger('click')
+    expect(w.text()).not.toContain('This draft was updated elsewhere')
+  })
+
   it('surfaces a submit error', async () => {
     mockApi((url, method) => {
       if (url.endsWith('/submit') && method === 'POST') return resp('nope', { ok: false, status: 500 })
