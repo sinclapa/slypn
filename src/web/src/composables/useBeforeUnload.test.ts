@@ -51,7 +51,7 @@ describe('useBeforeUnload', () => {
 
   it('the handler sets returnValue only while warning', () => {
     const { shouldWarn } = mountWith(true)
-    const handler = addSpy.mock.calls.find(c => c[0] === 'beforeunload')![1] as (e: BeforeUnloadEvent) => void
+    const handler = addSpy.mock.calls.find((c: unknown[]) => c[0] === 'beforeunload')![1] as (e: BeforeUnloadEvent) => void
     const event = { preventDefault: vi.fn(), returnValue: undefined } as unknown as BeforeUnloadEvent
     handler(event)
     expect(event.preventDefault).toHaveBeenCalled()

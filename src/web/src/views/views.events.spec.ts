@@ -15,6 +15,7 @@ import EventFormDialog from '@/components/common/EventFormDialog.vue'
 import EventCalendar from '@/components/common/EventCalendar.vue'
 import EventManagementView from './EventManagementView.vue'
 import { useAuthStore } from '@/stores/auth'
+import type { CommunityEvent } from '@/types/content'
 
 const stubs = { RouterLink: RouterLinkStub, teleport: true }
 let pinia: Pinia
@@ -57,16 +58,21 @@ describe('MonthRangePicker', () => {
     expect(end).toBeInstanceOf(Date)
   })
 
-  it('emits a null end via "No end date"', async () => {
+  it('emits a null end via "No end date" (disabled until picking the end)', async () => {
     const w = mountP(new Date(2026, 0, 1), new Date(2026, 0, 1))
-    await w.find('button').trigger('click')
-    await w.findAll('button').find(b => b.text() === 'No end date')!.trigger('click')
+    await w.find('button').trigger('click') // open — phase: start
+    // "No end date" is present but disabled until a start month is chosen.
+    expect(w.findAll('button').find(b => b.text() === 'No end date')!.attributes('disabled')).toBeDefined()
+    await w.findAll('button').find(b => b.text() === 'Mar')!.trigger('click') // pick start — phase: end
+    const noEnd = w.findAll('button').find(b => b.text() === 'No end date')!
+    expect(noEnd.attributes('disabled')).toBeUndefined()
+    await noEnd.trigger('click')
     expect(w.emitted('change')![0][1]).toBeNull()
   })
 })
 
 describe('EventFormDialog', () => {
-  const evt = { id: 'e1', title: 'Quiz', type: 'Q&A', startsAt: '2026-06-01T18:00:00Z', endsAt: '2026-06-01T20:00:00Z', location: 'Pub', description: 'Fun', _etag: 'w1' }
+  const evt: CommunityEvent = { id: 'e1', title: 'Quiz', type: 'Q&A', startsAt: '2026-06-01T18:00:00Z', endsAt: '2026-06-01T20:00:00Z', location: 'Pub', description: 'Fun', _etag: 'w1' }
 
   it('adds an event via POST', async () => {
     apiFetch.mockResolvedValue(ok({ id: 'new' }))

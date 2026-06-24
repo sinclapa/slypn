@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SaveIndicator from './SaveIndicator.vue'
+import type { AutoSaveStatus } from '@/composables/useAutoSave'
 
-function mountIndicator(props: Record<string, unknown>) {
+function mountIndicator(props: { status: AutoSaveStatus; lastSavedAt?: Date | null; error?: string | null }) {
   return mount(SaveIndicator, { props: { lastSavedAt: null, ...props } })
 }
 
