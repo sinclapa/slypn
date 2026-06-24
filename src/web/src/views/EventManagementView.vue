@@ -183,7 +183,7 @@ async function deleteEvent(event: CommunityEvent) {
         <input
           v-model="searchQuery"
           type="search"
-          placeholder="Search by title, location, type, or date (e.g. Jun, 2025)…"
+          placeholder="Search by title, location, type, or date…"
           class="w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
         />
         <div class="flex items-center gap-2">
@@ -210,20 +210,19 @@ async function deleteEvent(event: CommunityEvent) {
         <li
           v-for="event in filtered"
           :key="event.id"
-          class="flex items-center justify-between gap-4 py-3"
+          class="flex items-start justify-between gap-4 py-3"
         >
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <RouterLink
-                :to="{ name: 'event-detail', params: { id: event.id } }"
-                class="truncate text-sm font-medium text-slypn-800 hover:text-slypn-600 hover:underline"
-              >{{ event.title }}</RouterLink>
+            <RouterLink
+              :to="{ name: 'event-detail', params: { id: event.id } }"
+              class="block truncate text-sm font-medium text-slypn-800 hover:text-slypn-600 hover:underline"
+            >{{ event.title }}</RouterLink>
+            <p v-if="event.type" class="mt-1">
               <span
-                v-if="event.type"
-                class="shrink-0 rounded-full bg-slypn-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slypn-700"
+                class="inline-block rounded-full bg-slypn-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slypn-700"
               >{{ event.type }}</span>
-            </div>
-            <p class="mt-0.5 text-xs text-slypn-500">
+            </p>
+            <p class="mt-1 text-xs text-slypn-500">
               <template v-if="isSameDay(event.startsAt, event.endsAt)">
                 {{ fmtDate(event.startsAt) }}, {{ fmtTime(event.startsAt) }}&ndash;{{ fmtTime(event.endsAt) }}
               </template>
