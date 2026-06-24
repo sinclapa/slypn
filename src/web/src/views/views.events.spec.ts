@@ -15,6 +15,7 @@ import EventFormDialog from '@/components/common/EventFormDialog.vue'
 import EventCalendar from '@/components/common/EventCalendar.vue'
 import EventManagementView from './EventManagementView.vue'
 import { useAuthStore } from '@/stores/auth'
+import type { CommunityEvent } from '@/types/content'
 
 const stubs = { RouterLink: RouterLinkStub, teleport: true }
 let pinia: Pinia
@@ -71,7 +72,7 @@ describe('MonthRangePicker', () => {
 })
 
 describe('EventFormDialog', () => {
-  const evt = { id: 'e1', title: 'Quiz', type: 'Q&A', startsAt: '2026-06-01T18:00:00Z', endsAt: '2026-06-01T20:00:00Z', location: 'Pub', description: 'Fun', _etag: 'w1' }
+  const evt: CommunityEvent = { id: 'e1', title: 'Quiz', type: 'Q&A', startsAt: '2026-06-01T18:00:00Z', endsAt: '2026-06-01T20:00:00Z', location: 'Pub', description: 'Fun', _etag: 'w1' }
 
   it('adds an event via POST', async () => {
     apiFetch.mockResolvedValue(ok({ id: 'new' }))
