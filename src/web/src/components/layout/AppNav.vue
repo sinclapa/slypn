@@ -174,47 +174,65 @@ async function onSignOut() {
         >
           {{ item.label }}
         </RouterLink>
-        <RouterLink
-          v-if="auth.isContributor || auth.isAdmin"
-          to="/admin/events"
-          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-          active-class="bg-slypn-50"
-          @click="mobileOpen = false"
-        >Event management</RouterLink>
-        <RouterLink
-          v-if="auth.isAdmin"
-          to="/admin/approvals"
-          class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-          active-class="bg-slypn-50"
-          @click="mobileOpen = false"
-        >
-          Approvals
-          <span
-            v-if="approvalsStore.pendingCount > 0"
-            class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
-          >{{ approvalsStore.pendingCount }}</span>
-        </RouterLink>
-        <RouterLink
-          v-if="auth.isAdmin"
-          to="/admin/members"
-          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-          active-class="bg-slypn-50"
-          @click="mobileOpen = false"
-        >Members</RouterLink>
-        <RouterLink
-          v-if="auth.isContributor || auth.isAdmin"
-          to="/admin/content"
-          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-          active-class="bg-slypn-50"
-          @click="mobileOpen = false"
-        >Content management</RouterLink>
-        <RouterLink
-          v-if="auth.isAdmin"
-          to="/admin/resources"
-          class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-          active-class="bg-slypn-50"
-          @click="mobileOpen = false"
-        >Resources</RouterLink>
+        <!-- Authenticated: dashboard + role-gated tools, mirroring the desktop user menu -->
+        <template v-if="auth.isAuthenticated">
+          <div class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></div>
+          <RouterLink
+            to="/dashboard"
+            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="mobileOpen = false"
+          >Dashboard</RouterLink>
+          <div class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></div>
+          <RouterLink
+            v-if="auth.isAdmin"
+            to="/admin/approvals"
+            class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="mobileOpen = false"
+          >
+            Approvals
+            <span
+              v-if="approvalsStore.pendingCount > 0"
+              class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+            >{{ approvalsStore.pendingCount }}</span>
+          </RouterLink>
+          <RouterLink
+            v-if="auth.isContributor || auth.isAdmin"
+            to="/admin/content"
+            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="mobileOpen = false"
+          >Content management</RouterLink>
+          <RouterLink
+            v-if="auth.isContributor || auth.isAdmin"
+            to="/editor"
+            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="mobileOpen = false"
+          >Editor</RouterLink>
+          <RouterLink
+            v-if="auth.isContributor || auth.isAdmin"
+            to="/admin/events"
+            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="mobileOpen = false"
+          >Event management</RouterLink>
+          <RouterLink
+            v-if="auth.isAdmin"
+            to="/admin/members"
+            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="mobileOpen = false"
+          >Members</RouterLink>
+          <RouterLink
+            v-if="auth.isAdmin"
+            to="/admin/resources"
+            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="mobileOpen = false"
+          >Resources</RouterLink>
+        </template>
         <button
           v-if="!auth.isAuthenticated"
           class="mt-1 rounded-md bg-slypn-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-slypn-700"

@@ -150,17 +150,25 @@ const hint = computed(() =>
       <!-- Two year panels -->
       <div class="flex divide-x divide-slypn-100 p-4">
 
-        <!-- Left year -->
-        <div class="w-44 pr-4">
+        <!-- Left year (the only panel shown on mobile) -->
+        <div class="w-44 md:pr-4">
           <div class="mb-3 flex items-center justify-between">
             <button
               type="button"
               class="rounded p-1 text-slypn-500 hover:bg-slypn-50"
+              aria-label="Previous year"
               @click="pickerYear--"
             >&larr;</button>
             <span class="text-sm font-semibold text-slypn-700">{{ pickerYear }}</span>
-            <!-- spacer keeps header symmetric -->
-            <span class="w-6" />
+            <!-- Next-year arrow on mobile; desktop uses the second panel's arrow. -->
+            <button
+              type="button"
+              class="rounded p-1 text-slypn-500 hover:bg-slypn-50 md:hidden"
+              aria-label="Next year"
+              @click="pickerYear++"
+            >&rarr;</button>
+            <!-- spacer keeps the desktop header symmetric -->
+            <span class="hidden w-6 md:block" />
           </div>
           <div class="grid grid-cols-3">
             <div
@@ -180,8 +188,8 @@ const hint = computed(() =>
           </div>
         </div>
 
-        <!-- Right year -->
-        <div class="w-44 pl-4">
+        <!-- Right year (desktop only — mobile shows a single year) -->
+        <div class="hidden w-44 pl-4 md:block">
           <div class="mb-3 flex items-center justify-between">
             <span class="w-6" />
             <span class="text-sm font-semibold text-slypn-700">{{ pickerYear + 1 }}</span>
@@ -217,7 +225,8 @@ const hint = computed(() =>
         <div class="flex gap-2">
           <button
             type="button"
-            class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100"
+            :disabled="phase !== 'end'"
+            class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slypn-50"
             @click="pickNoEnd"
           >No end date</button>
           <button

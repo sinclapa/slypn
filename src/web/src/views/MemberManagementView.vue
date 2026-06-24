@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import { apiFetch, apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
@@ -33,6 +33,11 @@ const allRoles: Role[] = ['Admin', 'Contributor', 'Member']
 const { data: members, loading, error, refresh } = useAsyncData(
   () => apiJson<Member[]>('/members'),
 )
+
+// Display members alphabetically by name (case-insensitive).
+const sortedMembers = computed(() =>
+  [...(members.value ?? [])].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName, 'en', { sensitivity: 'base' })))
 
 // ── Role update ────────────────────────────────────────────────────────────
 
@@ -239,7 +244,7 @@ const fmtDate = (iso: string) =>
 
       <div v-if="members?.length" class="divide-y divide-slypn-100">
         <div
-          v-for="m in members"
+          v-for="m in sortedMembers"
           :key="m.id"
           class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:gap-6"
         >
