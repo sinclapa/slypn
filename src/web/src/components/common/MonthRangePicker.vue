@@ -145,7 +145,7 @@ const hint = computed(() =>
     <!-- Picker panel -->
     <div
       v-if="open"
-      class="absolute left-0 top-full z-20 mt-2 rounded-xl border border-slypn-200 bg-white shadow-xl"
+      class="absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 rounded-xl border border-slypn-200 bg-white shadow-xl md:left-0 md:translate-x-0"
     >
       <!-- Two year panels -->
       <div class="flex divide-x divide-slypn-100 p-4">
@@ -228,7 +228,7 @@ const hint = computed(() =>
             :disabled="phase !== 'end'"
             class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slypn-50"
             @click="pickNoEnd"
-          >No end date</button>
+          >{{ phase === 'end' ? 'No end date' : 'Select end date' }}</button>
           <button
             type="button"
             class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100"
