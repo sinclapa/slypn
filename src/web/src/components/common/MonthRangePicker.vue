@@ -219,10 +219,10 @@ const hint = computed(() =>
 
       </div>
 
-      <!-- Footer: hint + shortcuts -->
-      <div class="flex items-center justify-between gap-2 border-t border-slypn-100 px-4 py-2.5">
-        <span class="text-xs text-slypn-400">{{ hint }}</span>
-        <div class="flex gap-2">
+      <!-- Footer: hint on its own line, then shortcuts -->
+      <div class="border-t border-slypn-100 px-4 py-2.5">
+        <p class="mb-2 text-xs text-slypn-400">{{ hint }}</p>
+        <div class="flex justify-end gap-2">
           <button
             type="button"
             :disabled="phase !== 'end'"
