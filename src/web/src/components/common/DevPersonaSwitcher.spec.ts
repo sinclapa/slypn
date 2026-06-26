@@ -14,13 +14,32 @@ describe('DevPersonaSwitcher', () => {
     expect(wrapper.find('[data-testid="dev-persona-trigger"]').text()).toContain('admin')
   })
 
-  it('lists all three personas once opened', async () => {
+  it('lists all personas once opened, including the second admin and contributor', async () => {
     const wrapper = mount(DevPersonaSwitcher, { global: { plugins: [createPinia()] } })
 
     await wrapper.find('[data-testid="dev-persona-trigger"]').trigger('click')
 
     expect(wrapper.find('[data-testid="dev-persona-admin"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="dev-persona-admin2"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="dev-persona-contributor"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="dev-persona-contributor2"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="dev-persona-member"]').exists()).toBe(true)
+  })
+
+  it('places the control in the chosen corner via the dropdown buttons and persists it', async () => {
+    const w = mount(DevPersonaSwitcher, { global: { plugins: [createPinia()] } })
+    const root = w.find('[data-testid="dev-persona-switcher"]')
+    await w.find('[data-testid="dev-persona-trigger"]').trigger('click') // open
+
+    // default: bottom-left
+    expect(root.classes()).toEqual(expect.arrayContaining(['bottom-4', 'left-4']))
+
+    await w.find('[data-testid="dev-persona-corner-top-right"]').trigger('click')
+    expect(root.classes()).toEqual(expect.arrayContaining(['top-4', 'right-4']))
+    expect(localStorage.getItem('slypn.devPersona.corner')).toBe('top-right')
+
+    await w.find('[data-testid="dev-persona-corner-bottom-right"]').trigger('click')
+    expect(root.classes()).toEqual(expect.arrayContaining(['bottom-4', 'right-4']))
+    expect(localStorage.getItem('slypn.devPersona.corner')).toBe('bottom-right')
   })
 })

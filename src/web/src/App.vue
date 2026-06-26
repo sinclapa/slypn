@@ -8,7 +8,11 @@ import DevPersonaSwitcher from '@/components/common/DevPersonaSwitcher.vue'
 <template>
   <div class="flex min-h-screen flex-col bg-slypn-50">
     <AppNav />
-    <RouterView class="flex-1" />
+    <RouterView v-slot="{ Component }">
+      <keep-alive :include="['EventsView', 'ArticlesView']">
+        <component :is="Component" class="flex-1" />
+      </keep-alive>
+    </RouterView>
     <AppFooter />
     <CookieBanner />
     <DevPersonaSwitcher />

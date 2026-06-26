@@ -210,7 +210,7 @@ async function deleteEvent(event: CommunityEvent) {
         <li
           v-for="event in filtered"
           :key="event.id"
-          class="flex items-start justify-between gap-4 py-3"
+          class="flex flex-col gap-3 py-3 md:flex-row md:items-start md:justify-between md:gap-4"
         >
           <div class="min-w-0 flex-1">
             <RouterLink

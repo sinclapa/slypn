@@ -118,7 +118,7 @@ const label = computed(() => {
 })
 
 const hint = computed(() =>
-  phase.value === 'end' ? 'Select end month, or no end date' : 'Select start month',
+  phase.value === 'end' ? 'Select end month' : 'Select start month',
 )
 </script>
 
@@ -228,7 +228,7 @@ const hint = computed(() =>
             :disabled="phase !== 'end'"
             class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slypn-50"
             @click="pickNoEnd"
-          >{{ phase === 'end' ? 'No end date' : 'Select end date' }}</button>
+          >No end date</button>
           <button
             type="button"
             class="rounded-md bg-slypn-50 px-2.5 py-1 text-xs font-medium text-slypn-600 hover:bg-slypn-100"

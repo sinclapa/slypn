@@ -18,9 +18,19 @@ describe('devPersonas', () => {
   })
 
   it('gives every persona exactly one role', () => {
-    expect(DEV_PERSONA_LIST).toHaveLength(3)
+    expect(DEV_PERSONA_LIST).toHaveLength(5)
     for (const p of DEV_PERSONA_LIST) {
       expect(p.roles).toHaveLength(1)
+    }
+  })
+
+  it('includes a second admin and contributor', () => {
+    expect(DEV_PERSONAS.admin2.roles).toEqual(['Admin'])
+    expect(DEV_PERSONAS.contributor2.roles).toEqual(['Contributor'])
+    // keys are unique and map back to themselves
+    for (const p of DEV_PERSONA_LIST) {
+      setActivePersonaKey(p.key)
+      expect(getActivePersonaKey()).toBe(p.key)
     }
   })
 

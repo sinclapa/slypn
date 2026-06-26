@@ -11,7 +11,7 @@
  * Keep the keys/OIDs/roles in sync with
  * src/api/Slypn.Api/Infrastructure/DevPersonas.cs.
  */
-export type DevPersonaKey = 'admin' | 'contributor' | 'member'
+export type DevPersonaKey = 'admin' | 'admin2' | 'contributor' | 'contributor2' | 'member'
 
 export interface DevPersona {
   key: DevPersonaKey
@@ -35,11 +35,25 @@ export const DEV_PERSONAS: Record<DevPersonaKey, DevPersona> = {
     oid: '11111111-1111-1111-1111-111111111111',
     roles: ['Admin'],
   },
+  admin2: {
+    key: 'admin2',
+    username: 'slypn.test.admin2@cookingcode.com',
+    name: 'Test Admin 2',
+    oid: '44444444-4444-4444-4444-444444444444',
+    roles: ['Admin'],
+  },
   contributor: {
     key: 'contributor',
     username: 'slypn.test.contributor@cookingcode.com',
     name: 'Test Contributor',
     oid: '22222222-2222-2222-2222-222222222222',
+    roles: ['Contributor'],
+  },
+  contributor2: {
+    key: 'contributor2',
+    username: 'slypn.test.contributor2@cookingcode.com',
+    name: 'Test Contributor 2',
+    oid: '55555555-5555-5555-5555-555555555555',
     roles: ['Contributor'],
   },
   member: {
@@ -54,7 +68,9 @@ export const DEV_PERSONAS: Record<DevPersonaKey, DevPersona> = {
 /** Ordered list for rendering the switcher. */
 export const DEV_PERSONA_LIST: DevPersona[] = [
   DEV_PERSONAS.admin,
+  DEV_PERSONAS.admin2,
   DEV_PERSONAS.contributor,
+  DEV_PERSONAS.contributor2,
   DEV_PERSONAS.member,
 ]
 
@@ -62,7 +78,7 @@ export const DEV_PERSONA_LIST: DevPersona[] = [
 export const DEFAULT_DEV_PERSONA_KEY: DevPersonaKey = 'admin'
 
 function isPersonaKey(value: string | null): value is DevPersonaKey {
-  return value === 'admin' || value === 'contributor' || value === 'member'
+  return value === 'admin' || value === 'admin2' || value === 'contributor' || value === 'contributor2' || value === 'member'
 }
 
 /** The persona key currently stored in localStorage (default `admin`). */
