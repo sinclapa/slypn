@@ -1,8 +1,27 @@
-import { describe, it, expect } from 'vitest'
-import { isFaroConfigured, setupFaro, getFaro } from './faro'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
+import type { Faro } from '@grafana/faro-web-sdk'
 
-// No VITE_FARO_URL in the test env, so Faro is unconfigured and inert.
+// Re-import the module with VITE_FARO_URL stubbed to empty so the test is
+// independent of whatever is in the local .env.local file.
 describe('faro (unconfigured)', () => {
+  let isFaroConfigured: boolean
+  let setupFaro: () => void
+  let getFaro: () => Faro | null
+
+  beforeAll(async () => {
+    vi.stubEnv('VITE_FARO_URL', '')
+    vi.resetModules()
+    const mod = await import('./faro')
+    isFaroConfigured = mod.isFaroConfigured
+    setupFaro = mod.setupFaro
+    getFaro = mod.getFaro
+  })
+
+  afterAll(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
   it('reports not configured', () => {
     expect(isFaroConfigured).toBe(false)
   })
