@@ -252,6 +252,85 @@ switch ($mode) {
 }
 Write-Host "    Toggle: .\scripts\setupLocal.ps1 -EntraLogin on|off" -ForegroundColor DarkGray
 
+# --- Grafana Faro (optional) -------------------------------------------------
+Write-Step 'Grafana Faro observability'
+
+function Get-EnvLocalVar([string]$name) {
+    if (-not (Test-Path $envLocalPath)) { return '' }
+    $line = Get-Content $envLocalPath |
+        Where-Object { $_ -match "^\s*${name}\s*=" } |
+        Select-Object -Last 1
+    if ($line -match '=\s*(.+)$') { return $Matches[1].Trim() }
+    return ''
+}
+
+$currentUrl     = Get-EnvLocalVar 'VITE_FARO_URL'
+$currentAppName = Get-EnvLocalVar 'VITE_FARO_APP_NAME'
+
+$hintUrl     = if ($currentUrl)     { " [$currentUrl]" }     else { '' }
+$hintAppName = if ($currentAppName) { " [$currentAppName]" } else { ' [slypn-web]' }
+
+$inputUrl     = Read-Host "  ? Faro collector URL (Enter to skip/keep)$hintUrl"
+$inputAppName = Read-Host "  ? Faro app name$hintAppName"
+
+$faroUrl     = if (-not [string]::IsNullOrWhiteSpace($inputUrl))     { $inputUrl.Trim() }     else { $currentUrl }
+$faroAppName = if (-not [string]::IsNullOrWhiteSpace($inputAppName)) { $inputAppName.Trim() } else { if ($currentAppName) { $currentAppName } else { 'slypn-web' } }
+
+$currentSmEndpoint = Get-EnvLocalVar 'FARO_SOURCEMAP_ENDPOINT'
+$currentSmAppId    = Get-EnvLocalVar 'FARO_SOURCEMAP_APP_ID'
+$currentSmStackId  = Get-EnvLocalVar 'FARO_SOURCEMAP_STACK_ID'
+$currentSmApiKey   = Get-EnvLocalVar 'FARO_SOURCEMAP_API_KEY'
+
+$hintSmEndpoint = if ($currentSmEndpoint) { " [$currentSmEndpoint]" } else { '' }
+$hintSmAppId    = if ($currentSmAppId)    { " [$currentSmAppId]" }    else { '' }
+$hintSmStackId  = if ($currentSmStackId)  { " [$currentSmStackId]" }  else { '' }
+$hintSmApiKey   = if ($currentSmApiKey)   { " [****]" }               else { '' }
+
+$inputSmEndpoint = Read-Host "  ? Faro source map endpoint (Enter to skip/keep)$hintSmEndpoint"
+$inputSmAppId    = Read-Host "  ? Faro source map app ID   (Enter to skip/keep)$hintSmAppId"
+$inputSmStackId  = Read-Host "  ? Faro source map stack ID (Enter to skip/keep)$hintSmStackId"
+$inputSmApiKey   = Read-Host "  ? Faro source map API key  (Enter to skip/keep)$hintSmApiKey"
+
+$faroSmEndpoint = if (-not [string]::IsNullOrWhiteSpace($inputSmEndpoint)) { $inputSmEndpoint.Trim() } else { $currentSmEndpoint }
+$faroSmAppId    = if (-not [string]::IsNullOrWhiteSpace($inputSmAppId))    { $inputSmAppId.Trim() }    else { $currentSmAppId }
+$faroSmStackId  = if (-not [string]::IsNullOrWhiteSpace($inputSmStackId))  { $inputSmStackId.Trim() }  else { $currentSmStackId }
+$faroSmApiKey   = if (-not [string]::IsNullOrWhiteSpace($inputSmApiKey))   { $inputSmApiKey.Trim() }   else { $currentSmApiKey }
+
+# Build the full set of Faro vars to patch into .env.local
+$faroKvPairs = [System.Collections.Generic.List[pscustomobject]]::new()
+if (-not [string]::IsNullOrWhiteSpace($faroUrl)) {
+    $faroKvPairs.Add([pscustomobject]@{ Key = 'VITE_FARO_URL';      Value = $faroUrl })
+    $faroKvPairs.Add([pscustomobject]@{ Key = 'VITE_FARO_APP_NAME'; Value = $faroAppName })
+    $faroKvPairs.Add([pscustomobject]@{ Key = 'VITE_FARO_ENV';      Value = 'local' })
+}
+if (-not [string]::IsNullOrWhiteSpace($faroSmEndpoint)) { $faroKvPairs.Add([pscustomobject]@{ Key = 'FARO_SOURCEMAP_ENDPOINT'; Value = $faroSmEndpoint }) }
+if (-not [string]::IsNullOrWhiteSpace($faroSmAppId))    { $faroKvPairs.Add([pscustomobject]@{ Key = 'FARO_SOURCEMAP_APP_ID';   Value = $faroSmAppId }) }
+if (-not [string]::IsNullOrWhiteSpace($faroSmStackId))  { $faroKvPairs.Add([pscustomobject]@{ Key = 'FARO_SOURCEMAP_STACK_ID'; Value = $faroSmStackId }) }
+if (-not [string]::IsNullOrWhiteSpace($faroSmApiKey))   { $faroKvPairs.Add([pscustomobject]@{ Key = 'FARO_SOURCEMAP_API_KEY';  Value = $faroSmApiKey }) }
+
+if ($faroKvPairs.Count -gt 0) {
+    $lines = if (Test-Path $envLocalPath) { @(Get-Content $envLocalPath) } else { @('# Created by scripts/setupLocal.ps1') }
+    foreach ($kv in $faroKvPairs) {
+        if ($lines -match "^\s*$($kv.Key)\s*=") {
+            $lines = $lines -replace "^\s*$($kv.Key)\s*=.*", "$($kv.Key)=$($kv.Value)"
+        } else {
+            $lines += "$($kv.Key)=$($kv.Value)"
+        }
+    }
+    $lines | Set-Content $envLocalPath -Encoding UTF8
+    if (-not [string]::IsNullOrWhiteSpace($faroUrl)) {
+        Write-Ok "VITE_FARO_URL set in .env.local"
+        Write-Ok "VITE_FARO_APP_NAME=$faroAppName"
+        Write-Ok "VITE_FARO_ENV=local (fixed for local dev)"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmEndpoint)) { Write-Ok "FARO_SOURCEMAP_ENDPOINT set in .env.local" }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmAppId))    { Write-Ok "FARO_SOURCEMAP_APP_ID=$faroSmAppId" }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmStackId))  { Write-Ok "FARO_SOURCEMAP_STACK_ID=$faroSmStackId" }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmApiKey))   { Write-Ok 'FARO_SOURCEMAP_API_KEY set (masked)' }
+} else {
+    Write-Warn 'Faro URL not set — observability disabled locally. Re-run to configure.'
+}
+
 Write-Host ''
 Write-Host 'Setup complete.' -ForegroundColor Green
 Write-Host "Next: .\scripts\startLocal.ps1" -ForegroundColor Green

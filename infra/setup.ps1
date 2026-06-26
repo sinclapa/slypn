@@ -183,13 +183,23 @@ if (-not $SkipEntra) {
     $s['tenantDomain'] = $tenantDomain
 }
 
-# Grafana Cloud OTLP inputs (optional — skip by pressing Enter).
+# Grafana Cloud inputs (optional — skip by pressing Enter).
 $grafanaOtlpUrl    = Ask $s 'grafanaOtlpUrl'    'Grafana OTLP endpoint (Enter to skip)' ''
 $grafanaInstanceId = Ask $s 'grafanaInstanceId'  'Grafana instance ID   (Enter to skip)' ''
 $grafanaApiToken   = Ask $s 'grafanaApiToken'    'Grafana API token     (Enter to skip)' ''
-if (-not [string]::IsNullOrWhiteSpace($grafanaOtlpUrl))    { $s['grafanaOtlpUrl']    = $grafanaOtlpUrl }
-if (-not [string]::IsNullOrWhiteSpace($grafanaInstanceId)) { $s['grafanaInstanceId'] = $grafanaInstanceId }
-if (-not [string]::IsNullOrWhiteSpace($grafanaApiToken))   { $s['grafanaApiToken']   = $grafanaApiToken }
+$faroUrl              = Ask $s 'faroUrl'              'Grafana Faro collector URL (Enter to skip)' ''
+$faroSourcemapEndpoint = Ask $s 'faroSourcemapEndpoint' 'Faro source map endpoint   (Enter to skip)' ''
+$faroSourcemapAppId    = Ask $s 'faroSourcemapAppId'    'Faro source map app ID     (Enter to skip)' ''
+$faroSourcemapStackId  = Ask $s 'faroSourcemapStackId'  'Faro source map stack ID   (Enter to skip)' ''
+$faroSourcemapApiKey   = Ask $s 'faroSourcemapApiKey'   'Faro source map API key    (Enter to skip)' ''
+if (-not [string]::IsNullOrWhiteSpace($grafanaOtlpUrl))        { $s['grafanaOtlpUrl']        = $grafanaOtlpUrl }
+if (-not [string]::IsNullOrWhiteSpace($grafanaInstanceId))     { $s['grafanaInstanceId']     = $grafanaInstanceId }
+if (-not [string]::IsNullOrWhiteSpace($grafanaApiToken))       { $s['grafanaApiToken']       = $grafanaApiToken }
+if (-not [string]::IsNullOrWhiteSpace($faroUrl))               { $s['faroUrl']               = $faroUrl }
+if (-not [string]::IsNullOrWhiteSpace($faroSourcemapEndpoint)) { $s['faroSourcemapEndpoint'] = $faroSourcemapEndpoint }
+if (-not [string]::IsNullOrWhiteSpace($faroSourcemapAppId))    { $s['faroSourcemapAppId']    = $faroSourcemapAppId }
+if (-not [string]::IsNullOrWhiteSpace($faroSourcemapStackId))  { $s['faroSourcemapStackId']  = $faroSourcemapStackId }
+if (-not [string]::IsNullOrWhiteSpace($faroSourcemapApiKey))   { $s['faroSourcemapApiKey']   = $faroSourcemapApiKey }
 
 # Prod URL — known after Bicep, but can be entered manually if skipping Bicep.
 if ($SkipBicep) {
@@ -863,6 +873,11 @@ if (-not $SkipGitHub) {
         Set-GhSecret 'VITE_MSAL_AUTHORITY' $authority
         Set-GhSecret 'VITE_MSAL_CLIENT_ID' $spaClientId
         Set-GhSecret 'VITE_API_SCOPE'      $apiScopeStr
+        if ($s.Contains('faroUrl'))               { Set-GhSecret 'VITE_FARO_URL'           $s['faroUrl'] }
+        if ($s.Contains('faroSourcemapEndpoint')) { Set-GhSecret 'FARO_SOURCEMAP_ENDPOINT' $s['faroSourcemapEndpoint'] }
+        if ($s.Contains('faroSourcemapAppId'))    { Set-GhSecret 'FARO_SOURCEMAP_APP_ID'   $s['faroSourcemapAppId'] }
+        if ($s.Contains('faroSourcemapStackId'))  { Set-GhSecret 'FARO_SOURCEMAP_STACK_ID' $s['faroSourcemapStackId'] }
+        if ($s.Contains('faroSourcemapApiKey'))   { Set-GhSecret 'FARO_SOURCEMAP_API_KEY'  $s['faroSourcemapApiKey'] }
     }
 }
 
@@ -896,6 +911,10 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         "VITE_API_SCOPE=$apiScopeStr"
         "VITE_DEV_SKIP_AUTH=$localSkipAuth"
     )
+    if ($s.Contains('faroUrl') -and -not [string]::IsNullOrWhiteSpace($s['faroUrl'])) {
+        $envLines += "VITE_FARO_URL=$($s['faroUrl'])"
+        $envLines += 'VITE_FARO_ENV=local'
+    }
 
     # Preserve any non-VITE_ vars already in the file (e.g. VITE_FARO_*).
     if (Test-Path $envLocalPath) {

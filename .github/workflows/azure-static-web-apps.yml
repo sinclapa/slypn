@@ -73,7 +73,17 @@ jobs:
           # Set via: .\infra\setup.ps1 (GitHub secrets phase).
           VITE_MSAL_AUTHORITY: ${{ secrets.VITE_MSAL_AUTHORITY }}
           VITE_MSAL_CLIENT_ID: ${{ secrets.VITE_MSAL_CLIENT_ID }}
-          VITE_API_SCOPE: ${{ secrets.VITE_API_SCOPE }}
+          VITE_API_SCOPE:      ${{ secrets.VITE_API_SCOPE }}
+          # Faro frontend observability — URL stored as secret (client-side but kept out of source).
+          # VITE_FARO_ENV: push to main → prod, PR preview builds → dev.
+          VITE_FARO_URL:             ${{ secrets.VITE_FARO_URL }}
+          VITE_FARO_ENV:             ${{ github.event_name == 'push' && 'prod' || 'dev' }}
+          # Faro source map uploads — build-time only, never exposed to the browser.
+          # Find these values in Grafana Cloud → Frontend Observability → Settings → Source Maps.
+          FARO_SOURCEMAP_ENDPOINT:   ${{ secrets.FARO_SOURCEMAP_ENDPOINT }}
+          FARO_SOURCEMAP_APP_ID:     ${{ secrets.FARO_SOURCEMAP_APP_ID }}
+          FARO_SOURCEMAP_STACK_ID:   ${{ secrets.FARO_SOURCEMAP_STACK_ID }}
+          FARO_SOURCEMAP_API_KEY:    ${{ secrets.FARO_SOURCEMAP_API_KEY }}
 
   close_pr_environment:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
