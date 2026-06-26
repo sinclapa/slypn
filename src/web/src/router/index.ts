@@ -10,6 +10,7 @@ import NewsletterView from '@/views/NewsletterView.vue'
 import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import { useAuthStore } from '@/stores/auth'
+import { getFaro } from '@/lib/faro'
 
 // Auth-gated views are dynamically imported so TipTap (used only by EditorView),
 // the Approvals queue, and the dashboard never ship to anonymous public visitors.
@@ -84,6 +85,10 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     return { name: 'home', query: { forbidden: to.fullPath } }
   }
   return true
+})
+
+router.afterEach((to) => {
+  getFaro()?.api.setView({ name: typeof to.name === 'string' ? to.name : to.path })
 })
 
 export default router
