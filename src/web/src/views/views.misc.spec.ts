@@ -90,7 +90,7 @@ describe('EventDetailView', () => {
     expect(w.text()).toContain('Coffee morning')
     expect(w.text()).toContain('Brixton')
     await w.find('button').trigger('click')
-    expect(router.back).toHaveBeenCalled()
+    expect(router.push).toHaveBeenCalledWith('/events')
   })
 
   it('shows an error message on failure', async () => {

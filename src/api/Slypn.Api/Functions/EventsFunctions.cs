@@ -23,7 +23,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     {
         try
         {
-            var ev = await repo.GetEventByIdAsync(id, ct);
+            var ev = await repo.GetEventWithNeighboursAsync(id, ct);
             if (ev is null) return await NotFound(req, "Event not found.");
             return await Ok(req, ev, ev.Etag);
         }

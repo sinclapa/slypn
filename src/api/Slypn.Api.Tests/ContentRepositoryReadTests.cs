@@ -90,6 +90,40 @@ public class ContentRepositoryReadTests
     }
 
     [Fact]
+    public async Task Article_with_neighbours_middle_has_both_prev_and_next()
+    {
+        // List order is newest-first: a1(May-12) a2(Apr-28) a3(Apr-10) a4(Mar-22) a5(Mar-04)
+        // a3 is at index 2: prev = a2 (newer, above in list), next = a4 (older, below in list).
+        var article = await Repo().GetArticleWithNeighboursAsync("support-network-at-any-age", Ct);
+        Assert.NotNull(article);
+        Assert.NotNull(article.Prev);
+        Assert.NotNull(article.Next);
+        Assert.Equal("medication-side-effects", article.Prev!.Slug);
+        Assert.Equal("sleep-exercise-parkinsons", article.Next!.Slug);
+    }
+
+    [Fact]
+    public async Task Article_with_neighbours_newest_has_no_prev()
+    {
+        // a1 is first in the list (newest) — nothing above it, so no prev.
+        var article = await Repo().GetArticleWithNeighboursAsync("working-with-parkinsons", Ct);
+        Assert.NotNull(article);
+        Assert.Null(article.Prev);
+        Assert.NotNull(article.Next);
+    }
+
+    [Fact]
+    public async Task Event_with_neighbours_uses_sorted_list_in_mock_mode()
+    {
+        var events = await Repo().ListEventsAsync(false, Ct);
+        var first = events.OrderBy(e => e.StartsAt).First();
+        var detail = await Repo().GetEventWithNeighboursAsync(first.Id, Ct);
+        Assert.NotNull(detail);
+        Assert.Null(detail.Prev);
+        Assert.NotNull(detail.Next);
+    }
+
+    [Fact]
     public async Task Writes_throw_when_unconfigured()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(

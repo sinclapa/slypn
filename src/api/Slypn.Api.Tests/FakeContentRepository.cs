@@ -43,9 +43,13 @@ internal sealed class FakeContentRepository : IContentRepository
         => Task.FromResult<IReadOnlyList<Article>>(Blogs);
     public Task<Article?> GetArticleBySlugAsync(string slug, CancellationToken ct)
         => Task.FromResult(ArticleBySlug);
+    public Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)
+        => Task.FromResult(ArticleBySlug);
     public Task<IReadOnlyList<CommunityEvent>> ListEventsAsync(bool upcomingOnly, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<CommunityEvent>>(Events);
     public Task<CommunityEvent?> GetEventByIdAsync(string id, CancellationToken ct)
+        => Task.FromResult(EventById);
+    public Task<CommunityEvent?> GetEventWithNeighboursAsync(string id, CancellationToken ct)
         => Task.FromResult(EventById);
     public Task<IReadOnlyList<Resource>> ListResourcesAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<Resource>>(Resources);

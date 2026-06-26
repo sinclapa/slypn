@@ -4,6 +4,11 @@ export type ArticleCategory =
   | 'Community'
   | 'Lifestyle'
 
+export interface ArticleNeighbour {
+  slug: string
+  title: string
+}
+
 export interface Article {
   id: string
   slug: string
@@ -15,6 +20,8 @@ export interface Article {
   readingMinutes: number
   category: ArticleCategory
   tags: string[]
+  prev?: ArticleNeighbour
+  next?: ArticleNeighbour
 }
 
 export interface BlogPost {
@@ -35,6 +42,12 @@ export type EventType =
   | 'Carer session'
   | 'Activity'
 
+export interface EventNeighbour {
+  id: string
+  title: string
+  startsAt: string
+}
+
 export interface CommunityEvent {
   id: string
   title: string
@@ -47,6 +60,8 @@ export interface CommunityEvent {
   createdBy?: string
   createdByName?: string
   _etag?: string
+  prev?: EventNeighbour
+  next?: EventNeighbour
 }
 
 export type ResourceCategory =

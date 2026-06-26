@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
 import type { CommunityEvent } from '@/types/content'
@@ -8,9 +8,23 @@ import type { CommunityEvent } from '@/types/content'
 const route  = useRoute()
 const router = useRouter()
 
-const { data: event, loading, error } = useAsyncData(
+function backToEvents() {
+  const back = router.options?.history?.state?.back
+  if (typeof back === 'string') {
+    const path = back.split('?')[0]
+    if (path === '/events' || path === '/events/previous') {
+      router.back()
+      return
+    }
+  }
+  router.push('/events')
+}
+
+const { data: event, loading, error, refresh } = useAsyncData(
   () => apiJson<CommunityEvent>(`/events/${route.params.id}`),
 )
+
+watch(() => route.params.id, refresh)
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -34,9 +48,9 @@ const isSameDay = computed(() => {
     <button
       type="button"
       class="mb-8 flex items-center gap-1.5 text-sm text-slypn-500 hover:text-slypn-700"
-      @click="router.back()"
+      @click="backToEvents"
     >
-      &larr; Back
+      &larr; Events
     </button>
 
     <p v-if="loading" class="text-center text-slypn-900/60">Loading…</p>
@@ -106,6 +120,43 @@ const isSameDay = computed(() => {
       >
         Sign up &rarr;
       </a>
+
+      <!-- prev / next event navigation -->
+      <nav
+        v-if="event.prev || event.next"
+        class="mt-12 grid grid-cols-2 gap-4 border-t border-slypn-100 pt-8"
+        aria-label="Event navigation"
+      >
+        <RouterLink
+          v-if="event.prev"
+          :to="`/events/${event.prev.id}`"
+          class="group rounded-xl border border-slypn-100 p-5 transition hover:border-slypn-300 hover:shadow-sm"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wider text-slypn-400 group-hover:text-slypn-600">
+            &larr; Previous event
+          </p>
+          <p class="mt-2 text-sm font-medium text-slypn-700 line-clamp-2 group-hover:text-slypn-900">
+            {{ event.prev.title }}
+          </p>
+          <p class="mt-1 text-xs text-slypn-400">{{ fmtDate(event.prev.startsAt) }}</p>
+        </RouterLink>
+        <div v-else />
+
+        <RouterLink
+          v-if="event.next"
+          :to="`/events/${event.next.id}`"
+          class="group rounded-xl border border-slypn-100 p-5 text-right transition hover:border-slypn-300 hover:shadow-sm"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wider text-slypn-400 group-hover:text-slypn-600">
+            Next event &rarr;
+          </p>
+          <p class="mt-2 text-sm font-medium text-slypn-700 line-clamp-2 group-hover:text-slypn-900">
+            {{ event.next.title }}
+          </p>
+          <p class="mt-1 text-xs text-slypn-400">{{ fmtDate(event.next.startsAt) }}</p>
+        </RouterLink>
+        <div v-else />
+      </nav>
     </article>
 
   </div>

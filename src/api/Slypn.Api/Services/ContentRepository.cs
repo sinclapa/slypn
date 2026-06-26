@@ -88,6 +88,28 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         return await GetArticleAsync(slugOrId, "published", ct);
     }
 
+    public async Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)
+    {
+        // ListArticlesAsync returns newest-first, matching the articles list page order.
+        // prev = the article above the current one in the list (newer),
+        // next = the article below (older).
+        var sorted = (await ListArticlesAsync("published", ct)).ToList();
+
+        var idx = sorted.FindIndex(a =>
+            string.Equals(a.Slug, slugOrId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a.Id,   slugOrId, StringComparison.OrdinalIgnoreCase));
+
+        if (idx < 0) return null;
+
+        var article = sorted[idx];
+        var prev = idx > 0
+            ? new ArticleNeighbour(sorted[idx - 1].Slug, sorted[idx - 1].Title) : null;
+        var next = idx < sorted.Count - 1
+            ? new ArticleNeighbour(sorted[idx + 1].Slug, sorted[idx + 1].Title) : null;
+
+        return article with { Prev = prev, Next = next };
+    }
+
     // ---- Articles writes ------------------------------------------------------
     public async Task<Article> CreateArticleAsync(ArticleInput input, CancellationToken ct)
     {
@@ -165,6 +187,23 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         var entities = await QueryAsync(store.Events, filter, ct);
         if (entities.Count == 0) return null;
         return Deserialize<CommunityEvent>(entities[0]) with { Etag = EncodeEtag(entities[0].ETag) };
+    }
+
+    public async Task<CommunityEvent?> GetEventWithNeighboursAsync(string id, CancellationToken ct)
+    {
+        // Events store their full data in the table row — no separate body blob —
+        // so the sorted list already contains everything we need.
+        var sorted = (await ListEventsAsync(false, ct)).ToList();
+        var idx = sorted.FindIndex(e => e.Id == id);
+        if (idx < 0) return null;
+
+        var ev = sorted[idx];
+        var prev = idx > 0
+            ? new EventNeighbour(sorted[idx - 1].Id, sorted[idx - 1].Title, sorted[idx - 1].StartsAt) : null;
+        var next = idx < sorted.Count - 1
+            ? new EventNeighbour(sorted[idx + 1].Id, sorted[idx + 1].Title, sorted[idx + 1].StartsAt) : null;
+
+        return ev with { Prev = prev, Next = next };
     }
 
     public async Task<CommunityEvent> CreateEventAsync(EventInput input, string? createdByOid, string? createdByName, CancellationToken ct)
