@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { apiFetch } from '@/lib/api'
 import { EVENT_TYPES } from '@/lib/eventTypes'
 import type { CommunityEvent } from '@/types/content'
@@ -25,6 +25,15 @@ const description = ref('')
 const signupUrl   = ref('')
 const submitting  = ref(false)
 const error       = ref<string | null>(null)
+
+// Offer the event's stored type as an option even when it doesn't exactly match
+// EVENT_TYPES (e.g. legacy or differently-cased values like "Coffee Meet-up"),
+// so editing an existing event always shows its current type.
+const typeOptions = computed(() => {
+  const opts = [...EVENT_TYPES] as string[]
+  if (type.value && !opts.includes(type.value)) opts.unshift(type.value)
+  return opts
+})
 
 function toDatetimeLocal(iso: string): string {
   const d = new Date(iso)
@@ -141,7 +150,7 @@ async function submit() {
                 required
                 class="mt-1 w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
               >
-                <option v-for="t in EVENT_TYPES" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in typeOptions" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
 

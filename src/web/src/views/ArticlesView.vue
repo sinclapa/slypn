@@ -7,6 +7,10 @@ import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
 import type { Article } from '@/types/content'
 
+// Named so <keep-alive :include> in App.vue caches this view, preserving the
+// category filter and scroll position across the article-detail round-trip.
+defineOptions({ name: 'ArticlesView' })
+
 const selected = ref('All')
 
 const { data: articles, loading, error, refresh } = useAsyncData(

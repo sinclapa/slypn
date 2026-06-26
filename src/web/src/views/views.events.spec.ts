@@ -58,12 +58,11 @@ describe('MonthRangePicker', () => {
     expect(end).toBeInstanceOf(Date)
   })
 
-  it('emits a null end via the end-date button (labelled "Select end date" until picking the end)', async () => {
+  it('emits a null end via the "No end date" button (disabled until picking the end)', async () => {
     const w = mountP(new Date(2026, 0, 1), new Date(2026, 0, 1))
     await w.find('button').trigger('click') // open — phase: start
-    // In the start phase the button prompts "Select end date" and is disabled.
-    const prompt = w.findAll('button').find(b => b.text() === 'Select end date')!
-    expect(prompt.attributes('disabled')).toBeDefined()
+    // The button always reads "No end date" but is disabled until a start month is chosen.
+    expect(w.findAll('button').find(b => b.text() === 'No end date')!.attributes('disabled')).toBeDefined()
     await w.findAll('button').find(b => b.text() === 'Mar')!.trigger('click') // pick start — phase: end
     const noEnd = w.findAll('button').find(b => b.text() === 'No end date')!
     expect(noEnd.attributes('disabled')).toBeUndefined()

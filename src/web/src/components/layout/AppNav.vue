@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import logoUrl from '@/assets/logo.svg'
 import { useAuthStore } from '@/stores/auth'
@@ -21,6 +21,25 @@ const router = useRouter()
 const mobileOpen = ref(false)
 const userMenuOpen = ref(false)
 
+// Account/admin links, defined once and reused by the desktop dropdown and the
+// mobile account panel. `dividerAfter` renders a separator; `badge` shows the
+// pending-approvals count.
+interface AccountLink { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }
+const accountLinks = computed<AccountLink[]>(() => ([
+  { to: '/dashboard',       label: 'Dashboard',          show: true, dividerAfter: true },
+  { to: '/admin/approvals', label: 'Approvals',          show: auth.isAdmin, badge: true },
+  { to: '/admin/content',   label: 'Content management', show: auth.isContributor || auth.isAdmin },
+  { to: '/editor',          label: 'Editor',             show: auth.isContributor || auth.isAdmin },
+  { to: '/admin/events',    label: 'Event management',   show: auth.isContributor || auth.isAdmin },
+  { to: '/admin/members',   label: 'Members',            show: auth.isAdmin },
+  { to: '/admin/resources', label: 'Resources',          show: auth.isAdmin },
+] as AccountLink[]).filter(l => l.show))
+
+// Mobile: the hamburger (primary nav) and the avatar (account) are separate
+// panels — opening one closes the other.
+function toggleMobileNav() { mobileOpen.value = !mobileOpen.value; userMenuOpen.value = false }
+function toggleAccount()   { userMenuOpen.value = !userMenuOpen.value; mobileOpen.value = false }
+
 onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
 watch(() => auth.isAdmin, (isAdmin) => { if (isAdmin) approvalsStore.refresh() })
 
@@ -39,6 +58,7 @@ async function onSignIn() {
 
 async function onSignOut() {
   userMenuOpen.value = false
+  mobileOpen.value = false
   try {
     await auth.logout()
   } catch (err) {
@@ -54,7 +74,7 @@ async function onSignOut() {
         to="/"
         class="flex items-center gap-2"
         aria-label="SLYPN — Home"
-        @click="mobileOpen = false"
+        @click="mobileOpen = false; userMenuOpen = false"
       >
         <img :src="logoUrl" alt="SLYPN" class="h-16 w-auto" width="684" height="488" />
       </RouterLink>
@@ -72,6 +92,7 @@ async function onSignOut() {
         </RouterLink>
       </nav>
 
+      <!-- Desktop: avatar dropdown / sign in -->
       <div class="relative hidden md:block">
         <button
           v-if="auth.isAuthenticated"
@@ -105,34 +126,22 @@ async function onSignOut() {
             <p class="mt-0.5 truncate font-medium text-slypn-900">{{ auth.account?.username }}</p>
           </div>
           <ul class="text-sm text-slypn-700">
-            <li>
-              <RouterLink to="/dashboard" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Dashboard</RouterLink>
-            </li>
-            <li class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></li>
-            <li v-if="auth.isAdmin">
-              <RouterLink to="/admin/approvals" class="flex items-center justify-between px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">
-                Approvals
-                <span
-                  v-if="approvalsStore.pendingCount > 0"
-                  class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
-                >{{ approvalsStore.pendingCount }}</span>
-              </RouterLink>
-            </li>
-            <li v-if="auth.isContributor || auth.isAdmin">
-              <RouterLink to="/admin/content" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Content management</RouterLink>
-            </li>
-            <li v-if="auth.isContributor || auth.isAdmin">
-              <RouterLink to="/editor" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Editor</RouterLink>
-            </li>
-            <li v-if="auth.isContributor || auth.isAdmin">
-              <RouterLink to="/admin/events" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Event management</RouterLink>
-            </li>
-            <li v-if="auth.isAdmin">
-              <RouterLink to="/admin/members" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Members</RouterLink>
-            </li>
-            <li v-if="auth.isAdmin">
-              <RouterLink to="/admin/resources" class="block px-4 py-2 hover:bg-slypn-50" @click="userMenuOpen = false">Resources</RouterLink>
-            </li>
+            <template v-for="link in accountLinks" :key="link.to">
+              <li>
+                <RouterLink
+                  :to="link.to"
+                  class="flex items-center justify-between px-4 py-2 hover:bg-slypn-50"
+                  @click="userMenuOpen = false"
+                >
+                  {{ link.label }}
+                  <span
+                    v-if="link.badge && approvalsStore.pendingCount > 0"
+                    class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+                  >{{ approvalsStore.pendingCount }}</span>
+                </RouterLink>
+              </li>
+              <li v-if="link.dividerAfter" class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></li>
+            </template>
             <li>
               <button class="block w-full px-4 py-2 text-left hover:bg-slypn-50" @click="onSignOut">Sign out</button>
             </li>
@@ -140,23 +149,40 @@ async function onSignOut() {
         </div>
       </div>
 
-      <button
-        type="button"
-        class="inline-flex items-center justify-center rounded-md p-2 text-slypn-700 hover:bg-slypn-50 md:hidden"
-        :aria-expanded="mobileOpen"
-        aria-controls="mobile-nav"
-        aria-label="Toggle navigation menu"
-        @click="mobileOpen = !mobileOpen"
-      >
-        <svg v-if="!mobileOpen" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-        <svg v-else class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M6 18L18 6" />
-        </svg>
-      </button>
+      <!-- Mobile: avatar (account) + hamburger (primary nav) -->
+      <div class="flex items-center gap-1 md:hidden">
+        <button
+          v-if="auth.isAuthenticated"
+          type="button"
+          class="rounded-full p-0.5 hover:bg-slypn-50"
+          aria-label="Account menu"
+          aria-controls="mobile-account"
+          :aria-expanded="userMenuOpen"
+          @click="toggleAccount"
+        >
+          <span class="grid h-9 w-9 place-items-center rounded-full bg-slypn-600 text-sm font-bold text-white">
+            {{ auth.displayName.charAt(0).toUpperCase() }}
+          </span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-md p-2 text-slypn-700 hover:bg-slypn-50"
+          :aria-expanded="mobileOpen"
+          aria-controls="mobile-nav"
+          aria-label="Toggle navigation menu"
+          @click="toggleMobileNav"
+        >
+          <svg v-if="!mobileOpen" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <svg v-else class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M6 18L18 6" />
+          </svg>
+        </button>
+      </div>
     </div>
 
+    <!-- Mobile: primary navigation only -->
     <nav
       v-show="mobileOpen"
       id="mobile-nav"
@@ -174,65 +200,6 @@ async function onSignOut() {
         >
           {{ item.label }}
         </RouterLink>
-        <!-- Authenticated: dashboard + role-gated tools, mirroring the desktop user menu -->
-        <template v-if="auth.isAuthenticated">
-          <div class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></div>
-          <RouterLink
-            to="/dashboard"
-            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-            active-class="bg-slypn-50"
-            @click="mobileOpen = false"
-          >Dashboard</RouterLink>
-          <div class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></div>
-          <RouterLink
-            v-if="auth.isAdmin"
-            to="/admin/approvals"
-            class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-            active-class="bg-slypn-50"
-            @click="mobileOpen = false"
-          >
-            Approvals
-            <span
-              v-if="approvalsStore.pendingCount > 0"
-              class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
-            >{{ approvalsStore.pendingCount }}</span>
-          </RouterLink>
-          <RouterLink
-            v-if="auth.isContributor || auth.isAdmin"
-            to="/admin/content"
-            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-            active-class="bg-slypn-50"
-            @click="mobileOpen = false"
-          >Content management</RouterLink>
-          <RouterLink
-            v-if="auth.isContributor || auth.isAdmin"
-            to="/editor"
-            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-            active-class="bg-slypn-50"
-            @click="mobileOpen = false"
-          >Editor</RouterLink>
-          <RouterLink
-            v-if="auth.isContributor || auth.isAdmin"
-            to="/admin/events"
-            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-            active-class="bg-slypn-50"
-            @click="mobileOpen = false"
-          >Event management</RouterLink>
-          <RouterLink
-            v-if="auth.isAdmin"
-            to="/admin/members"
-            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-            active-class="bg-slypn-50"
-            @click="mobileOpen = false"
-          >Members</RouterLink>
-          <RouterLink
-            v-if="auth.isAdmin"
-            to="/admin/resources"
-            class="rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
-            active-class="bg-slypn-50"
-            @click="mobileOpen = false"
-          >Resources</RouterLink>
-        </template>
         <button
           v-if="!auth.isAuthenticated"
           class="mt-1 rounded-md bg-slypn-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-slypn-700"
@@ -240,10 +207,38 @@ async function onSignOut() {
         >
           Sign in
         </button>
+      </div>
+    </nav>
+
+    <!-- Mobile: signed-in account + admin tools -->
+    <nav
+      v-show="userMenuOpen && auth.isAuthenticated"
+      id="mobile-account"
+      class="border-t border-slypn-100 bg-white md:hidden"
+      aria-label="Account"
+    >
+      <div class="page-container flex flex-col gap-1 py-3">
+        <p class="px-3 pb-1 text-xs text-slypn-900/60">
+          Signed in as <span class="font-medium text-slypn-900">{{ auth.account?.username }}</span>
+        </p>
+        <template v-for="link in accountLinks" :key="link.to">
+          <RouterLink
+            :to="link.to"
+            class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
+            active-class="bg-slypn-50"
+            @click="userMenuOpen = false"
+          >
+            {{ link.label }}
+            <span
+              v-if="link.badge && approvalsStore.pendingCount > 0"
+              class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+            >{{ approvalsStore.pendingCount }}</span>
+          </RouterLink>
+          <div v-if="link.dividerAfter" class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></div>
+        </template>
         <button
-          v-else
           class="mt-1 rounded-md border border-slypn-200 bg-white px-3 py-2 text-center text-base font-semibold text-slypn-700 hover:bg-slypn-50"
-          @click="mobileOpen = false; onSignOut()"
+          @click="onSignOut"
         >
           Sign out
         </button>

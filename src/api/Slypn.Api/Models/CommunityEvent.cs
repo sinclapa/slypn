@@ -20,4 +20,12 @@ public sealed record CommunityEvent(
     [JsonPropertyName("_etag")]
     [Newtonsoft.Json.JsonProperty("_etag")]
     public string? Etag { get; init; }
+
+    /// <summary>Earlier adjacent event. Populated only on single-item detail responses.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EventNeighbour? Prev { get; init; }
+
+    /// <summary>Later adjacent event. Populated only on single-item detail responses.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EventNeighbour? Next { get; init; }
 }

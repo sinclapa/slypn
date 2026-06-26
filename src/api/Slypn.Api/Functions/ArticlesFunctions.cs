@@ -33,7 +33,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "articles/{slug}")] HttpRequestData req,
         string slug, CancellationToken ct)
     {
-        var article = await repo.GetArticleBySlugAsync(slug, ct);
+        var article = await repo.GetArticleWithNeighboursAsync(slug, ct);
         if (article is null) return req.CreateResponse(HttpStatusCode.NotFound);
         return await Ok(req, article, article.Etag);
     }

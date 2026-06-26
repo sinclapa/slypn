@@ -8,6 +8,11 @@ import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
 import type { CommunityEvent } from '@/types/content'
 
+// Named so <keep-alive :include="['EventsView']"> in App.vue caches this view,
+// preserving the list/calendar toggle, calendar month, filter, and scroll
+// position across the event-detail round-trip.
+defineOptions({ name: 'EventsView' })
+
 const view = ref<'list' | 'calendar'>('list')
 
 const { data: events, loading, error, refresh } = useAsyncData(

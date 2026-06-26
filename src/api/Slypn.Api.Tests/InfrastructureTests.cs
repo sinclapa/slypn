@@ -42,7 +42,9 @@ public class InfrastructureTests
 
     [Theory]
     [InlineData("admin", "Admin")]
+    [InlineData("admin2", "Admin")]
     [InlineData("contributor", "Contributor")]
+    [InlineData("contributor2", "Contributor")]
     [InlineData("member", "Member")]
     [InlineData("ADMIN", "Admin")]
     public void DevPersonas_resolves_known_keys(string key, string expectedRole)
@@ -62,7 +64,7 @@ public class InfrastructureTests
     [Fact]
     public void DevPersonas_all_have_one_role_each()
     {
-        Assert.Equal(3, DevPersonas.All.Count);
+        Assert.Equal(5, DevPersonas.All.Count);
         Assert.All(DevPersonas.All, p => Assert.Single(p.Roles));
     }
 

@@ -38,4 +38,12 @@ public sealed record Article(
     [JsonPropertyName("_etag")]
     [Newtonsoft.Json.JsonProperty("_etag")]
     public string? Etag { get; init; }
+
+    /// <summary>Older adjacent article. Populated only on single-item detail responses.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ArticleNeighbour? Prev { get; init; }
+
+    /// <summary>Newer adjacent article. Populated only on single-item detail responses.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ArticleNeighbour? Next { get; init; }
 }

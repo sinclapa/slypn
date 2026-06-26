@@ -74,4 +74,32 @@ describe('AppNav', () => {
     expect(w.text()).toContain('Approvals')
     expect(w.text()).toContain('Sign out')
   })
+
+  it('on mobile, the avatar opens a separate account menu kept out of the nav drawer', async () => {
+    const auth = useAuthStore()
+    await auth.initialize() // dev-skip admin
+    const w = mountNav()
+
+    const avatar = w.find('button[aria-controls="mobile-account"]')
+    expect(avatar.exists()).toBe(true)
+    expect(avatar.attributes('aria-expanded')).toBe('false')
+    await avatar.trigger('click')
+    expect(avatar.attributes('aria-expanded')).toBe('true')
+
+    // The account panel holds the account/admin tools + sign out.
+    const account = w.find('#mobile-account')
+    expect(account.text()).toContain('Dashboard')
+    expect(account.text()).toContain('Members')
+    expect(account.text()).toContain('Sign out')
+
+    // The primary-nav drawer holds navigation only — no admin tools.
+    const nav = w.find('#mobile-nav')
+    expect(nav.text()).toContain('Newsletter')
+    expect(nav.text()).not.toContain('Dashboard')
+    expect(nav.text()).not.toContain('Sign out')
+
+    // Opening the hamburger closes the account menu (mutual exclusivity).
+    await w.find('button[aria-controls="mobile-nav"]').trigger('click')
+    expect(avatar.attributes('aria-expanded')).toBe('false')
+  })
 })
