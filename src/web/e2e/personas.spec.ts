@@ -32,7 +32,7 @@ test.describe('dev persona switcher', () => {
     await expect(page.getByRole('link', { name: 'Admin' })).toHaveCount(0)
 
     // Router guard redirects unauthorised roles back home with ?forbidden=.
-    await page.goto('/admin')
+    await page.goto('/admin/members')
     await expect(page).toHaveURL(/\/\?forbidden=/)
   })
 })

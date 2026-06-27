@@ -10,6 +10,8 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   test: {
+    // threads avoids the Windows EPERM/timeout issue with the forks pool.
+    pool: 'threads',
     environment: 'happy-dom',
     include: ['src/**/*.{test,spec}.ts'],
     setupFiles: ['./src/test/setup.ts'],
