@@ -17,6 +17,7 @@ using Slypn.Api.Services;
 var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults(builder =>
     {
+        builder.UseMiddleware<TracingMiddleware>();
         builder.UseMiddleware<JwtMiddleware>();
     })
     .ConfigureLogging((context, logging) =>
