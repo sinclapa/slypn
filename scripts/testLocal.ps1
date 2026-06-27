@@ -233,6 +233,57 @@ if ($covSources.Count -gt 0) {
     Write-Warn 'Coverage not measured (no instrumented suite ran).'
 }
 
+# ── Changed-file (branch diff) coverage ──────────────────────────────────────
+Write-Host ''
+Write-Step 'Changed-file coverage  (current branch vs main)'
+
+$diffBase    = if (git rev-parse --verify origin/main 2>$null) { 'origin/main' } else { 'main' }
+$changedFiles = (git diff "$diffBase...HEAD" --name-only 2>$null) -split "`n" |
+    Where-Object { $_ -match '\.(cs|ts|vue)$' -and $_ -notmatch '\.(spec|test)\.' -and $_ -notmatch '[\\/]test[\\/]' }
+
+if (-not $changedFiles) {
+    Write-Warn 'No changed source files detected on this branch.'
+} elseif ($covSources.Count -eq 0) {
+    Write-Warn 'No coverage data — run without -SkipApi/-SkipUnit to instrument.'
+} else {
+    $allXml = foreach ($c in $covSources) {
+        if (Test-Path $c.File) { [xml](Get-Content $c.File -Raw) }
+    }
+
+    $anyFound = $false
+    foreach ($changed in $changedFiles) {
+        $norm = $changed -replace '\\', '/'
+
+        $classNode = $null
+        foreach ($x in $allXml) {
+            $classNode = $x.SelectNodes('//class') |
+                Where-Object { ($_.filename -replace '\\', '/') -like "*$norm" } |
+                Select-Object -First 1
+            if ($classNode) { break }
+        }
+        if (-not $classNode) { continue }
+        $anyFound = $true
+
+        $lineNodes = $classNode.SelectNodes('lines/line')
+        $lv = $lineNodes.Count
+        $lc = ($lineNodes | Where-Object { [int]$_.hits -gt 0 }).Count
+        $linePct = if ($lv -gt 0) { $lc / $lv * 100 } else { 100.0 }
+
+        $bv = 0; $bc = 0
+        foreach ($ln in ($lineNodes | Where-Object { $_.branch -eq 'true' })) {
+            if ($ln.'condition-coverage' -match '\((\d+)/(\d+)\)') {
+                $bc += [int]$Matches[1]; $bv += [int]$Matches[2]
+            }
+        }
+        $brStr = if ($bv -gt 0) { "  branch $([math]::Round($bc/$bv*100,1))% ($bc/$bv)" } else { '' }
+        $label = ($norm -replace '^src/(api|web)/', '') -replace 'Slypn\.Api[\\/]', ''
+        Write-Rated "  $label" $linePct ("{0}/{1} lines{2}" -f $lc, $lv, $brStr)
+    }
+    if (-not $anyFound) {
+        Write-Warn 'Changed files not found in coverage data (test/config files only?).'
+    }
+}
+
 # ── Verdict / exit ────────────────────────────────────────────────────────────
 Write-Host ''
 if ($totalFailed -gt 0 -or $runError) {

@@ -5,6 +5,12 @@ import logoUrl from '@/assets/logo.svg'
 import { useAuthStore } from '@/stores/auth'
 import { useApprovalsStore } from '@/stores/approvals'
 
+const APP_ENV   = import.meta.env.VITE_FARO_ENV ?? 'dev'
+const envLabel  = APP_ENV !== 'prod' ? APP_ENV : null
+const envClass  = APP_ENV === 'local'
+  ? 'bg-green-100 text-green-700 border-green-300'
+  : 'bg-amber-100 text-amber-700 border-amber-300'
+
 const navItems = [
   { to: '/',           label: 'Home' },
   { to: '/about',      label: 'About' },
@@ -78,6 +84,12 @@ async function onSignOut() {
       >
         <img :src="logoUrl" alt="SLYPN" class="h-16 w-auto" width="684" height="488" />
       </RouterLink>
+
+      <span
+        v-if="envLabel"
+        class="inline-block rounded border px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wide"
+        :class="envClass"
+      >{{ envLabel }}</span>
 
       <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
         <RouterLink
