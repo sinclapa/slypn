@@ -869,6 +869,73 @@ if (-not $SkipGitHub) {
             Warn 'SWA not known — skipping AZURE_STATIC_WEB_APPS_API_TOKEN'
         }
 
+        # ── OIDC federation for GitHub Actions ───────────────────────────────
+        Step 'Phase 4 · GitHub Actions OIDC federation'
+
+        if ($s.Contains('subscriptionId')) { Switch-ToSubscription $s['subscriptionId'] }
+
+        # Subscription's Entra tenant (separate from the CIAM tenant used for sign-in).
+        $subscriptionTenantId = az account show --query tenantId -o tsv
+
+        $cicdAppName = 'slypn-github-actions'
+        $cicdApp = az ad app list --filter "displayName eq '$cicdAppName'" --query '[0]' -o json 2>$null |
+                   ConvertFrom-Json
+        if ($cicdApp) {
+            $cicdAppId = $cicdApp.appId
+            $cicdObjId = $cicdApp.id
+            Info "Found  $cicdAppName  appId=$cicdAppId"
+        } else {
+            $cicdApp   = az ad app create --display-name $cicdAppName -o json | ConvertFrom-Json
+            $cicdAppId = $cicdApp.appId
+            $cicdObjId = $cicdApp.id
+            Ok "Created  $cicdAppName  appId=$cicdAppId"
+        }
+        $s['cicdAppId']            = $cicdAppId
+        $s['subscriptionTenantId'] = $subscriptionTenantId
+        Save-Secrets $s
+
+        $cicdSpList = az ad sp list --filter "appId eq '$cicdAppId'" -o json 2>$null | ConvertFrom-Json
+        if (-not $cicdSpList -or $cicdSpList.Count -eq 0) {
+            az ad sp create --id $cicdAppId | Out-Null
+            Ok 'Created service principal'
+        } else {
+            Info 'Service principal exists'
+        }
+
+        $scope = "/subscriptions/$($s['subscriptionId'])/resourceGroups/$($s['resourceGroup'])"
+        $roleAssigned = az role assignment list --assignee $cicdAppId --role Contributor --scope $scope -o json 2>$null |
+                        ConvertFrom-Json
+        if (-not $roleAssigned -or $roleAssigned.Count -eq 0) {
+            az role assignment create --assignee $cicdAppId --role Contributor --scope $scope | Out-Null
+            Ok "Contributor granted on $($s['resourceGroup'])"
+        } else {
+            Info 'Contributor already assigned'
+        }
+
+        foreach ($fc in @(
+            @{ name = 'github-main'; subject = "repo:$gitHubRepo`:ref:refs/heads/main" }
+            @{ name = 'github-prs';  subject = "repo:$gitHubRepo`:pull_request" }
+        )) {
+            $exists = az ad app federated-credential list --id $cicdObjId -o json 2>$null |
+                      ConvertFrom-Json | Where-Object { $_.name -eq $fc.name }
+            if (-not $exists) {
+                $params = @{
+                    name      = $fc.name
+                    issuer    = 'https://token.actions.githubusercontent.com'
+                    subject   = $fc.subject
+                    audiences = @('api://AzureADTokenExchange')
+                } | ConvertTo-Json
+                az ad app federated-credential create --id $cicdObjId --parameters $params | Out-Null
+                Ok "Federated credential: $($fc.name)"
+            } else {
+                Info "Federated credential exists: $($fc.name)"
+            }
+        }
+
+        Set-GhSecret 'AZURE_CLIENT_ID'       $cicdAppId
+        Set-GhSecret 'AZURE_TENANT_ID'       $subscriptionTenantId
+        Set-GhSecret 'AZURE_SUBSCRIPTION_ID' $s['subscriptionId']
+
         # VITE_ build-time env vars consumed by azure-static-web-apps.yml.
         Set-GhSecret 'VITE_MSAL_AUTHORITY' $authority
         Set-GhSecret 'VITE_MSAL_CLIENT_ID' $spaClientId
@@ -878,6 +945,8 @@ if (-not $SkipGitHub) {
         if ($s.Contains('faroSourcemapAppId'))    { Set-GhSecret 'FARO_SOURCEMAP_APP_ID'   $s['faroSourcemapAppId'] }
         if ($s.Contains('faroSourcemapStackId'))  { Set-GhSecret 'FARO_SOURCEMAP_STACK_ID' $s['faroSourcemapStackId'] }
         if ($s.Contains('faroSourcemapApiKey'))   { Set-GhSecret 'FARO_SOURCEMAP_API_KEY'  $s['faroSourcemapApiKey'] }
+        if ($grafanaOtlpUrl)                      { Set-GhSecret 'OTEL_ENDPOINT'            $grafanaOtlpUrl }
+        if ($grafanaHeaders)                      { Set-GhSecret 'OTEL_HEADERS'             $grafanaHeaders }
     }
 }
 
