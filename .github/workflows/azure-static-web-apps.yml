@@ -33,20 +33,20 @@ jobs:
     runs-on: ubuntu-latest
     name: Build + deploy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
         with:
           submodules: true
           lfs: false
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.4.0
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: src/web/package-lock.json
 
       - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v4.3.0
         with:
           dotnet-version: '8.0.x'
 
@@ -60,14 +60,6 @@ jobs:
           app_location: src/web
           api_location: src/api/Slypn.Api
           output_location: dist
-          # The action handles `npm ci` + `npm run build` for the Vue app
-          # and `dotnet build` for the Functions, so no preceding steps are
-          # required.
-          deployment_environment: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || '' }}
-          # Until the first Bicep deploy provisions the SWA + the secret is
-          # set in repo secrets, the action build-only and skips the upload
-          # instead of erroring. Remove this flag once the token is in place.
-          skip_deploy_on_missing_secrets: true
         env:
           # Vite bakes these into the JS bundle at build time.
           # Set via: .\infra\setup.ps1 (GitHub secrets phase).
@@ -95,4 +87,3 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: close
-          skip_deploy_on_missing_secrets: true
