@@ -919,13 +919,15 @@ if (-not $SkipGitHub) {
             $exists = az ad app federated-credential list --id $cicdObjId -o json 2>$null |
                       ConvertFrom-Json | Where-Object { $_.name -eq $fc.name }
             if (-not $exists) {
-                $params = @{
+                $tmpJson = New-TemporaryFile
+                @{
                     name      = $fc.name
                     issuer    = 'https://token.actions.githubusercontent.com'
                     subject   = $fc.subject
                     audiences = @('api://AzureADTokenExchange')
-                } | ConvertTo-Json
-                az ad app federated-credential create --id $cicdObjId --parameters $params | Out-Null
+                } | ConvertTo-Json | Set-Content $tmpJson -Encoding UTF8
+                az ad app federated-credential create --id $cicdObjId --parameters "@$($tmpJson.FullName)" | Out-Null
+                Remove-Item $tmpJson -ErrorAction SilentlyContinue
                 Ok "Federated credential: $($fc.name)"
             } else {
                 Info "Federated credential exists: $($fc.name)"
