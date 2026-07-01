@@ -34,8 +34,7 @@ const envMenuOpen = ref(false)
 // Account/admin links, defined once and reused by the desktop dropdown and the
 // mobile account panel. `dividerAfter` renders a separator; `badge` shows the
 // pending-approvals count.
-type AccountLink = { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }
-const accountLinks = computed<AccountLink[]>(() => ([
+const accountLinks = computed(() => ([
   { to: '/dashboard',       label: 'Dashboard',          show: true, dividerAfter: true },
   { to: '/admin/approvals', label: 'Approvals',          show: auth.isAdmin, badge: true },
   { to: '/admin/content',   label: 'Content management', show: auth.isContributor || auth.isAdmin },
@@ -43,7 +42,7 @@ const accountLinks = computed<AccountLink[]>(() => ([
   { to: '/admin/events',    label: 'Event management',   show: auth.isContributor || auth.isAdmin },
   { to: '/admin/members',   label: 'Members',            show: auth.isAdmin },
   { to: '/admin/resources', label: 'Resources',          show: auth.isAdmin },
-] as AccountLink[]).filter(l => l.show))
+] as { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }[]).filter(l => l.show))
 
 // Mobile: the hamburger (primary nav) and the avatar (account) are separate
 // panels — opening one closes the other.
