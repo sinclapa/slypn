@@ -759,6 +759,106 @@ if (-not $SkipEntra) {
     }
 
 
+    # ── CI service principal — PR preview redirect URI management ─────────────
+    # slypn-ci lives in the CIAM tenant and holds Application.ReadWrite.OwnedBy
+    # on Microsoft Graph. It is added as an owner of slypn-web so it can patch
+    # the SPA redirect URI list when a PR preview is opened or closed.
+
+    Step 'Entra · CI service principal (slypn-ci)'
+
+    $ciAppName = 'slypn-ci'
+    $ciApps    = (Invoke-Graph GET "/applications?`$filter=displayName eq '$ciAppName'").value
+    $ciApp     = $ciApps | Select-Object -First 1
+    if ($ciApp) {
+        $ciClientId = $ciApp.appId
+        $ciObjectId = $ciApp.id
+        Info "Found: appId=$ciClientId"
+    } else {
+        $ciApp      = Invoke-Graph POST '/applications' @{
+            displayName    = $ciAppName
+            signInAudience = 'AzureADMyOrg'
+        }
+        $ciClientId = $ciApp.appId
+        $ciObjectId = $ciApp.id
+        Ok "Created: appId=$ciClientId"
+    }
+    $s['ciClientId'] = $ciClientId
+    $s['ciObjectId'] = $ciObjectId
+    Save-Secrets $s
+
+    # Ensure the service principal exists in the tenant.
+    $ciSp = (Invoke-Graph GET "/servicePrincipals?`$filter=appId eq '$ciClientId'").value |
+                Select-Object -First 1
+    if (-not $ciSp) {
+        $ciSp = Invoke-Graph POST '/servicePrincipals' @{ appId = $ciClientId }
+        Ok 'Created service principal'
+    } else {
+        Info "Service principal: $($ciSp.id)"
+    }
+    $ciSpId = $ciSp.id
+
+    # Grant Application.ReadWrite.OwnedBy (admin consent via appRoleAssignment).
+    $appReadWriteOwnedById = '18a4783c-866b-4cc7-a460-3d5e5662c884'
+    $ciAssignments = (Invoke-Graph GET "/servicePrincipals/$ciSpId/appRoleAssignments").value
+    $alreadyGranted = $ciAssignments | Where-Object {
+        $_.resourceId -eq $graphSpId -and $_.appRoleId -eq $appReadWriteOwnedById
+    }
+    if ($alreadyGranted) {
+        Info 'Application.ReadWrite.OwnedBy already granted'
+    } else {
+        Invoke-Graph POST "/servicePrincipals/$graphSpId/appRoleAssignedTo" @{
+            principalId = $ciSpId
+            resourceId  = $graphSpId
+            appRoleId   = $appReadWriteOwnedById
+        } | Out-Null
+        Ok 'Granted Application.ReadWrite.OwnedBy'
+    }
+
+    # Add CI SP as owner of slypn-web (required for OwnedBy permission to apply).
+    $owners      = (Invoke-Graph GET "/applications/$spaObjectId/owners").value
+    $alreadyOwner = $owners | Where-Object { $_.id -eq $ciSpId }
+    if ($alreadyOwner) {
+        Info 'CI SP already owner of slypn-web'
+    } else {
+        Invoke-Graph POST "/applications/$spaObjectId/owners/`$ref" @{
+            '@odata.id' = "https://graph.microsoft.com/v1.0/directoryObjects/$ciSpId"
+        } | Out-Null
+        Ok 'Added CI SP as owner of slypn-web'
+    }
+
+    # Create / rotate client secret.
+    $ciSecretName  = 'slypn-ci-gh-actions'
+    $ciCredentials = (Invoke-Graph GET "/applications/$ciObjectId").passwordCredentials
+    $managed       = @($ciCredentials | Where-Object { $_.displayName -eq $ciSecretName })
+    $needsSecret   = $RotateSecret.IsPresent
+    if (-not $s.Contains('ciClientSecret') -or [string]::IsNullOrWhiteSpace($s['ciClientSecret'])) {
+        $needsSecret = $true
+    } elseif ($managed.Count -gt 0) {
+        $expiry = [datetime]$managed[0].endDateTime
+        if ($expiry -gt (Get-Date).AddDays(30)) {
+            Info "Secret exists, expires $($expiry.ToString('yyyy-MM-dd'))"
+        } else {
+            Warn "Expires $($expiry.ToString('yyyy-MM-dd')) — rotating"
+            $needsSecret = $true
+        }
+    } else {
+        $needsSecret = $true
+    }
+    if ($needsSecret) {
+        foreach ($cred in $managed) {
+            try { Invoke-Graph POST "/applications/$ciObjectId/removePassword" @{ keyId = $cred.keyId } | Out-Null } catch {}
+        }
+        $result = Invoke-Graph POST "/applications/$ciObjectId/addPassword" @{
+            passwordCredential = @{
+                displayName = $ciSecretName
+                endDateTime = (Get-Date).AddYears(2).ToString('o')
+            }
+        }
+        $s['ciClientSecret'] = $result.secretText
+        Save-Secrets $s
+        Ok "Secret created, expires $($result.endDateTime.ToString('yyyy-MM-dd'))"
+    }
+
     # Make variables available for downstream phases.
     $tenantId     = $s['tenantId']
     $tenantDomain = $s['tenantDomain']
@@ -948,6 +1048,12 @@ if (-not $SkipGitHub) {
         if ($s.Contains('faroSourcemapApiKey'))   { Set-GhSecret 'FARO_SOURCEMAP_API_KEY'  $s['faroSourcemapApiKey'] }
         if ($grafanaOtlpUrl)                      { Set-GhSecret 'OTEL_ENDPOINT'            $grafanaOtlpUrl }
         if ($grafanaHeaders)                      { Set-GhSecret 'OTEL_HEADERS'             $grafanaHeaders }
+
+        # CIAM CI credentials — PR preview redirect URI management.
+        if ($s.Contains('tenantId'))        { Set-GhSecret 'CIAM_TENANT_ID'     $s['tenantId'] }
+        if ($s.Contains('spaObjectId'))     { Set-GhSecret 'SPA_OBJECT_ID'      $s['spaObjectId'] }
+        if ($s.Contains('ciClientId'))      { Set-GhSecret 'CIAM_CLIENT_ID'     $s['ciClientId'] }
+        if ($s.Contains('ciClientSecret'))  { Set-GhSecret 'CIAM_CLIENT_SECRET' $s['ciClientSecret'] }
     }
 }
 
