@@ -34,7 +34,7 @@ const envMenuOpen = ref(false)
 // Account/admin links, defined once and reused by the desktop dropdown and the
 // mobile account panel. `dividerAfter` renders a separator; `badge` shows the
 // pending-approvals count.
-interface AccountLink { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }
+type AccountLink = { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }
 const accountLinks = computed<AccountLink[]>(() => ([
   { to: '/dashboard',       label: 'Dashboard',          show: true, dividerAfter: true },
   { to: '/admin/approvals', label: 'Approvals',          show: auth.isAdmin, badge: true },
@@ -49,6 +49,8 @@ const accountLinks = computed<AccountLink[]>(() => ([
 // panels — opening one closes the other.
 function toggleMobileNav() { mobileOpen.value = !mobileOpen.value; userMenuOpen.value = false }
 function toggleAccount()   { userMenuOpen.value = !userMenuOpen.value; mobileOpen.value = false }
+function toggleEnvMenu()   { envMenuOpen.value = !envMenuOpen.value }
+function closeEnvMenu()    { envMenuOpen.value = false }
 
 onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
 watch(() => auth.isAdmin, (isAdmin) => { if (isAdmin) approvalsStore.refresh() })
@@ -95,7 +97,7 @@ async function onSignOut() {
           class="inline-flex items-center gap-1 rounded border px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wide"
           :class="envClass"
           :aria-expanded="envMenuOpen"
-          @click="envMenuOpen = !envMenuOpen"
+          @click="toggleEnvMenu"
         >
           {{ envLabel }}
           <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
@@ -105,14 +107,14 @@ async function onSignOut() {
         <div
           v-if="envMenuOpen"
           class="absolute left-0 top-full mt-1 min-w-max rounded-md border border-slypn-100 bg-white py-1 shadow-lg"
-          @mouseleave="envMenuOpen = false"
+          @mouseleave="closeEnvMenu"
         >
           <a
             :href="swaggerUrl"
             target="_blank"
             rel="noopener"
             class="block px-4 py-2 text-sm font-normal normal-case tracking-normal text-slypn-700 hover:bg-slypn-50"
-            @click="envMenuOpen = false"
+            @click="closeEnvMenu"
           >API docs</a>
         </div>
       </div>
