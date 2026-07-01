@@ -20,6 +20,14 @@ describe('useCookieConsent', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe('declined')
   })
 
+  it('reset() clears storage and sets choice to null', () => {
+    const { choice, accept, reset } = useCookieConsent()
+    accept()
+    reset()
+    expect(choice.value).toBeNull()
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
   it('shares one reactive choice across callers (singleton)', () => {
     const a = useCookieConsent()
     const b = useCookieConsent()

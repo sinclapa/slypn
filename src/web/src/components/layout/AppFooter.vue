@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import logoWhiteUrl from '@/assets/logo-white.svg'
+import { useCookieConsent } from '@/composables/useCookieConsent'
 
 const year = new Date().getFullYear()
+const { reset: resetCookies } = useCookieConsent()
 </script>
 
 <template>
@@ -60,15 +62,11 @@ const year = new Date().getFullYear()
     <div class="border-t border-slypn-600/60">
       <div class="page-container flex flex-col items-start justify-between gap-3 py-5 text-xs text-slypn-100/70 sm:flex-row sm:items-center">
         <p>&copy; {{ year }} South London Younger Parkinson&rsquo;s Network.</p>
-        <p>
-          Built with care &mdash;
-          <a
-            href="https://github.com/sinclapa/slypn"
-            class="underline underline-offset-2 hover:text-tulip"
-            rel="noopener"
-            target="_blank"
-          >source on GitHub</a>.
-        </p>
+        <button
+          type="button"
+          class="underline underline-offset-2 hover:text-tulip"
+          @click="resetCookies"
+        >Cookie preferences</button>
       </div>
     </div>
   </footer>
