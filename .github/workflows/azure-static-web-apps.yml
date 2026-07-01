@@ -102,12 +102,10 @@ jobs:
           CIAM_CLIENT_ID:     ${{ secrets.CIAM_CLIENT_ID }}
           CIAM_CLIENT_SECRET: ${{ secrets.CIAM_CLIENT_SECRET }}
           SPA_OBJECT_ID:      ${{ secrets.SPA_OBJECT_ID }}
+          SWA_URL:            ${{ steps.builddeploy.outputs.static_web_app_url }}
         run: |
           set -euo pipefail
-          SWA_HOST=$(az staticwebapp show \
-            --name swa-slypn-prod --resource-group rg-slypn-prod \
-            --query defaultHostname -o tsv)
-          CALLBACK="https://${SWA_HOST%%.*}-${{ github.event.pull_request.number }}.${SWA_HOST#*.}/auth/callback"
+          CALLBACK="${SWA_URL%/}/auth/callback"
           TOKEN=$(curl -sf \
             "https://login.microsoftonline.com/${CIAM_TENANT_ID}/oauth2/v2.0/token" \
             --data-urlencode "grant_type=client_credentials" \
@@ -148,10 +146,11 @@ jobs:
           SPA_OBJECT_ID:      ${{ secrets.SPA_OBJECT_ID }}
         run: |
           set -euo pipefail
-          SWA_HOST=$(az staticwebapp show \
+          PR_HOST=$(az staticwebapp environment list \
             --name swa-slypn-prod --resource-group rg-slypn-prod \
-            --query defaultHostname -o tsv)
-          CALLBACK="https://${SWA_HOST%%.*}-${{ github.event.pull_request.number }}.${SWA_HOST#*.}/auth/callback"
+            --query "[?contains(hostname, '-${{ github.event.pull_request.number }}.')]|[0].hostname" \
+            -o tsv)
+          CALLBACK="https://${PR_HOST}/auth/callback"
           TOKEN=$(curl -sf \
             "https://login.microsoftonline.com/${CIAM_TENANT_ID}/oauth2/v2.0/token" \
             --data-urlencode "grant_type=client_credentials" \
