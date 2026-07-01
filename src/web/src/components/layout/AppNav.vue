@@ -10,6 +10,9 @@ const envLabel  = APP_ENV !== 'prod' ? APP_ENV : null
 const envClass  = APP_ENV === 'local'
   ? 'bg-green-100 text-green-700 border-green-300'
   : 'bg-amber-100 text-amber-700 border-amber-300'
+const swaggerUrl = APP_ENV === 'local'
+  ? 'http://localhost:7071/api/swagger/ui'
+  : '/api/swagger/ui'
 
 const navItems = [
   { to: '/',           label: 'Home' },
@@ -26,6 +29,7 @@ const approvalsStore = useApprovalsStore()
 const router = useRouter()
 const mobileOpen = ref(false)
 const userMenuOpen = ref(false)
+const envMenuOpen = ref(false)
 
 // Account/admin links, defined once and reused by the desktop dropdown and the
 // mobile account panel. `dividerAfter` renders a separator; `badge` shows the
@@ -85,11 +89,33 @@ async function onSignOut() {
         <img :src="logoUrl" alt="SLYPN" class="h-16 w-auto" width="684" height="488" />
       </RouterLink>
 
-      <span
-        v-if="envLabel"
-        class="inline-block rounded border px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wide"
-        :class="envClass"
-      >{{ envLabel }}</span>
+      <div v-if="envLabel" class="relative">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded border px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wide"
+          :class="envClass"
+          :aria-expanded="envMenuOpen"
+          @click="envMenuOpen = !envMenuOpen"
+        >
+          {{ envLabel }}
+          <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div
+          v-if="envMenuOpen"
+          class="absolute left-0 top-full mt-1 min-w-max rounded-md border border-slypn-100 bg-white py-1 shadow-lg"
+          @mouseleave="envMenuOpen = false"
+        >
+          <a
+            :href="swaggerUrl"
+            target="_blank"
+            rel="noopener"
+            class="block px-4 py-2 text-sm font-normal normal-case tracking-normal text-slypn-700 hover:bg-slypn-50"
+            @click="envMenuOpen = false"
+          >API docs</a>
+        </div>
+      </div>
 
       <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
         <RouterLink
