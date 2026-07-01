@@ -58,6 +58,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Write API appsettings
+        env:
+          OTEL_ENV: ${{ github.event_name == 'push' && 'prod' || 'dev' }}
+        run: |
+          printf '{\n  "Otel": {\n    "Env": "%s"\n  }\n}\n' "$OTEL_ENV" \
+            > src/api/Slypn.Api/appsettings.json
+        shell: bash
+
       - name: Build + deploy to SWA
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -85,26 +93,6 @@ jobs:
           FARO_SOURCEMAP_STACK_ID:   ${{ secrets.FARO_SOURCEMAP_STACK_ID }}
           FARO_SOURCEMAP_API_KEY:    ${{ secrets.FARO_SOURCEMAP_API_KEY }}
 
-      - name: Set API OTel settings on PR preview
-        if: github.event_name == 'pull_request'
-        run: |
-          ENV_NAME="pr-${{ github.event.pull_request.number }}"
-          # SWA preview environments appear in ARM a few seconds after the deploy
-          # action completes. Retry for up to 2 minutes before failing.
-          for i in $(seq 1 8); do
-            az staticwebapp appsettings set \
-              --name swa-slypn-prod \
-              --resource-group rg-slypn-prod \
-              --environment-name "$ENV_NAME" \
-              --setting-names \
-                "Otel__Endpoint=${{ secrets.OTEL_ENDPOINT }}" \
-                "Otel__Headers=${{ secrets.OTEL_HEADERS }}" \
-                "Otel__ServiceName=slypn-api" \
-                "Otel__Env=dev" && break
-            echo "Environment not ready yet (attempt $i/8) — waiting 15s..."
-            sleep 15
-          done
-        shell: bash
 
   close_pr_environment:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'

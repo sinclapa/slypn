@@ -810,7 +810,6 @@ if (-not $SkipSwa -and $swaName) {
     if ($tenantId)                               { $settings['SignupGate__TenantId']      = $tenantId }
     if ($s['signupExtensionId'])                 { $settings['SignupGate__ExtensionId']   = $s['signupExtensionId'] }
                                                    $settings['Otel__ServiceName']         = 'slypn-api'
-                                                   $settings['Otel__Env']                 = 'prod'
     if ($grafanaOtlpUrl)                          { $settings['Otel__Endpoint']           = $grafanaOtlpUrl }
     if ($grafanaHeaders)                          { $settings['Otel__Headers']            = $grafanaHeaders }
 
