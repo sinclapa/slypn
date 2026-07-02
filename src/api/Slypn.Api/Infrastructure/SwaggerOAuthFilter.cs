@@ -42,6 +42,8 @@ public sealed class SwaggerOAuthFilter(IConfiguration config) : IDocumentFilter
             }
         };
 
+        document.Components.SecuritySchemes.Remove("bearer_auth");
+
         var oauth2Ref = new OpenApiSecurityScheme
         {
             Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "oauth2" }
