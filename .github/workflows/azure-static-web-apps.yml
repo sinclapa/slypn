@@ -69,6 +69,14 @@ jobs:
             "$OTEL_ENV" "$SPA_CLIENT_ID" > src/api/Slypn.Api/appsettings.json
         shell: bash
 
+      - name: Set Otel__Env production app setting
+        if: github.event_name == 'push'
+        run: |
+          az staticwebapp appsettings set \
+            --name swa-slypn-prod --resource-group rg-slypn-prod \
+            --setting-names Otel__Env=prod
+        shell: bash
+
       - name: Build + deploy to SWA
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
