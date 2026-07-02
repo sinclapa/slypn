@@ -43,7 +43,7 @@ const accountLinks = computed(() => ([
 const envMenuOpen = ref(false)
 const swaggerUrl = APP_ENV === 'local'
   ? 'http://localhost:7071/api/swagger/ui'
-  : '/api/swagger/ui'
+  : '/swagger.html'
 
 // Mobile: the hamburger (primary nav) and the avatar (account) are separate
 // panels — opening one closes the other.
