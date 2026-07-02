@@ -10,12 +10,21 @@
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
-    SwaggerUIBundle({
-      url: '/api/swagger.json',
-      dom_id: '#swagger-ui',
-      presets: [SwaggerUIBundle.presets.apis],
-      layout: 'BaseLayout',
-    })
+    fetch('/api/swagger.json')
+      .then(r => r.json())
+      .then(spec => {
+        const oauth2 = spec.components?.securitySchemes?.oauth2
+        const clientId = oauth2?.['x-client-id'] ?? ''
+        const scopes = Object.keys(oauth2?.flows?.authorizationCode?.scopes ?? {}).join(' ')
+        SwaggerUIBundle({
+          spec,
+          dom_id: '#swagger-ui',
+          presets: [SwaggerUIBundle.presets.apis],
+          layout: 'BaseLayout',
+          oauth2RedirectUrl: window.location.origin + '/oauth2-redirect.html',
+          initOAuth: { clientId, scopes, usePkceWithAuthorizationCodeGrant: true },
+        })
+      })
   </script>
 </body>
 </html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en-US">
+<body onload="run()">
+</body>
+</html>
+<script>
+  'use strict';
+  function run() {
+    var oauth2 = window.opener.swaggerUIRedirectOauth2;
+    var sentState = oauth2.state;
+    var redirectUrl = oauth2.redirectUrl;
+    var isValid, qp, arr;
+    if (/code|token|error/.test(window.location.hash)) {
+      qp = window.location.hash.substring(1).replace('?', '&');
+    } else {
+      qp = location.search.substring(1);
+    }
+    arr = qp.split('&');
+    arr.forEach(function(v, i, _arr) { _arr[i] = '"' + v.replace('=', '":"') + '"'; });
+    qp = qp ? JSON.parse('{' + arr.join() + '}',
+      function(key, value) { return key ? decodeURIComponent(value) : value; }
+    ) : {};
+    isValid = qp.state === sentState;
+    if ((
+      oauth2.auth.schema.get('flow') === 'accessCode' ||
+      oauth2.auth.schema.get('flow') === 'authorizationCode' ||
+      oauth2.auth.schema.get('flow') === 'authorization_code'
+    ) && !oauth2.auth.bearerFormat) {
+      window.opener.swaggerUIRedirectOauth2.callback({ auth: oauth2.auth, redirectUrl: redirectUrl });
+    } else {
+      window.opener.swaggerUIRedirectOauth2.callback({ auth: oauth2.auth, token: qp, isValid: isValid, redirectUrl: redirectUrl });
+    }
+    window.close();
+  }
+</script>

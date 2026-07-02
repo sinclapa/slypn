@@ -584,10 +584,10 @@ if (-not $SkipEntra) {
     Save-Secrets $s
 
     # Redirect URIs — prod omitted if URL not yet known.
-    $redirectUris = @('http://localhost:5173/auth/callback')
+    $redirectUris = @('http://localhost:5173/auth/callback', 'http://localhost:5173/oauth2-redirect.html')
     $pUrl = if ($s.Contains('prodUrl')) { $s['prodUrl'] } else { '' }
     if (-not [string]::IsNullOrWhiteSpace($pUrl)) {
-        $redirectUris = @("$pUrl/auth/callback") + $redirectUris
+        $redirectUris = @("$pUrl/auth/callback", "$pUrl/oauth2-redirect.html") + $redirectUris
     }
 
     $spaApp           = Invoke-Graph GET "/applications/$spaObjectId"
@@ -1142,6 +1142,7 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         $ls['Values']['Graph__InviteRedirectUrl'] = 'http://localhost:5173/'
         if ($grafanaOtlpUrl) { $ls['Values']['Otel__Endpoint'] = $grafanaOtlpUrl }
         if ($grafanaHeaders) { $ls['Values']['Otel__Headers']  = $grafanaHeaders }
+        $ls['Values']['Swagger__SpaClientId'] = $spaClientId
 
         $ls | ConvertTo-Json -Depth 5 | Set-Content $localSettingsPath -Encoding UTF8
         Ok "Updated $localSettingsPath (Entra/Graph fields; Storage unchanged)"

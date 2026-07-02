@@ -62,10 +62,11 @@ jobs:
 
       - name: Write API appsettings
         env:
-          OTEL_ENV: ${{ github.event_name == 'push' && 'prod' || 'dev' }}
+          OTEL_ENV:      ${{ github.event_name == 'push' && 'prod' || 'dev' }}
+          SPA_CLIENT_ID: ${{ secrets.VITE_MSAL_CLIENT_ID }}
         run: |
-          printf '{\n  "Otel": {\n    "Env": "%s"\n  }\n}\n' "$OTEL_ENV" \
-            > src/api/Slypn.Api/appsettings.json
+          printf '{\n  "Otel": { "Env": "%s" },\n  "Swagger": { "SpaClientId": "%s" }\n}\n' \
+            "$OTEL_ENV" "$SPA_CLIENT_ID" > src/api/Slypn.Api/appsettings.json
         shell: bash
 
       - name: Build + deploy to SWA
@@ -117,13 +118,14 @@ jobs:
             "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
             -H "Authorization: Bearer $TOKEN" \
             | jq -c '.spa.redirectUris')
-          UPDATED=$(echo "$CURRENT" | jq -c --arg u "$CALLBACK" '. + [$u] | unique')
+          OAUTH_REDIRECT="${SWA_URL%/}/oauth2-redirect.html"
+          UPDATED=$(echo "$CURRENT" | jq -c --arg a "$CALLBACK" --arg b "$OAUTH_REDIRECT" '. + [$a,$b] | unique')
           curl -sf -X PATCH \
             "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"spa\":{\"redirectUris\":${UPDATED}}}"
-          echo "Registered: $CALLBACK"
+          echo "Registered: $CALLBACK  $OAUTH_REDIRECT"
         shell: bash
 
   close_pr_environment:
@@ -151,6 +153,7 @@ jobs:
             --query "[?contains(hostname, '-${{ github.event.pull_request.number }}.')]|[0].hostname" \
             -o tsv)
           CALLBACK="https://${PR_HOST}/auth/callback"
+          OAUTH_REDIRECT="https://${PR_HOST}/oauth2-redirect.html"
           TOKEN=$(curl -sf \
             "https://login.microsoftonline.com/${CIAM_TENANT_ID}/oauth2/v2.0/token" \
             --data-urlencode "grant_type=client_credentials" \
@@ -162,7 +165,7 @@ jobs:
             "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
             -H "Authorization: Bearer $TOKEN" \
             | jq -c '.spa.redirectUris')
-          UPDATED=$(echo "$CURRENT" | jq -c --arg u "$CALLBACK" '[.[] | select(. != $u)]')
+          UPDATED=$(echo "$CURRENT" | jq -c --arg a "$CALLBACK" --arg b "$OAUTH_REDIRECT" '[.[] | select(. != $a and . != $b)]')
           curl -sf -X PATCH \
             "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
             -H "Authorization: Bearer $TOKEN" \

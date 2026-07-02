@@ -11,6 +11,7 @@ public sealed class OpenApiConfig : IOpenApiConfigurationOptions
     {
         var env = config[$"{OtelOptions.SectionName}:Env"] ?? "dev";
         Info = new OpenApiInfo { Version = "1.0.0", Title = $"Slypn API [{env}]" };
+        DocumentFilters = [new SwaggerOAuthFilter(config)];
     }
 
     public OpenApiInfo Info { get; set; }
