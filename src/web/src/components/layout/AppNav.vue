@@ -10,9 +10,6 @@ const envLabel  = APP_ENV !== 'prod' ? APP_ENV : null
 const envClass  = APP_ENV === 'local'
   ? 'bg-green-100 text-green-700 border-green-300'
   : 'bg-amber-100 text-amber-700 border-amber-300'
-const swaggerUrl = APP_ENV === 'local'
-  ? 'http://localhost:7071/api/swagger/ui'
-  : '/api/swagger/ui'
 
 const navItems = [
   { to: '/',           label: 'Home' },
@@ -29,7 +26,6 @@ const approvalsStore = useApprovalsStore()
 const router = useRouter()
 const mobileOpen = ref(false)
 const userMenuOpen = ref(false)
-const envMenuOpen = ref(false)
 
 // Account/admin links, defined once and reused by the desktop dropdown and the
 // mobile account panel. `dividerAfter` renders a separator; `badge` shows the
@@ -43,6 +39,11 @@ const accountLinks = computed(() => ([
   { to: '/admin/members',   label: 'Members',            show: auth.isAdmin },
   { to: '/admin/resources', label: 'Resources',          show: auth.isAdmin },
 ] as { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }[]).filter(l => l.show))
+
+const envMenuOpen = ref(false)
+const swaggerUrl = APP_ENV === 'local'
+  ? 'http://localhost:7071/api/swagger/ui'
+  : '/api/swagger/ui'
 
 // Mobile: the hamburger (primary nav) and the avatar (account) are separate
 // panels — opening one closes the other.
