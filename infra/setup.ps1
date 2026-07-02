@@ -912,6 +912,7 @@ if (-not $SkipSwa -and $swaName) {
                                                    $settings['Otel__ServiceName']         = 'slypn-api'
     if ($grafanaOtlpUrl)                          { $settings['Otel__Endpoint']           = $grafanaOtlpUrl }
     if ($grafanaHeaders)                          { $settings['Otel__Headers']            = $grafanaHeaders }
+    if ($spaClientId)                             { $settings['Swagger__SpaClientId']     = $spaClientId }
 
     $settingArgs = $settings.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
     az staticwebapp appsettings set `
