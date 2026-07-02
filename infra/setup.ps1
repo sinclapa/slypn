@@ -921,15 +921,23 @@ if (-not $SkipSwa -and $swaName) {
 
     Ok "Applied $($settings.Count) setting(s) to $swaName"
 
-    # Otel__Env is baked into appsettings.json at CI time (prod for main, dev for
-    # PR previews). Deleting it from Azure app settings ensures the baked value is
-    # never overridden — all SWA environments (including PR previews) inherit Azure
-    # app settings, so a persistent Otel__Env=prod here would shadow the dev value.
-    az staticwebapp appsettings delete `
-        --name $swaName `
-        --resource-group $rg `
-        --setting-names Otel__Env 2>$null | Out-Null
-    Ok 'Removed Otel__Env from Azure app settings (baked per-build value takes precedence)'
+    # Otel__Env is baked into appsettings.json at CI time (prod for main, dev for PR
+    # previews). Delete it from ALL environments so the baked value is never overridden.
+    # The old CI workflow set it per-PR-environment; those stale overrides must be cleared.
+    $allEnvNames = @('default') + @(
+        az staticwebapp environment list --name $swaName --resource-group $rg `
+            --query '[].name' -o json | ConvertFrom-Json |
+            Where-Object { $_ -ne 'default' }
+    )
+    foreach ($envName in $allEnvNames) {
+        $envArg = if ($envName -eq 'default') { @() } else { @('--environment-name', $envName) }
+        az staticwebapp appsettings delete `
+            --name $swaName `
+            --resource-group $rg `
+            @envArg `
+            --setting-names Otel__Env 2>$null | Out-Null
+    }
+    Ok "Removed Otel__Env from all SWA environments ($($allEnvNames -join ', '))"
 } elseif (-not $SkipSwa) {
     Warn 'SWA name not known — skipping app settings (run with -SkipBicep after first deploy to apply)'
 }
