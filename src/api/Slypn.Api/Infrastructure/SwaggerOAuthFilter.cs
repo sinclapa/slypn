@@ -15,6 +15,12 @@ public sealed class SwaggerOAuthFilter(IConfiguration config) : IDocumentFilter
         var spaClient = config["Swagger:SpaClientId"] ?? "";
         var scope     = $"{audience}/access_as_user";
 
+        // authority ends with /v2.0; strip it to get the tenant base URL, then
+        // build the actual OIDC endpoints which live under /oauth2/v2.0/
+        var baseUrl = authority.EndsWith("/v2.0", StringComparison.OrdinalIgnoreCase)
+            ? authority[..^5]
+            : authority;
+
         document.Components ??= new OpenApiComponents();
         document.Components.SecuritySchemes ??= new Dictionary<string, OpenApiSecurityScheme>();
 
@@ -25,8 +31,8 @@ public sealed class SwaggerOAuthFilter(IConfiguration config) : IDocumentFilter
             {
                 AuthorizationCode = new OpenApiOAuthFlow
                 {
-                    AuthorizationUrl = new Uri($"{authority}/authorize"),
-                    TokenUrl         = new Uri($"{authority}/token"),
+                    AuthorizationUrl = new Uri($"{baseUrl}/oauth2/v2.0/authorize"),
+                    TokenUrl         = new Uri($"{baseUrl}/oauth2/v2.0/token"),
                     Scopes           = new Dictionary<string, string> { [scope] = "Access the SLYPN API" }
                 }
             },
