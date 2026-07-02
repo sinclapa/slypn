@@ -29,7 +29,7 @@ internal sealed class FakeContentRepository : IContentRepository
     public Draft? DraftById;
 
     /// <summary>Set to throw from the next write to exercise error mapping.</summary>
-    public Exception? ThrowOnWrite;
+    public Exception? ThrowOnWrite { get; set; }
 
     private T Guard<T>(T value)
     {

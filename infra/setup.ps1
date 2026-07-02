@@ -584,10 +584,10 @@ if (-not $SkipEntra) {
     Save-Secrets $s
 
     # Redirect URIs — prod omitted if URL not yet known.
-    $redirectUris = @('http://localhost:5173/auth/callback')
+    $redirectUris = @('http://localhost:5173/auth/callback', 'http://localhost:5173/oauth2-redirect.html')
     $pUrl = if ($s.Contains('prodUrl')) { $s['prodUrl'] } else { '' }
     if (-not [string]::IsNullOrWhiteSpace($pUrl)) {
-        $redirectUris = @("$pUrl/auth/callback") + $redirectUris
+        $redirectUris = @("$pUrl/auth/callback", "$pUrl/oauth2-redirect.html") + $redirectUris
     }
 
     $spaApp           = Invoke-Graph GET "/applications/$spaObjectId"
@@ -759,6 +759,106 @@ if (-not $SkipEntra) {
     }
 
 
+    # ── CI service principal — PR preview redirect URI management ─────────────
+    # slypn-ci lives in the CIAM tenant and holds Application.ReadWrite.OwnedBy
+    # on Microsoft Graph. It is added as an owner of slypn-web so it can patch
+    # the SPA redirect URI list when a PR preview is opened or closed.
+
+    Step 'Entra · CI service principal (slypn-ci)'
+
+    $ciAppName = 'slypn-ci'
+    $ciApps    = (Invoke-Graph GET "/applications?`$filter=displayName eq '$ciAppName'").value
+    $ciApp     = $ciApps | Select-Object -First 1
+    if ($ciApp) {
+        $ciClientId = $ciApp.appId
+        $ciObjectId = $ciApp.id
+        Info "Found: appId=$ciClientId"
+    } else {
+        $ciApp      = Invoke-Graph POST '/applications' @{
+            displayName    = $ciAppName
+            signInAudience = 'AzureADMyOrg'
+        }
+        $ciClientId = $ciApp.appId
+        $ciObjectId = $ciApp.id
+        Ok "Created: appId=$ciClientId"
+    }
+    $s['ciClientId'] = $ciClientId
+    $s['ciObjectId'] = $ciObjectId
+    Save-Secrets $s
+
+    # Ensure the service principal exists in the tenant.
+    $ciSp = (Invoke-Graph GET "/servicePrincipals?`$filter=appId eq '$ciClientId'").value |
+                Select-Object -First 1
+    if (-not $ciSp) {
+        $ciSp = Invoke-Graph POST '/servicePrincipals' @{ appId = $ciClientId }
+        Ok 'Created service principal'
+    } else {
+        Info "Service principal: $($ciSp.id)"
+    }
+    $ciSpId = $ciSp.id
+
+    # Grant Application.ReadWrite.OwnedBy (admin consent via appRoleAssignment).
+    $appReadWriteOwnedById = '18a4783c-866b-4cc7-a460-3d5e5662c884'
+    $ciAssignments = (Invoke-Graph GET "/servicePrincipals/$ciSpId/appRoleAssignments").value
+    $alreadyGranted = $ciAssignments | Where-Object {
+        $_.resourceId -eq $graphSpId -and $_.appRoleId -eq $appReadWriteOwnedById
+    }
+    if ($alreadyGranted) {
+        Info 'Application.ReadWrite.OwnedBy already granted'
+    } else {
+        Invoke-Graph POST "/servicePrincipals/$graphSpId/appRoleAssignedTo" @{
+            principalId = $ciSpId
+            resourceId  = $graphSpId
+            appRoleId   = $appReadWriteOwnedById
+        } | Out-Null
+        Ok 'Granted Application.ReadWrite.OwnedBy'
+    }
+
+    # Add CI SP as owner of slypn-web (required for OwnedBy permission to apply).
+    $owners      = (Invoke-Graph GET "/applications/$spaObjectId/owners").value
+    $alreadyOwner = $owners | Where-Object { $_.id -eq $ciSpId }
+    if ($alreadyOwner) {
+        Info 'CI SP already owner of slypn-web'
+    } else {
+        Invoke-Graph POST "/applications/$spaObjectId/owners/`$ref" @{
+            '@odata.id' = "https://graph.microsoft.com/v1.0/directoryObjects/$ciSpId"
+        } | Out-Null
+        Ok 'Added CI SP as owner of slypn-web'
+    }
+
+    # Create / rotate client secret.
+    $ciSecretName  = 'slypn-ci-gh-actions'
+    $ciCredentials = (Invoke-Graph GET "/applications/$ciObjectId").passwordCredentials
+    $managed       = @($ciCredentials | Where-Object { $_.displayName -eq $ciSecretName })
+    $needsSecret   = $RotateSecret.IsPresent
+    if (-not $s.Contains('ciClientSecret') -or [string]::IsNullOrWhiteSpace($s['ciClientSecret'])) {
+        $needsSecret = $true
+    } elseif ($managed.Count -gt 0) {
+        $expiry = [datetime]$managed[0].endDateTime
+        if ($expiry -gt (Get-Date).AddDays(30)) {
+            Info "Secret exists, expires $($expiry.ToString('yyyy-MM-dd'))"
+        } else {
+            Warn "Expires $($expiry.ToString('yyyy-MM-dd')) — rotating"
+            $needsSecret = $true
+        }
+    } else {
+        $needsSecret = $true
+    }
+    if ($needsSecret) {
+        foreach ($cred in $managed) {
+            try { Invoke-Graph POST "/applications/$ciObjectId/removePassword" @{ keyId = $cred.keyId } | Out-Null } catch {}
+        }
+        $result = Invoke-Graph POST "/applications/$ciObjectId/addPassword" @{
+            passwordCredential = @{
+                displayName = $ciSecretName
+                endDateTime = (Get-Date).AddYears(2).ToString('o')
+            }
+        }
+        $s['ciClientSecret'] = $result.secretText
+        Save-Secrets $s
+        Ok "Secret created, expires $($result.endDateTime.ToString('yyyy-MM-dd'))"
+    }
+
     # Make variables available for downstream phases.
     $tenantId     = $s['tenantId']
     $tenantDomain = $s['tenantDomain']
@@ -810,9 +910,9 @@ if (-not $SkipSwa -and $swaName) {
     if ($tenantId)                               { $settings['SignupGate__TenantId']      = $tenantId }
     if ($s['signupExtensionId'])                 { $settings['SignupGate__ExtensionId']   = $s['signupExtensionId'] }
                                                    $settings['Otel__ServiceName']         = 'slypn-api'
-                                                   $settings['Otel__Env']                 = 'prod'
     if ($grafanaOtlpUrl)                          { $settings['Otel__Endpoint']           = $grafanaOtlpUrl }
     if ($grafanaHeaders)                          { $settings['Otel__Headers']            = $grafanaHeaders }
+    if ($spaClientId)                             { $settings['Swagger__SpaClientId']     = $spaClientId }
 
     $settingArgs = $settings.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
     az staticwebapp appsettings set `
@@ -821,6 +921,24 @@ if (-not $SkipSwa -and $swaName) {
         --setting-names @settingArgs | Out-Null
 
     Ok "Applied $($settings.Count) setting(s) to $swaName"
+
+    # Otel__Env is baked into appsettings.json at CI time (prod for main, dev for PR
+    # previews). Delete it from ALL environments so the baked value is never overridden.
+    # The old CI workflow set it per-PR-environment; those stale overrides must be cleared.
+    $allEnvNames = @('default') + @(
+        az staticwebapp environment list --name $swaName --resource-group $rg `
+            --query '[].name' -o json | ConvertFrom-Json |
+            Where-Object { $_ -ne 'default' }
+    )
+    foreach ($envName in $allEnvNames) {
+        $envArg = if ($envName -eq 'default') { @() } else { @('--environment-name', $envName) }
+        az staticwebapp appsettings delete `
+            --name $swaName `
+            --resource-group $rg `
+            @envArg `
+            --setting-names Otel__Env 2>$null | Out-Null
+    }
+    Ok "Removed Otel__Env from all SWA environments ($($allEnvNames -join ', '))"
 } elseif (-not $SkipSwa) {
     Warn 'SWA name not known — skipping app settings (run with -SkipBicep after first deploy to apply)'
 }
@@ -869,6 +987,75 @@ if (-not $SkipGitHub) {
             Warn 'SWA not known — skipping AZURE_STATIC_WEB_APPS_API_TOKEN'
         }
 
+        # ── OIDC federation for GitHub Actions ───────────────────────────────
+        Step 'Phase 4 · GitHub Actions OIDC federation'
+
+        if ($s.Contains('subscriptionId')) { Switch-ToSubscription $s['subscriptionId'] }
+
+        # Subscription's Entra tenant (separate from the CIAM tenant used for sign-in).
+        $subscriptionTenantId = az account show --query tenantId -o tsv
+
+        $cicdAppName = 'slypn-github-actions'
+        $cicdApp = az ad app list --filter "displayName eq '$cicdAppName'" --query '[0]' -o json 2>$null |
+                   ConvertFrom-Json
+        if ($cicdApp) {
+            $cicdAppId = $cicdApp.appId
+            $cicdObjId = $cicdApp.id
+            Info "Found  $cicdAppName  appId=$cicdAppId"
+        } else {
+            $cicdApp   = az ad app create --display-name $cicdAppName -o json | ConvertFrom-Json
+            $cicdAppId = $cicdApp.appId
+            $cicdObjId = $cicdApp.id
+            Ok "Created  $cicdAppName  appId=$cicdAppId"
+        }
+        $s['cicdAppId']            = $cicdAppId
+        $s['subscriptionTenantId'] = $subscriptionTenantId
+        Save-Secrets $s
+
+        $cicdSpList = az ad sp list --filter "appId eq '$cicdAppId'" -o json 2>$null | ConvertFrom-Json
+        if (-not $cicdSpList -or $cicdSpList.Count -eq 0) {
+            az ad sp create --id $cicdAppId | Out-Null
+            Ok 'Created service principal'
+        } else {
+            Info 'Service principal exists'
+        }
+
+        $scope = "/subscriptions/$($s['subscriptionId'])/resourceGroups/$($s['resourceGroup'])"
+        $roleAssigned = az role assignment list --assignee $cicdAppId --role Contributor --scope $scope -o json 2>$null |
+                        ConvertFrom-Json
+        if (-not $roleAssigned -or $roleAssigned.Count -eq 0) {
+            az role assignment create --assignee $cicdAppId --role Contributor --scope $scope | Out-Null
+            Ok "Contributor granted on $($s['resourceGroup'])"
+        } else {
+            Info 'Contributor already assigned'
+        }
+
+        foreach ($fc in @(
+            @{ name = 'github-main'; subject = "repo:$gitHubRepo`:ref:refs/heads/main" }
+            @{ name = 'github-prs';  subject = "repo:$gitHubRepo`:pull_request" }
+        )) {
+            $exists = az ad app federated-credential list --id $cicdObjId -o json 2>$null |
+                      ConvertFrom-Json | Where-Object { $_.name -eq $fc.name }
+            if (-not $exists) {
+                $tmpJson = New-TemporaryFile
+                @{
+                    name      = $fc.name
+                    issuer    = 'https://token.actions.githubusercontent.com'
+                    subject   = $fc.subject
+                    audiences = @('api://AzureADTokenExchange')
+                } | ConvertTo-Json | Set-Content $tmpJson -Encoding UTF8
+                az ad app federated-credential create --id $cicdObjId --parameters "@$($tmpJson.FullName)" | Out-Null
+                Remove-Item $tmpJson -ErrorAction SilentlyContinue
+                Ok "Federated credential: $($fc.name)"
+            } else {
+                Info "Federated credential exists: $($fc.name)"
+            }
+        }
+
+        Set-GhSecret 'AZURE_CLIENT_ID'       $cicdAppId
+        Set-GhSecret 'AZURE_TENANT_ID'       $subscriptionTenantId
+        Set-GhSecret 'AZURE_SUBSCRIPTION_ID' $s['subscriptionId']
+
         # VITE_ build-time env vars consumed by azure-static-web-apps.yml.
         Set-GhSecret 'VITE_MSAL_AUTHORITY' $authority
         Set-GhSecret 'VITE_MSAL_CLIENT_ID' $spaClientId
@@ -878,6 +1065,14 @@ if (-not $SkipGitHub) {
         if ($s.Contains('faroSourcemapAppId'))    { Set-GhSecret 'FARO_SOURCEMAP_APP_ID'   $s['faroSourcemapAppId'] }
         if ($s.Contains('faroSourcemapStackId'))  { Set-GhSecret 'FARO_SOURCEMAP_STACK_ID' $s['faroSourcemapStackId'] }
         if ($s.Contains('faroSourcemapApiKey'))   { Set-GhSecret 'FARO_SOURCEMAP_API_KEY'  $s['faroSourcemapApiKey'] }
+        if ($grafanaOtlpUrl)                      { Set-GhSecret 'OTEL_ENDPOINT'            $grafanaOtlpUrl }
+        if ($grafanaHeaders)                      { Set-GhSecret 'OTEL_HEADERS'             $grafanaHeaders }
+
+        # CIAM CI credentials — PR preview redirect URI management.
+        if ($s.Contains('tenantId'))        { Set-GhSecret 'CIAM_TENANT_ID'     $s['tenantId'] }
+        if ($s.Contains('spaObjectId'))     { Set-GhSecret 'SPA_OBJECT_ID'      $s['spaObjectId'] }
+        if ($s.Contains('ciClientId'))      { Set-GhSecret 'CIAM_CLIENT_ID'     $s['ciClientId'] }
+        if ($s.Contains('ciClientSecret'))  { Set-GhSecret 'CIAM_CLIENT_SECRET' $s['ciClientSecret'] }
     }
 }
 
@@ -948,6 +1143,7 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         $ls['Values']['Graph__InviteRedirectUrl'] = 'http://localhost:5173/'
         if ($grafanaOtlpUrl) { $ls['Values']['Otel__Endpoint'] = $grafanaOtlpUrl }
         if ($grafanaHeaders) { $ls['Values']['Otel__Headers']  = $grafanaHeaders }
+        $ls['Values']['Swagger__SpaClientId'] = $spaClientId
 
         $ls | ConvertTo-Json -Depth 5 | Set-Content $localSettingsPath -Encoding UTF8
         Ok "Updated $localSettingsPath (Entra/Graph fields; Storage unchanged)"

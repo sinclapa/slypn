@@ -1,3 +1,4 @@
+using System.Net;
 using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -6,6 +7,7 @@ using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
+using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
@@ -17,6 +19,8 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     [Function("GetEvent")]
     [OpenApiOperation(operationId: "events.get", tags: new[] { "events" }, Summary = "Get event", Description = "Returns a single event by id.")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Event id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(CommunityEvent), Description = "Event")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Description = "Not found")]
     public async Task<HttpResponseData> GetEvent(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "events/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -33,6 +37,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     [Function("GetEvents")]
     [OpenApiOperation(operationId: "events.list", tags: new[] { "events" }, Summary = "List events", Description = "Returns events with an optional upcoming filter.")]
     [OpenApiParameter(name: "upcoming", In = ParameterLocation.Query, Required = false, Type = typeof(string), Description = "Set to true to return only upcoming events.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(CommunityEvent[]), Description = "List of events")]
     public async Task<HttpResponseData> GetEvents(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "events")] HttpRequestData req,
         CancellationToken ct)
@@ -47,6 +52,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     [OpenApiOperation(operationId: "events.create", tags: new[] { "events" }, Summary = "Create event", Description = "Creates a new event. Admins and Contributors may create events.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(EventInput), Required = true, Description = "Event payload.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(CommunityEvent), Description = "Created event")]
     public async Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "events")] HttpRequestData req,
         FunctionContext context,
@@ -73,6 +79,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Event id.")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(EventInput), Required = true, Description = "Event payload.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(CommunityEvent), Description = "Updated event")]
     public async Task<HttpResponseData> Replace(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "events/{id}")] HttpRequestData req,
         string id, FunctionContext context, CancellationToken ct)
@@ -102,6 +109,7 @@ public sealed class EventsFunctions(IContentRepository repo, ILogger<EventsFunct
     [OpenApiOperation(operationId: "events.delete", tags: new[] { "events" }, Summary = "Delete event", Description = "Deletes an event. Admins may delete any event; Contributors may only delete their own.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Event id.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NoContent, Description = "Deleted")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "events/{id}")] HttpRequestData req,
         string id, FunctionContext context, CancellationToken ct)

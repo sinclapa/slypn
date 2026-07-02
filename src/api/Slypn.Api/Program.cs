@@ -11,12 +11,14 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Abstractions;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Services;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults(builder =>
     {
+        builder.UseMiddleware<TracingMiddleware>();
         builder.UseMiddleware<JwtMiddleware>();
     })
     .ConfigureLogging((context, logging) =>
@@ -56,6 +58,7 @@ var host = new HostBuilder()
             options.Serializer = new JsonObjectSerializer(new JsonSerializerOptions(JsonSerializerDefaults.Web));
         });
 
+        services.AddSingleton<IOpenApiConfigurationOptions, OpenApiConfig>();
         services.AddSingleton<IMockDataService, MockDataService>();
         services.AddSingleton<IContentRepository, ContentRepository>();
         services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>();

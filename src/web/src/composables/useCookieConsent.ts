@@ -23,10 +23,20 @@ function persist(next: ConsentChoice) {
   }
 }
 
+function reset() {
+  choice.value = null
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    /* storage blocked */
+  }
+}
+
 export function useCookieConsent() {
   return {
     choice,
     accept: () => persist('accepted'),
     decline: () => persist('declined'),
+    reset,
   }
 }

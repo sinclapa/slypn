@@ -5,6 +5,12 @@ import logoUrl from '@/assets/logo.svg'
 import { useAuthStore } from '@/stores/auth'
 import { useApprovalsStore } from '@/stores/approvals'
 
+const APP_ENV   = import.meta.env.VITE_FARO_ENV ?? 'dev'
+const envLabel  = APP_ENV !== 'prod' ? APP_ENV : null
+const envClass  = APP_ENV === 'local'
+  ? 'bg-green-100 text-green-700 border-green-300'
+  : 'bg-amber-100 text-amber-700 border-amber-300'
+
 const navItems = [
   { to: '/',           label: 'Home' },
   { to: '/about',      label: 'About' },
@@ -24,8 +30,7 @@ const userMenuOpen = ref(false)
 // Account/admin links, defined once and reused by the desktop dropdown and the
 // mobile account panel. `dividerAfter` renders a separator; `badge` shows the
 // pending-approvals count.
-interface AccountLink { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }
-const accountLinks = computed<AccountLink[]>(() => ([
+const accountLinks = computed(() => ([
   { to: '/dashboard',       label: 'Dashboard',          show: true, dividerAfter: true },
   { to: '/admin/approvals', label: 'Approvals',          show: auth.isAdmin, badge: true },
   { to: '/admin/content',   label: 'Content management', show: auth.isContributor || auth.isAdmin },
@@ -33,12 +38,19 @@ const accountLinks = computed<AccountLink[]>(() => ([
   { to: '/admin/events',    label: 'Event management',   show: auth.isContributor || auth.isAdmin },
   { to: '/admin/members',   label: 'Members',            show: auth.isAdmin },
   { to: '/admin/resources', label: 'Resources',          show: auth.isAdmin },
-] as AccountLink[]).filter(l => l.show))
+] as { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }[]).filter(l => l.show))
+
+const envMenuOpen = ref(false)
+const swaggerUrl = APP_ENV === 'local'
+  ? 'http://localhost:7071/api/swagger/ui'
+  : '/swagger.html'
 
 // Mobile: the hamburger (primary nav) and the avatar (account) are separate
 // panels — opening one closes the other.
 function toggleMobileNav() { mobileOpen.value = !mobileOpen.value; userMenuOpen.value = false }
 function toggleAccount()   { userMenuOpen.value = !userMenuOpen.value; mobileOpen.value = false }
+function toggleEnvMenu()   { envMenuOpen.value = !envMenuOpen.value }
+function closeEnvMenu()    { envMenuOpen.value = false }
 
 onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
 watch(() => auth.isAdmin, (isAdmin) => { if (isAdmin) approvalsStore.refresh() })
@@ -78,6 +90,34 @@ async function onSignOut() {
       >
         <img :src="logoUrl" alt="SLYPN" class="h-16 w-auto" width="684" height="488" />
       </RouterLink>
+
+      <div v-if="envLabel" class="relative">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded border px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wide"
+          :class="envClass"
+          :aria-expanded="envMenuOpen"
+          @click="toggleEnvMenu"
+        >
+          {{ envLabel }}
+          <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div
+          v-if="envMenuOpen"
+          class="absolute left-0 top-full mt-1 min-w-max rounded-md border border-slypn-100 bg-white py-1 shadow-lg"
+          @mouseleave="closeEnvMenu"
+        >
+          <a
+            :href="swaggerUrl"
+            target="_blank"
+            rel="noopener"
+            class="block px-4 py-2 text-sm font-normal normal-case tracking-normal text-slypn-700 hover:bg-slypn-50"
+            @click="closeEnvMenu"
+          >API docs</a>
+        </div>
+      </div>
 
       <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
         <RouterLink

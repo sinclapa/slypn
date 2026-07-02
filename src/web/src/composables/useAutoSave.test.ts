@@ -9,6 +9,8 @@ interface Harness {
   lastSavedAt: Ref<Date | null>
 }
 
+let currentWrapper: ReturnType<typeof mount> | null = null
+
 function mountAutoSave<T>(state: Ref<T>, saveFn: (v: T) => Promise<void>, options = {}) {
   let api!: Harness
   const Comp = defineComponent({
@@ -18,13 +20,18 @@ function mountAutoSave<T>(state: Ref<T>, saveFn: (v: T) => Promise<void>, option
     },
     template: '<div />',
   })
-  const wrapper = mount(Comp)
-  return { api, wrapper }
+  currentWrapper = mount(Comp)
+  return { api, wrapper: currentWrapper }
 }
 
 describe('useAutoSave', () => {
   beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    vi.clearAllTimers()    // discard any pending debounce timers
+    vi.useRealTimers()
+    currentWrapper?.unmount()  // trigger onBeforeUnmount → clears the timer ref
+    currentWrapper = null
+  })
 
   it('skips the initial change by default', async () => {
     const state = ref('a')

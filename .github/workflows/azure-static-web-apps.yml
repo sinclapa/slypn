@@ -3,10 +3,12 @@ name: Azure Static Web Apps deploy
 # Production deploys on push to main; PR previews on every open / update.
 # SWA closes the preview environment when the PR is closed.
 #
-# Required repo secret (set after first Bicep deploy):
-#   AZURE_STATIC_WEB_APPS_API_TOKEN — the deployment token from the SWA
-#     resource (Azure portal -> swa-slypn-* -> Manage deployment token,
-#     or `az staticwebapp secrets list -n swa-slypn-prod -g rg-slypn-prod`).
+# Required repo secrets (set via .\infra\setup.ps1):
+#   AZURE_STATIC_WEB_APPS_API_TOKEN — SWA deployment token
+#   CIAM_TENANT_ID     — Entra External ID tenant ID
+#   CIAM_CLIENT_ID     — slypn-ci app client ID (Application.ReadWrite.OwnedBy on Graph)
+#   CIAM_CLIENT_SECRET — slypn-ci client secret
+#   SPA_OBJECT_ID      — slypn-web app object ID
 
 on:
   push:
@@ -18,6 +20,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
 
 concurrency:
   # Include the event name so that a push to main and a pull_request-closed
@@ -33,22 +36,38 @@ jobs:
     runs-on: ubuntu-latest
     name: Build + deploy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           lfs: false
 
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: src/web/package-lock.json
 
       - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
+
+      - name: Write API appsettings
+        env:
+          OTEL_ENV:      ${{ github.event_name == 'push' && 'prod' || 'dev' }}
+          SPA_CLIENT_ID: ${{ secrets.VITE_MSAL_CLIENT_ID }}
+        run: |
+          printf '{\n  "Otel": { "Env": "%s" },\n  "Swagger": { "SpaClientId": "%s" }\n}\n' \
+            "$OTEL_ENV" "$SPA_CLIENT_ID" > src/api/Slypn.Api/appsettings.json
+        shell: bash
 
       - name: Build + deploy to SWA
         id: builddeploy
@@ -60,14 +79,6 @@ jobs:
           app_location: src/web
           api_location: src/api/Slypn.Api
           output_location: dist
-          # The action handles `npm ci` + `npm run build` for the Vue app
-          # and `dotnet build` for the Functions, so no preceding steps are
-          # required.
-          deployment_environment: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || '' }}
-          # Until the first Bicep deploy provisions the SWA + the secret is
-          # set in repo secrets, the action build-only and skips the upload
-          # instead of erroring. Remove this flag once the token is in place.
-          skip_deploy_on_missing_secrets: true
         env:
           # Vite bakes these into the JS bundle at build time.
           # Set via: .\infra\setup.ps1 (GitHub secrets phase).
@@ -85,14 +96,86 @@ jobs:
           FARO_SOURCEMAP_STACK_ID:   ${{ secrets.FARO_SOURCEMAP_STACK_ID }}
           FARO_SOURCEMAP_API_KEY:    ${{ secrets.FARO_SOURCEMAP_API_KEY }}
 
+      - name: Register PR preview redirect URI
+        if: github.event_name == 'pull_request'
+        env:
+          CIAM_TENANT_ID:     ${{ secrets.CIAM_TENANT_ID }}
+          CIAM_CLIENT_ID:     ${{ secrets.CIAM_CLIENT_ID }}
+          CIAM_CLIENT_SECRET: ${{ secrets.CIAM_CLIENT_SECRET }}
+          SPA_OBJECT_ID:      ${{ secrets.SPA_OBJECT_ID }}
+          SWA_URL:            ${{ steps.builddeploy.outputs.static_web_app_url }}
+        run: |
+          set -euo pipefail
+          CALLBACK="${SWA_URL%/}/auth/callback"
+          TOKEN=$(curl -sf \
+            "https://login.microsoftonline.com/${CIAM_TENANT_ID}/oauth2/v2.0/token" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${CIAM_CLIENT_ID}" \
+            --data-urlencode "client_secret=${CIAM_CLIENT_SECRET}" \
+            --data-urlencode "scope=https://graph.microsoft.com/.default" \
+            | jq -r .access_token)
+          CURRENT=$(curl -sf \
+            "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
+            -H "Authorization: Bearer $TOKEN" \
+            | jq -c '.spa.redirectUris')
+          OAUTH_REDIRECT="${SWA_URL%/}/oauth2-redirect.html"
+          UPDATED=$(echo "$CURRENT" | jq -c --arg a "$CALLBACK" --arg b "$OAUTH_REDIRECT" '. + [$a,$b] | unique')
+          curl -sf -X PATCH \
+            "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"spa\":{\"redirectUris\":${UPDATED}}}"
+          echo "Registered: $CALLBACK  $OAUTH_REDIRECT"
+        shell: bash
+
   close_pr_environment:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     name: Close PR environment
     steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Remove PR preview redirect URI
+        env:
+          CIAM_TENANT_ID:     ${{ secrets.CIAM_TENANT_ID }}
+          CIAM_CLIENT_ID:     ${{ secrets.CIAM_CLIENT_ID }}
+          CIAM_CLIENT_SECRET: ${{ secrets.CIAM_CLIENT_SECRET }}
+          SPA_OBJECT_ID:      ${{ secrets.SPA_OBJECT_ID }}
+        run: |
+          set -euo pipefail
+          PR_HOST=$(az staticwebapp environment list \
+            --name swa-slypn-prod --resource-group rg-slypn-prod \
+            --query "[?contains(hostname, '-${{ github.event.pull_request.number }}.')]|[0].hostname" \
+            -o tsv)
+          CALLBACK="https://${PR_HOST}/auth/callback"
+          OAUTH_REDIRECT="https://${PR_HOST}/oauth2-redirect.html"
+          TOKEN=$(curl -sf \
+            "https://login.microsoftonline.com/${CIAM_TENANT_ID}/oauth2/v2.0/token" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${CIAM_CLIENT_ID}" \
+            --data-urlencode "client_secret=${CIAM_CLIENT_SECRET}" \
+            --data-urlencode "scope=https://graph.microsoft.com/.default" \
+            | jq -r .access_token)
+          CURRENT=$(curl -sf \
+            "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
+            -H "Authorization: Bearer $TOKEN" \
+            | jq -c '.spa.redirectUris')
+          UPDATED=$(echo "$CURRENT" | jq -c --arg a "$CALLBACK" --arg b "$OAUTH_REDIRECT" '[.[] | select(. != $a and . != $b)]')
+          curl -sf -X PATCH \
+            "https://graph.microsoft.com/v1.0/applications/${SPA_OBJECT_ID}" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"spa\":{\"redirectUris\":${UPDATED}}}"
+          echo "Removed: $CALLBACK"
+        shell: bash
+
       - name: Close PR environment
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: close
-          skip_deploy_on_missing_secrets: true

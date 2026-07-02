@@ -1,3 +1,4 @@
+using System.Net;
 using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -26,6 +27,7 @@ public sealed class MembersFunctions(
     [RequireRole("Admin")]
     [OpenApiOperation(operationId: "members.list", tags: new[] { "members" }, Summary = "List members", Description = "Returns all members.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Member[]), Description = "List of members")]
     public async Task<HttpResponseData> List(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "members")] HttpRequestData req,
         CancellationToken ct)
@@ -44,6 +46,7 @@ public sealed class MembersFunctions(
     [OpenApiOperation(operationId: "members.invite", tags: new[] { "members" }, Summary = "Invite member", Description = "Creates or updates a member invitation.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(MemberInviteInput), Required = true, Description = "Invitation payload.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(object), Description = "Invitation result")]
     public async Task<HttpResponseData> Invite(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "members/invite")] HttpRequestData req,
         FunctionContext context,
@@ -105,6 +108,7 @@ public sealed class MembersFunctions(
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Member id.")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(MemberRolesInput), Required = true)]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Member), Description = "Updated member")]
     public async Task<HttpResponseData> UpdateRoles(
         [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "members/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -137,6 +141,7 @@ public sealed class MembersFunctions(
     [OpenApiOperation(operationId: "members.delete", tags: new[] { "members" }, Summary = "Delete member", Description = "Removes a member record.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Member id.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NoContent, Description = "Deleted")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "members/{id}")] HttpRequestData req,
         string id, FunctionContext context, CancellationToken ct)
