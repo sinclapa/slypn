@@ -17,6 +17,7 @@ public sealed class MediaFunctions(IBlobService blob)
     [Function("UploadMedia")]
     [OpenApiOperation(operationId: "media.upload", tags: new[] { "media" }, Summary = "Upload media", Description = "Uploads a media file and returns its blob name and read URL.")]
     [OpenApiRequestBody(contentType: "multipart/form-data", bodyType: typeof(object), Required = true, Description = "Multipart form body with a single file part named file.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(object), Description = "Upload result with blob name and read URL")]
     public async Task<HttpResponseData> Upload(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "media")] HttpRequestData req)
     {

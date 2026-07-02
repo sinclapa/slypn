@@ -7,6 +7,7 @@ using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
+using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
@@ -18,6 +19,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [Function("GetArticles")]
     [OpenApiOperation(operationId: "articles.list", tags: new[] { "articles" }, Summary = "List articles", Description = "Returns articles filtered by the optional status query parameter.")]
     [OpenApiParameter(name: "status", In = ParameterLocation.Query, Required = false, Type = typeof(string), Description = "Optional article status filter.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of articles")]
     public async Task<HttpResponseData> GetArticles(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "articles")] HttpRequestData req,
         CancellationToken ct)
@@ -29,6 +31,8 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [Function("GetArticleBySlug")]
     [OpenApiOperation(operationId: "articles.getBySlug", tags: new[] { "articles" }, Summary = "Get article by slug", Description = "Returns a single article identified by slug.")]
     [OpenApiParameter(name: "slug", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article slug.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Article")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Description = "Not found")]
     public async Task<HttpResponseData> GetArticleBySlug(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "articles/{slug}")] HttpRequestData req,
         string slug, CancellationToken ct)
@@ -43,6 +47,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiOperation(operationId: "articles.create", tags: new[] { "articles" }, Summary = "Create article", Description = "Creates a new article.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ArticleInput), Required = true, Description = "Article payload.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(Article), Description = "Created article")]
     public async Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles")] HttpRequestData req,
         CancellationToken ct)
@@ -65,6 +70,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ArticleInput), Required = true, Description = "Article payload.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Updated article")]
     public async Task<HttpResponseData> Replace(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "articles/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -87,6 +93,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
     [OpenApiParameter(name: "status", In = ParameterLocation.Query, Required = true, Type = typeof(string), Description = "Article partition key status.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NoContent, Description = "Deleted")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "articles/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -112,6 +119,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiOperation(operationId: "articles.publish", tags: new[] { "articles" }, Summary = "Publish article", Description = "Moves an article to published status.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Published article")]
     public async Task<HttpResponseData> Publish(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/publish")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -138,6 +146,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiOperation(operationId: "articles.edit", tags: new[] { "articles" }, Summary = "Edit published", Description = "Creates a draft revision of a published article for approval.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(Draft), Description = "Created draft revision")]
     public async Task<HttpResponseData> Edit(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/edit")] HttpRequestData req,
         FunctionContext context,
@@ -165,6 +174,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiOperation(operationId: "articles.requestDeletion", tags: new[] { "articles" }, Summary = "Request deletion", Description = "Flags a published article for deletion, pending admin approval.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Updated article")]
     public async Task<HttpResponseData> RequestDeletion(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/request-deletion")] HttpRequestData req,
         FunctionContext context,
@@ -188,6 +198,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiOperation(operationId: "articles.cancelDeletion", tags: new[] { "articles" }, Summary = "Keep article", Description = "Clears a pending deletion request.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Updated article")]
     public async Task<HttpResponseData> CancelDeletion(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/cancel-deletion")] HttpRequestData req,
         string id, CancellationToken ct)
@@ -212,6 +223,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(RejectionInput), Required = true, Description = "Revision feedback.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Draft), Description = "Draft with revision feedback")]
     public async Task<HttpResponseData> Revise(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/revise")] HttpRequestData req,
         string id, CancellationToken ct)

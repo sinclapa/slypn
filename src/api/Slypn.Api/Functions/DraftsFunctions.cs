@@ -1,3 +1,4 @@
+using System.Net;
 using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -19,6 +20,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     [RequireRole("Admin", "Contributor")]
     [OpenApiOperation(operationId: "drafts.listMine", tags: new[] { "drafts" }, Summary = "List my drafts", Description = "Returns drafts for the authenticated author.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Draft[]), Description = "List of drafts")]
     public async Task<HttpResponseData> List(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "drafts")] HttpRequestData req,
         FunctionContext context,
@@ -40,6 +42,8 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     [OpenApiOperation(operationId: "drafts.get", tags: new[] { "drafts" }, Summary = "Get draft", Description = "Returns a draft owned by the authenticated author.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Draft), Description = "Draft")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Description = "Not found")]
     public async Task<HttpResponseData> Get(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "drafts/{id}")] HttpRequestData req,
         FunctionContext context,
@@ -68,6 +72,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(DraftInput), Required = true, Description = "Draft payload.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Draft), Description = "Saved draft")]
     public async Task<HttpResponseData> Upsert(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "drafts/{id}")] HttpRequestData req,
         FunctionContext context,
@@ -122,6 +127,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     [OpenApiOperation(operationId: "drafts.delete", tags: new[] { "drafts" }, Summary = "Delete draft", Description = "Deletes a draft owned by the authenticated author.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NoContent, Description = "Deleted")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "drafts/{id}")] HttpRequestData req,
         FunctionContext context,
@@ -149,6 +155,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     [OpenApiOperation(operationId: "drafts.submit", tags: new[] { "drafts" }, Summary = "Submit draft", Description = "Submits a draft for review and promotes it to an article.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Draft id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(Article), Description = "Submitted article")]
     public async Task<HttpResponseData> Submit(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "drafts/{id}/submit")] HttpRequestData req,
         FunctionContext context,

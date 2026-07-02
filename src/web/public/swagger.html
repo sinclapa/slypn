@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <title>Slypn API docs</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.30.2/swagger-ui.css" />
   <style>body { margin: 0; }</style>
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.30.2/swagger-ui-bundle.js"></script>
   <script>
     fetch('/api/swagger.json')
       .then(r => r.json())
@@ -22,6 +22,7 @@
           presets: [SwaggerUIBundle.presets.apis],
           layout: 'BaseLayout',
           oauth2RedirectUrl: window.location.origin + '/oauth2-redirect.html',
+          validatorUrl: null,
           requestInterceptor: (req) => {
             req.url = req.url.replace(/https?:\/\/[^/]+\.azurewebsites\.net\/api/, window.location.origin + '/api')
             return req
