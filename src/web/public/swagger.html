@@ -16,6 +16,7 @@
         const oauth2 = spec.components?.securitySchemes?.oauth2
         const clientId = oauth2?.['x-client-id'] ?? ''
         const scopes = Object.keys(oauth2?.flows?.authorizationCode?.scopes ?? {}).join(' ')
+        spec.servers = [{ url: window.location.origin + '/api' }]
         const ui = SwaggerUIBundle({
           spec,
           dom_id: '#swagger-ui',
