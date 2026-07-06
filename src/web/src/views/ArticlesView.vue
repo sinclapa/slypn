@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import ArticlesIcon from '@/components/common/ArticlesIcon.vue'
 import ArticleCard from '@/components/common/ArticleCard.vue'
 import PillFilter from '@/components/common/PillFilter.vue'
 import { apiJson } from '@/lib/api'
@@ -39,7 +40,11 @@ const visible = computed(() => {
     eyebrow="Articles"
     title="Considered pieces, written by members"
     subtitle="Longer-form writing from the SLYPN community on living with Parkinson's, navigating treatment, and the small daily things that make a difference."
-  />
+  >
+    <template #brand>
+      <ArticlesIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+    </template>
+  </HeroBanner>
 
   <section class="page-container py-16">
     <PillFilter v-model="selected" :options="categories" />
