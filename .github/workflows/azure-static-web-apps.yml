@@ -107,7 +107,7 @@ jobs:
       - name: Set Otel__Env=dev on PR preview
         if: github.event_name == 'pull_request'
         run: |
-          ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          ENV_NAME="${{ github.event.pull_request.number }}"
           # SWA preview environments appear in ARM a few seconds after the deploy
           # action completes. Retry for up to 2 minutes before failing.
           for i in $(seq 1 8); do
