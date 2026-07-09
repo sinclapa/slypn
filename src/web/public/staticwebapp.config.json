@@ -1,4 +1,10 @@
 {
+  "routes": [
+    {
+      "route": "/oauth2-redirect.html",
+      "rewrite": "/api/swagger/oauth2-redirect.html"
+    }
+  ],
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": ["/assets/*", "/favicon.png"]
