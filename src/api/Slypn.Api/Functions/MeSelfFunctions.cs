@@ -1,6 +1,10 @@
+using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
@@ -11,10 +15,10 @@ public sealed class MeSelfFunctions(
     IContentRepository repo,
     ILogger<MeSelfFunctions> log)
 {
-    /// <summary>
-    /// Returns the validated JWT claims for the current caller. Useful for diagnosing
-    /// auth issues (wrong tenant, missing roles, unexpected oid, etc.).
-    /// </summary>
+    [OpenApiOperation(operationId: "me.whoami", tags: new[] { "me" }, Summary = "Who am I", Description = "Returns the validated JWT claims for the current caller. Useful for diagnosing auth issues.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(object), Description = "JWT claims")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Unauthorized, Description = "Missing or invalid token")]
     [Function("WhoAmI")]
     [RequireRole]
     public async Task<HttpResponseData> WhoAmI(
@@ -29,11 +33,10 @@ public sealed class MeSelfFunctions(
     }
 
 
-    /// <summary>
-    /// Returns the caller's Cosmos member profile (roles + status). On first call after
-    /// sign-up, links the Entra OID to the member record and activates it. Safe to call
-    /// repeatedly — idempotent once OID is linked.
-    /// </summary>
+    [OpenApiOperation(operationId: "me.get", tags: new[] { "me" }, Summary = "My profile", Description = "Returns the caller's member profile (roles + status). On first call after sign-up, links the Entra OID to the member record.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(object), Description = "Member profile with roles and status")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Unauthorized, Description = "Missing or invalid token")]
     [Function("GetMe")]
     [RequireRole]
     public async Task<HttpResponseData> Get(
