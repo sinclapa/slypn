@@ -12,6 +12,24 @@ public sealed class MeSelfFunctions(
     ILogger<MeSelfFunctions> log)
 {
     /// <summary>
+    /// Returns the validated JWT claims for the current caller. Useful for diagnosing
+    /// auth issues (wrong tenant, missing roles, unexpected oid, etc.).
+    /// </summary>
+    [Function("WhoAmI")]
+    [RequireRole]
+    public async Task<HttpResponseData> WhoAmI(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "whoami")] HttpRequestData req,
+        FunctionContext context)
+    {
+        var principal = context.GetPrincipal();
+        var claims = principal?.Claims
+            .Select(c => new { type = c.Type, value = c.Value })
+            .ToList();
+        return await Ok(req, new { claims });
+    }
+
+
+    /// <summary>
     /// Returns the caller's Cosmos member profile (roles + status). On first call after
     /// sign-up, links the Entra OID to the member record and activates it. Safe to call
     /// repeatedly — idempotent once OID is linked.

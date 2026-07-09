@@ -21,7 +21,13 @@ public sealed class EntraJwtValidator : IJwtValidator
         _opts = options.Value;
         if (!_opts.IsConfigured) return;
 
-        var metadataAddress = $"{_opts.Authority!.TrimEnd('/')}/.well-known/openid-configuration";
+        // CIAM always stamps tokens with iss = https://{tenantId}.ciamlogin.com/...
+        // regardless of which branded domain was used for the authorization request.
+        // Fetch the JWKS from the GUID-domain so we get the keys that actually sign tokens.
+        var metadataBase = _opts.TenantId is not null
+            ? $"https://{_opts.TenantId}.ciamlogin.com/{_opts.TenantId}/v2.0"
+            : _opts.Authority!.TrimEnd('/');
+        var metadataAddress = $"{metadataBase}/.well-known/openid-configuration";
         _configManager = new ConfigurationManager<OpenIdConnectConfiguration>(
             metadataAddress,
             new OpenIdConnectConfigurationRetriever(),
