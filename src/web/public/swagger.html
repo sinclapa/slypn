@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <title>Slypn API docs</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.30.2/swagger-ui.css" />
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.32.8/swagger-ui.css" />
   <style>body { margin: 0; }</style>
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5.30.2/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.32.8/swagger-ui-bundle.js"></script>
   <script>
     fetch('/api/swagger.json')
       .then(r => r.json())
@@ -17,7 +17,7 @@
         const clientId = oauth2?.['x-client-id'] ?? ''
         const scopes = Object.keys(oauth2?.flows?.authorizationCode?.scopes ?? {}).join(' ')
         const ui = SwaggerUIBundle({
-          url: '/api/swagger.json',
+          spec,
           dom_id: '#swagger-ui',
           presets: [SwaggerUIBundle.presets.apis],
           layout: 'BaseLayout',
