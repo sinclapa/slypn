@@ -25,6 +25,13 @@
           validatorUrl: null,
           requestInterceptor: (req) => {
             req.url = req.url.replace(/https?:\/\/[^/]+\.azurewebsites\.net\/api/, window.location.origin + '/api')
+            // SWA replaces Authorization with its own HS256 session token before reaching Functions.
+            // Move the Bearer token to X-Slypn-Token which SWA leaves untouched.
+            const auth = req.headers?.['Authorization']
+            if (auth && req.url.includes('/api/')) {
+              req.headers['X-Slypn-Token'] = auth
+              delete req.headers['Authorization']
+            }
             return req
           },
         })
