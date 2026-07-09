@@ -60,6 +60,18 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Compute version
+        id: version
+        run: |
+          BASE=$(node -p "require('./src/web/package.json').version")
+          SHA=$(git rev-parse --short HEAD)
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "value=$BASE" >> $GITHUB_OUTPUT
+          else
+            echo "value=${BASE}-pr.${{ github.event.pull_request.number }}+${SHA}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
       - name: Write API appsettings
         env:
           OTEL_ENV:      ${{ github.event_name == 'push' && 'prod' || 'dev' }}
@@ -95,13 +107,14 @@ jobs:
           FARO_SOURCEMAP_APP_ID:     ${{ secrets.FARO_SOURCEMAP_APP_ID }}
           FARO_SOURCEMAP_STACK_ID:   ${{ secrets.FARO_SOURCEMAP_STACK_ID }}
           FARO_SOURCEMAP_API_KEY:    ${{ secrets.FARO_SOURCEMAP_API_KEY }}
+          VITE_APP_VERSION:          ${{ steps.version.outputs.value }}
 
       - name: Set Otel__Env=prod on production
         if: github.event_name == 'push'
         run: |
           az staticwebapp appsettings set \
             --name swa-slypn-prod --resource-group rg-slypn-prod \
-            --setting-names Otel__Env=prod
+            --setting-names Otel__Env=prod APP_VERSION=${{ steps.version.outputs.value }}
         shell: bash
 
       - name: Set Otel__Env=dev on PR preview
@@ -114,7 +127,7 @@ jobs:
             az staticwebapp appsettings set \
               --name swa-slypn-prod --resource-group rg-slypn-prod \
               --environment-name "$ENV_NAME" \
-              --setting-names Otel__Env=dev && break
+              --setting-names Otel__Env=dev APP_VERSION=${{ steps.version.outputs.value }} && break
             echo "Preview environment not yet ARM-visible (attempt $i/8) — retrying in 15s..."
             sleep 15
           done

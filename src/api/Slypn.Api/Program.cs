@@ -38,7 +38,7 @@ var host = new HostBuilder()
         {
             o.SetResourceBuilder(ResourceBuilder.CreateDefault()
                 .AddService(otelOpts.ServiceName,
-                    serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.1")
+                    serviceVersion: context.Configuration["APP_VERSION"] ?? "0.0.0")
                 .AddAttributes(new[] { new KeyValuePair<string, object>("deployment.environment", otelOpts.Env) }));
             o.IncludeScopes = true;
             o.IncludeFormattedMessage = true;
@@ -59,6 +59,7 @@ var host = new HostBuilder()
         });
 
         services.AddSingleton<IOpenApiConfigurationOptions, OpenApiConfig>();
+        services.AddSingleton<IOpenApiCustomUIOptions, SwaggerUiOptions>();
         services.AddSingleton<IMockDataService, MockDataService>();
         services.AddSingleton<IContentRepository, ContentRepository>();
         services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>();
@@ -118,7 +119,8 @@ var host = new HostBuilder()
             services
                 .AddOpenTelemetry()
                 .ConfigureResource(r => r
-                    .AddService(otelOpts.ServiceName)
+                    .AddService(otelOpts.ServiceName,
+                        serviceVersion: context.Configuration["APP_VERSION"] ?? "0.0.0")
                     .AddAttributes(new[] { new KeyValuePair<string, object>("deployment.environment", otelOpts.Env) }))
                 .WithTracing(tracing => tracing
                     .AddSource(OtelSources.ApiName)

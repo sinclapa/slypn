@@ -11,6 +11,8 @@
     "AzureAd__Audience": "",
     "AzureAd__TenantId": "",
     "AzureAd__SkipAuth": "true",
+    "Swagger__SpaClientId": "",
+    "APP_VERSION": "",
     "Graph__ClientSecret": "",
     "Graph__InviteRedirectUrl": "http://localhost:5173/",
     "Otel__Endpoint": "",

@@ -38,7 +38,9 @@ export default defineConfig(async () => {
       alias: { '@': path.resolve(__dirname, './src') },
     },
     define: {
-      __APP_VERSION__: JSON.stringify(pkg.version),
+      // CI injects VITE_APP_VERSION with the full stamped string (e.g. 1.2.0-pr.42+abc1234);
+      // fall back to the bare semver from package.json for local dev.
+      __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION ?? `${pkg.version}-local`),
     },
     build: {
       rollupOptions: {

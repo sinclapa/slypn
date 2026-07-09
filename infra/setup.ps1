@@ -584,7 +584,11 @@ if (-not $SkipEntra) {
     Save-Secrets $s
 
     # Redirect URIs — prod omitted if URL not yet known.
-    $redirectUris = @('http://localhost:5173/auth/callback', 'http://localhost:5173/oauth2-redirect.html')
+    $redirectUris = @(
+        'http://localhost:5173/auth/callback',
+        'http://localhost:5173/oauth2-redirect.html',
+        'http://localhost:7071/api/swagger/oauth2-redirect.html'   # Swagger UI local dev
+    )
     $pUrl = if ($s.Contains('prodUrl')) { $s['prodUrl'] } else { '' }
     if (-not [string]::IsNullOrWhiteSpace($pUrl)) {
         $redirectUris = @("$pUrl/auth/callback", "$pUrl/oauth2-redirect.html") + $redirectUris
