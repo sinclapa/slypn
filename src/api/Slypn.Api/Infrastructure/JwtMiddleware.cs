@@ -8,6 +8,7 @@ using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using Slypn.Api.Services;
 
 namespace Slypn.Api.Infrastructure;
@@ -170,10 +171,20 @@ public sealed class JwtMiddleware(
             var raw = vals.FirstOrDefault();
             if (string.IsNullOrWhiteSpace(raw)) continue;
             const string prefix = "Bearer ";
-            if (raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return raw[prefix.Length..].Trim();
+            if (!raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+            var token = raw[prefix.Length..].Trim();
+            // SWA's own HS256 session tokens carry no kid — skip them so they
+            // never reach the CIAM validator and produce a confusing IDX10517.
+            if (!HasKeyId(token)) continue;
+            return token;
         }
         return null;
+    }
+
+    private static bool HasKeyId(string token)
+    {
+        try { return !string.IsNullOrEmpty(new JwtSecurityTokenHandler().ReadJwtToken(token).Header.Kid); }
+        catch { return false; }
     }
 
     private static string? GetHeader(HttpRequestData req, string name) =>

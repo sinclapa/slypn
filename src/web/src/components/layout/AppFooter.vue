@@ -5,6 +5,7 @@ import { useCookieConsent } from '@/composables/useCookieConsent'
 
 const year = new Date().getFullYear()
 const { reset: resetCookies } = useCookieConsent()
+const appVersion = __APP_VERSION__
 </script>
 
 <template>
@@ -62,11 +63,14 @@ const { reset: resetCookies } = useCookieConsent()
     <div class="border-t border-slypn-600/60">
       <div class="page-container flex flex-col items-start justify-between gap-3 py-5 text-xs text-slypn-100/70 sm:flex-row sm:items-center">
         <p>&copy; {{ year }} South London Younger Parkinson&rsquo;s Network.</p>
-        <button
-          type="button"
-          class="underline underline-offset-2 hover:text-tulip"
-          @click="resetCookies"
-        >Cookie preferences</button>
+        <div class="flex items-center gap-4">
+          <span class="opacity-50">v{{ appVersion }}</span>
+          <button
+            type="button"
+            class="underline underline-offset-2 hover:text-tulip"
+            @click="resetCookies"
+          >Cookie preferences</button>
+        </div>
       </div>
     </div>
   </footer>

@@ -15,10 +15,15 @@ describe('AppFooter', () => {
     expect(links).toContain('/newsletter')
   })
 
-  it('shows the current year and the Parkinson’s UK affiliation link', () => {
+  it("shows the current year and the Parkinson's UK affiliation link", () => {
     const w = mountFooter()
     expect(w.text()).toContain(String(new Date().getFullYear()))
     const ext = w.find('a[href="https://www.parkinsons.org.uk/"]')
     expect(ext.exists()).toBe(true)
+  })
+
+  it('shows the app version', () => {
+    const w = mountFooter()
+    expect(w.text()).toContain(`v${__APP_VERSION__}`)
   })
 })

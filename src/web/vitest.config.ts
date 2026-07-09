@@ -1,6 +1,10 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')) as { version: string }
 
 // Unit/component tests for the Vue app. Kept separate from the Playwright e2e
 // suite in ./e2e (those use @playwright/test and are excluded here via `include`).
@@ -8,6 +12,9 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION ?? `${pkg.version}-local`),
   },
   test: {
     // threads avoids the Windows EPERM/timeout issue with the forks pool.
