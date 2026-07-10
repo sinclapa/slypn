@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Net;
 using System.Security.Claims;
 using System.Text;
@@ -112,6 +113,81 @@ internal static class TestHttp
         IDictionary<string, string>? headers = null) =>
         new(ctx, method, url, JsonSerializer.Serialize(body, new JsonSerializerOptions(JsonSerializerDefaults.Web)), headers);
 
-    public static TestHttpRequestData Raw(FunctionContext ctx, string method, string url, string body) =>
-        new(ctx, method, url, body);
+    public static TestHttpRequestData Raw(FunctionContext ctx, string method, string url, string body,
+        IDictionary<string, string>? headers = null) =>
+        new(ctx, method, url, body, headers);
+}
+
+// ── Middleware test infrastructure ──────────────────────────────────────────
+
+internal sealed class TestInvocationFeatures : IInvocationFeatures
+{
+    private readonly Dictionary<Type, object> _store = new();
+
+    public TFeature? Get<TFeature>() =>
+        _store.TryGetValue(typeof(TFeature), out var v) ? (TFeature)v : default;
+
+    public void Set<TFeature>(TFeature? instance)
+    {
+        if (instance is null) _store.Remove(typeof(TFeature));
+        else _store[typeof(TFeature)] = instance;
+    }
+
+    public IEnumerator<KeyValuePair<Type, object>> GetEnumerator() => _store.GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+internal sealed class TestFunctionDefinition : FunctionDefinition
+{
+    public TestFunctionDefinition(string entryPoint) => EntryPoint = entryPoint;
+    public override string PathToAssembly => "";
+    public override string EntryPoint { get; }
+    public override string Id => "test-id";
+    public override string Name => EntryPoint[(EntryPoint.LastIndexOf('.') + 1)..];
+    public override ImmutableArray<FunctionParameter> Parameters => ImmutableArray<FunctionParameter>.Empty;
+    public override ImmutableDictionary<string, BindingMetadata> InputBindings =>
+        ImmutableDictionary<string, BindingMetadata>.Empty;
+    public override ImmutableDictionary<string, BindingMetadata> OutputBindings =>
+        ImmutableDictionary<string, BindingMetadata>.Empty;
+}
+
+/// <summary>
+/// FunctionContext wired for middleware tests: has a real FunctionDefinition (entry point) and
+/// a Features implementation that returns null for any unknown feature type (so
+/// GetHttpRequestDataAsync returns null, exercising the non-HTTP trigger branch).
+/// </summary>
+internal sealed class TestMiddlewareContext : FunctionContext
+{
+    private readonly IServiceProvider _services;
+    private readonly TestInvocationFeatures _features = new();
+
+    public TestMiddlewareContext(string entryPoint)
+    {
+        Definition = new TestFunctionDefinition(entryPoint);
+        var sc = new ServiceCollection();
+        sc.Configure<WorkerOptions>(o =>
+            o.Serializer = new JsonObjectSerializer(new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        _services = sc.BuildServiceProvider();
+    }
+
+    public TestFunctionDefinition Definition { get; }
+    public override IDictionary<object, object> Items { get; set; } = new Dictionary<object, object>();
+    public override IServiceProvider InstanceServices { get => _services; set { } }
+    public override string InvocationId => "mw-invocation";
+    public override string FunctionId => "mw-function";
+    public override TraceContext TraceContext => throw new NotSupportedException();
+    public override BindingContext BindingContext => throw new NotSupportedException();
+    public override RetryContext RetryContext => throw new NotSupportedException();
+    public override FunctionDefinition FunctionDefinition => Definition;
+    public override IInvocationFeatures Features => _features;
+
+    public TestMiddlewareContext WithUser(string oid, string name, params string[] roles)
+    {
+        var identity = new ClaimsIdentity("test", "name", "roles");
+        identity.AddClaim(new Claim("oid", oid));
+        identity.AddClaim(new Claim("name", name));
+        foreach (var r in roles) identity.AddClaim(new Claim("roles", r));
+        Items[JwtMiddleware.PrincipalContextKey] = new ClaimsPrincipal(identity);
+        return this;
+    }
 }

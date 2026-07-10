@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Coverlet settings. Excludes:
+    Source-generated files (Azure Functions SDK emits .g.cs in obj/),
+    Program.cs startup/DI wiring, and pure configuration classes.
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <!-- Exclude auto-generated files, SDK wiring, and I/O-only infrastructure adapters.
+               Repository/service implementations that wrap Azure Storage, Blob, Entra, and CIAM
+               APIs cannot be unit-tested without live infrastructure and are covered separately
+               by integration tests. TracingMiddleware is pure SDK infra (W3C propagation). -->
+          <ExcludeByFile>
+            **/obj/**/*.g.cs,
+            **/Program.cs,
+            **/Infrastructure/OpenApiConfig.cs,
+            **/Infrastructure/OtelSources.cs,
+            **/Infrastructure/SwaggerUiOptions.cs,
+            **/Infrastructure/TracingMiddleware.cs,
+            **/Infrastructure/TableBootstrapper.cs,
+            **/Services/ContentRepository.cs,
+            **/Services/BlobService.cs,
+            **/Services/ContentBodyStore.cs,
+            **/Services/TableStore.cs,
+            **/Services/EntraUserService.cs,
+            **/Services/CiamInviteService.cs
+          </ExcludeByFile>
+          <!-- Exclude generated Azure Functions SDK types by class name -->
+          <Exclude>[Slypn.Api]Slypn.Api.WorkerExtensionStartupCodeExecutor*</Exclude>
+          <ExcludeByAttribute>ExcludeFromCodeCoverage,GeneratedCode</ExcludeByAttribute>
+          <Format>cobertura</Format>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

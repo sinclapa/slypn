@@ -87,4 +87,38 @@ public class AuthExtensionFunctionsTests
         var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
         Assert.Contains("showBlockPage", Read(resp));
     }
+
+    [Fact]
+    public async Task Blocks_on_extension_id_mismatch()
+    {
+        var fn = Make(new FakeContentRepository { Writes = false }, new SignupGateOptions { ExtensionId = "correct-ext-id" });
+        var body = "{\"data\":{\"tenantId\":null,\"customAuthenticationExtensionId\":\"wrong-ext-id\"," +
+                   "\"authenticationContext\":{\"user\":{\"mail\":\"a@b.com\"}}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
+
+    [Fact]
+    public async Task Parses_email_from_identity_array_with_emailAddress_signInType()
+    {
+        // Tests FirstIdentityEmail: email comes via identities array rather than user.mail
+        var repo = new FakeContentRepository { MemberByEmail = new Member("m1", "identity@example.com", "A", new[] { "Member" }, "invited", DateTime.UtcNow) };
+        var fn = Make(repo);
+        var body = "{\"data\":{\"tenantId\":null,\"authenticationContext\":{\"user\":{" +
+                   "\"identities\":[{\"signInType\":\"emailAddress\",\"issuerAssignedId\":\"identity@example.com\"}]}}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("continueWithDefaultBehavior", Read(resp));
+    }
+
+    [Fact]
+    public async Task Blocks_when_member_lookup_throws()
+    {
+        var repo = new FakeContentRepository { ThrowOnMemberEmailLookup = new Exception("Cosmos unavailable") };
+        var fn = Make(repo);
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", Body("a@b.com"));
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
 }
