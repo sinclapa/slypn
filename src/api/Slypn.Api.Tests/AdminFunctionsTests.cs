@@ -296,7 +296,7 @@ public class AdminFunctionsTests
     }
 
     [Fact]
-    public async Task Members_update_roles_400_when_role_unknown_and_412_when_storage_fails()
+    public async Task Members_update_roles_400_when_role_unknown_and_500_when_read_fails_and_412_when_upsert_fails()
     {
         // Bad role → 400 (line 123)
         var repo = new FakeContentRepository { MemberById = Member() };
