@@ -28,7 +28,7 @@ internal sealed class FakeContentRepository : IContentRepository
     public List<Draft> Drafts = new();
     public Draft? DraftById;
 
-    /// <summary>Set to throw from the next write to exercise storage error mapping.</summary>
+    /// <summary>Set to throw from writes to exercise storage error mapping.</summary>
     public Exception? ThrowOnWrite { get; set; }
 
     /// <summary>Set to throw from read operations that have catch (RequestFailedException) blocks.</summary>
