@@ -340,7 +340,7 @@ public class AdminFunctionsTests
     }
 
     [Fact]
-    public async Task Members_list_412_when_storage_fails()
+    public async Task Members_list_500_when_storage_fails()
     {
         var repo = new FakeContentRepository { ThrowOnRead = new RequestFailedException(500, "Storage error") };
         var fn = MembersFn(repo);
