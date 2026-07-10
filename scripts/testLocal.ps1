@@ -59,7 +59,8 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
 
-$apiTestsProj = Join-Path $RepoRoot 'src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj'
+$apiTestsProj     = Join-Path $RepoRoot 'src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj'
+$apiRunSettings   = Join-Path $RepoRoot 'src/api/Slypn.Api.Tests/coverlet.runsettings'
 $resultsDir   = Join-Path $RepoRoot '.testresults'
 $apiCovDir    = Join-Path $resultsDir 'api-coverage'
 $webCovDir    = Join-Path $resultsDir 'web-coverage'
@@ -110,6 +111,7 @@ New-Item -ItemType Directory -Path $resultsDir | Out-Null
 if (-not $SkipApi) {
     Write-Step 'API tests (.NET) with coverage'
     & dotnet test $apiTestsProj `
+        --settings $apiRunSettings `
         --collect:"XPlat Code Coverage" `
         --results-directory $apiCovDir `
         --nologo -v q 2>&1 | Tee-Object -Variable apiOut
