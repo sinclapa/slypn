@@ -468,4 +468,308 @@ public class ContentFunctionsTests
         var resp = (TestHttpResponseData)await fn.WhoAmI(TestHttp.Get(ctx, "http://localhost/api/whoami"), ctx);
         Assert.Equal(System.Net.HttpStatusCode.OK, resp.StatusCode);
     }
+
+    // ── Me: OID linking with preferred_username and null-name branches ────────
+
+    [Fact]
+    public async Task Me_links_oid_using_preferred_username_when_no_email_claim()
+    {
+        var repo = new FakeContentRepository
+        {
+            MemberByOid   = null,
+            MemberByEmail = new Slypn.Api.Models.Member("m1", "pref@example.com", "Pref User",
+                new[] { "Member" }, "invited", DateTime.UtcNow, Oid: "old-oid")
+        };
+        var fn = MeFn(repo);
+        // Principal with "preferred_username" but no "email" claim
+        var identity = new System.Security.Claims.ClaimsIdentity("test", "name", "roles");
+        identity.AddClaim(new System.Security.Claims.Claim("oid",                "new-oid"));
+        identity.AddClaim(new System.Security.Claims.Claim("name",              "Pref User"));
+        identity.AddClaim(new System.Security.Claims.Claim("preferred_username", "pref@example.com"));
+        identity.AddClaim(new System.Security.Claims.Claim("roles",             "Member"));
+        var ctx = new TestFunctionContext();
+        ctx.Items[JwtMiddleware.PrincipalContextKey] = new System.Security.Claims.ClaimsPrincipal(identity);
+
+        var resp = (TestHttpResponseData)await fn.Get(TestHttp.Get(ctx, "http://localhost/api/me"), ctx, Ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Contains("Member", resp.ReadBodyAsString());
+    }
+
+    [Fact]
+    public async Task Me_links_oid_uses_email_display_name_when_jwt_has_no_name()
+    {
+        var repo = new FakeContentRepository
+        {
+            MemberByOid   = null,
+            MemberByEmail = new Slypn.Api.Models.Member("m1", "user@example.com", "Stored Name",
+                new[] { "Member" }, "invited", DateTime.UtcNow, Oid: "old-oid")
+        };
+        var fn = MeFn(repo);
+        // Principal with email but no "name" claim → GetUserName() returns null → falls back to byEmail.DisplayName
+        var identity = new System.Security.Claims.ClaimsIdentity("test", "oid", "roles");
+        identity.AddClaim(new System.Security.Claims.Claim("oid",   "new-oid"));
+        identity.AddClaim(new System.Security.Claims.Claim("email", "user@example.com"));
+        identity.AddClaim(new System.Security.Claims.Claim("roles", "Member"));
+        var ctx = new TestFunctionContext();
+        ctx.Items[JwtMiddleware.PrincipalContextKey] = new System.Security.Claims.ClaimsPrincipal(identity);
+
+        var resp = (TestHttpResponseData)await fn.Get(TestHttp.Get(ctx, "http://localhost/api/me"), ctx, Ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Me_links_oid_with_accepted_member_keeps_existing_status()
+    {
+        // AcceptedAt is set → Status stays byEmail.Status, AcceptedAt stays as-is
+        var repo = new FakeContentRepository
+        {
+            MemberByOid   = null,
+            MemberByEmail = new Slypn.Api.Models.Member("m1", "acc@example.com", "Alice",
+                new[] { "Member" }, "active", DateTime.UtcNow,
+                AcceptedAt: DateTime.UtcNow, Oid: "old-oid")
+        };
+        var fn = MeFn(repo);
+        var identity = new System.Security.Claims.ClaimsIdentity("test", "name", "roles");
+        identity.AddClaim(new System.Security.Claims.Claim("oid",   "new-oid"));
+        identity.AddClaim(new System.Security.Claims.Claim("name",  "Alice"));
+        identity.AddClaim(new System.Security.Claims.Claim("email", "acc@example.com"));
+        identity.AddClaim(new System.Security.Claims.Claim("roles", "Member"));
+        var ctx = new TestFunctionContext();
+        ctx.Items[JwtMiddleware.PrincipalContextKey] = new System.Security.Claims.ClaimsPrincipal(identity);
+
+        var resp = (TestHttpResponseData)await fn.Get(TestHttp.Get(ctx, "http://localhost/api/me"), ctx, Ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Contains("active", resp.ReadBodyAsString());
+    }
+
+    // ── Events: validation error and missing-event branches ──────────────────
+
+    [Fact]
+    public async Task Events_create_400_on_invalid_input()
+    {
+        var fn = EventsFn(new FakeContentRepository());
+        var ctx = new TestFunctionContext().WithUser("oid", "U", "Contributor");
+        // Empty object fails required-field validation
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/events", new { }), ctx, Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Events_replace_503_when_writes_disabled()
+    {
+        var fn = EventsFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext().WithUser("admin", "A", "Admin");
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/events/e1", ValidEvent()), "e1", ctx, Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Events_replace_400_on_invalid_input()
+    {
+        var fn = EventsFn(new FakeContentRepository());
+        var ctx = new TestFunctionContext().WithUser("admin", "A", "Admin");
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/events/e1", new { }), "e1", ctx, Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Events_replace_404_when_event_not_found()
+    {
+        var fn = EventsFn(new FakeContentRepository()); // EventById = null
+        var ctx = new TestFunctionContext().WithUser("admin", "A", "Admin");
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/events/e1", ValidEvent()), "e1", ctx, Ct);
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Events_delete_503_when_writes_disabled()
+    {
+        var fn = EventsFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext().WithUser("admin", "A", "Admin");
+        var resp = (TestHttpResponseData)await fn.Delete(
+            TestHttp.Raw(ctx, "DELETE", "http://localhost/api/events/e1", ""), "e1", ctx, Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    // ── Events: GetEvents upcoming=false branch ───────────────────────────────
+
+    [Fact]
+    public async Task Events_list_without_upcoming_param_returns_200()
+    {
+        var fn = EventsFn(new FakeContentRepository { Events = { Event() } });
+        var resp = (TestHttpResponseData)await fn.GetEvents(
+            TestHttp.Get(new TestFunctionContext(), "http://localhost/api/events"), Ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    // ── Newsletters: writes-disabled and validation-error branches ────────────
+
+    [Fact]
+    public async Task Newsletters_create_503_when_writes_disabled()
+    {
+        var fn = NewslettersFn(new FakeContentRepository { Writes = false });
+        var valid = new { title = "June 2026", issueDate = "2026-06-01", summary = "A long enough summary.", topics = new[] { "x" } };
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletters", valid), Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Newsletters_create_400_on_invalid_input()
+    {
+        var fn = NewslettersFn(new FakeContentRepository());
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletters", new { }), Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Newsletters_replace_400_on_invalid_input()
+    {
+        var fn = NewslettersFn(new FakeContentRepository());
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(new TestFunctionContext(), "PUT", "http://localhost/api/newsletters/n1", new { }), "n1", Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Newsletters_subscribe_503_when_writes_disabled()
+    {
+        var fn = NewslettersFn(new FakeContentRepository { Writes = false });
+        var resp = (TestHttpResponseData)await fn.Subscribe(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+                new { email = "me@example.com" }), Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Newsletters_subscribe_400_on_invalid_input()
+    {
+        var fn = NewslettersFn(new FakeContentRepository());
+        // Empty object → email field fails [Required, EmailAddress] validation
+        var resp = (TestHttpResponseData)await fn.Subscribe(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+                new { }), Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Newsletters_subscribe_updates_existing_pure_subscriber()
+    {
+        // existing subscriber with no roles and no Oid → Status stays "subscribed"
+        var existing = new Slypn.Api.Models.Member("m1", "sub@example.com", "Old Display",
+            Array.Empty<string>(), "subscribed", DateTime.UtcNow);
+        var repo = new FakeContentRepository { MemberByEmail = existing };
+        var fn = NewslettersFn(repo);
+
+        // With displayName → covers the non-whitespace displayName branch
+        var resp = (TestHttpResponseData)await fn.Subscribe(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+                new { email = "sub@example.com", displayName = "New Display" }), Ct);
+        Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
+        Assert.Contains("sub@example.com", resp.ReadBodyAsString());
+    }
+
+    [Fact]
+    public async Task Newsletters_subscribe_existing_subscriber_without_display_name_keeps_existing()
+    {
+        var existing = new Slypn.Api.Models.Member("m1", "sub@example.com", "Old Display",
+            Array.Empty<string>(), "subscribed", DateTime.UtcNow);
+        var repo = new FakeContentRepository { MemberByEmail = existing };
+        var fn = NewslettersFn(repo);
+
+        // Without displayName → keeps existing.DisplayName
+        var resp = (TestHttpResponseData)await fn.Subscribe(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+                new { email = "sub@example.com" }), Ct);
+        Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
+    }
+
+    [Fact]
+    public async Task Newsletters_subscribe_existing_member_with_roles_preserves_status()
+    {
+        // existing member with roles → Status preserved (not overwritten with "subscribed")
+        var existing = new Slypn.Api.Models.Member("m1", "mem@example.com", "Alice",
+            new[] { "Member" }, "active", DateTime.UtcNow, Oid: "oid-1");
+        var repo = new FakeContentRepository { MemberByEmail = existing };
+        var fn = NewslettersFn(repo);
+
+        var resp = (TestHttpResponseData)await fn.Subscribe(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+                new { email = "mem@example.com" }), Ct);
+        Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
+        Assert.Contains("active", resp.ReadBodyAsString());
+    }
+
+    // ── Resources: writes-disabled and validation-error branches ─────────────
+
+    [Fact]
+    public async Task Resources_create_503_when_writes_disabled()
+    {
+        var fn = ResourcesFn(new FakeContentRepository { Writes = false });
+        var valid = new { title = "T", description = "Support line for members", url = "https://x.org/a", category = "NHS" };
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/resources", valid), Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Resources_create_400_on_invalid_input()
+    {
+        var fn = ResourcesFn(new FakeContentRepository());
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/resources", new { }), Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Resources_replace_400_on_invalid_input()
+    {
+        var fn = ResourcesFn(new FakeContentRepository());
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(new TestFunctionContext(), "PUT", "http://localhost/api/resources/r1", new { }), "r1", Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Resources_delete_503_when_writes_disabled()
+    {
+        var fn = ResourcesFn(new FakeContentRepository { Writes = false });
+        var resp = (TestHttpResponseData)await fn.Delete(
+            TestHttp.Raw(new TestFunctionContext(), "DELETE", "http://localhost/api/resources/r1?category=NHS", ""), "r1", Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    // ── FunctionHelpers: null body and storage exception mapping ─────────────
+
+    [Fact]
+    public async Task ReadValidatedAsync_returns_400_on_null_body()
+    {
+        // JSON "null" deserialises to null → triggers "Empty request body" branch
+        var fn = NewslettersFn(new FakeContentRepository());
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/newsletters", "null",
+                new Dictionary<string, string> { ["Content-Type"] = "application/json" }), Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task MapStorageException_maps_404_and_409_status_codes()
+    {
+        var valid = new { title = "June 2026", issueDate = "2026-06-01", summary = "A long enough summary.", topics = new[] { "x" } };
+
+        var fn404 = NewslettersFn(new FakeContentRepository { ThrowOnWrite = new Azure.RequestFailedException(404, "Not found") });
+        var resp404 = (TestHttpResponseData)await fn404.Create(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletters", valid), Ct);
+        Assert.Equal(HttpStatusCode.NotFound, resp404.StatusCode);
+
+        var fn409 = NewslettersFn(new FakeContentRepository { ThrowOnWrite = new Azure.RequestFailedException(409, "Conflict") });
+        var resp409 = (TestHttpResponseData)await fn409.Create(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletters", valid), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, resp409.StatusCode);
+    }
 }

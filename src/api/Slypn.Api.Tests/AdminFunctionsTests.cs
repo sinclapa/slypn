@@ -2,6 +2,7 @@ using Azure;
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Slypn.Api.Functions;
+using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
 using Slypn.Api.Services;
 using Xunit;
@@ -364,5 +365,147 @@ public class AdminFunctionsTests
         var notFound = (TestHttpResponseData)await fn.Delete(
             TestHttp.Raw(ctx, "DELETE", "http://localhost/api/members/m1", ""), "m1", ctx, Ct);
         Assert.Equal(HttpStatusCode.NotFound, notFound.StatusCode);
+    }
+
+    // ── Drafts writes-disabled branches ──────────────────────────────────────
+
+    [Fact]
+    public async Task Drafts_list_503_when_writes_disabled()
+    {
+        var fn = DraftsFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext().WithUser("oid-1", "A", "Contributor");
+        var resp = (TestHttpResponseData)await fn.List(TestHttp.Get(ctx, "http://localhost/api/drafts"), ctx, Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_get_503_when_writes_disabled()
+    {
+        var fn = DraftsFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext().WithUser("oid-1", "A", "Contributor");
+        var resp = (TestHttpResponseData)await fn.Get(TestHttp.Get(ctx, "http://localhost/api/drafts/d1"), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_get_400_when_no_oid()
+    {
+        var fn = DraftsFn(new FakeContentRepository());
+        var ctx = new TestFunctionContext(); // no principal → no oid
+        var resp = (TestHttpResponseData)await fn.Get(TestHttp.Get(ctx, "http://localhost/api/drafts/d1"), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_upsert_503_when_writes_disabled()
+    {
+        var fn = DraftsFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext().WithUser("oid-1", "A", "Contributor");
+        var body = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var resp = (TestHttpResponseData)await fn.Upsert(TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", body), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_upsert_400_when_no_oid()
+    {
+        var fn = DraftsFn(new FakeContentRepository());
+        var ctx = new TestFunctionContext(); // no principal → no oid
+        var body = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var resp = (TestHttpResponseData)await fn.Upsert(TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", body), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_upsert_with_existing_draft_uses_etag_and_falls_back_to_member_name()
+    {
+        var repo = new FakeContentRepository { DraftById = Draft() };
+        var fn = DraftsFn(repo);
+        // Context with oid but no "name" claim — triggers the "Member" fallback in authorName
+        var identity = new System.Security.Claims.ClaimsIdentity("test", "oid", "roles");
+        identity.AddClaim(new System.Security.Claims.Claim("oid", "oid-1"));
+        identity.AddClaim(new System.Security.Claims.Claim("roles", "Contributor"));
+        var ctx = new TestFunctionContext();
+        ctx.Items[JwtMiddleware.PrincipalContextKey] = new System.Security.Claims.ClaimsPrincipal(identity);
+
+        var body = new { type = "article", title = "Updated", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var resp = (TestHttpResponseData)await fn.Upsert(TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", body), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_delete_503_when_writes_disabled()
+    {
+        var fn = DraftsFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext().WithUser("oid-1", "A", "Contributor");
+        var resp = (TestHttpResponseData)await fn.Delete(TestHttp.Raw(ctx, "DELETE", "http://localhost/api/drafts/d1", ""), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_delete_400_when_no_oid()
+    {
+        var fn = DraftsFn(new FakeContentRepository());
+        var ctx = new TestFunctionContext(); // no principal → no oid
+        var resp = (TestHttpResponseData)await fn.Delete(TestHttp.Raw(ctx, "DELETE", "http://localhost/api/drafts/d1", ""), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Drafts_submit_400_when_no_oid()
+    {
+        var fn = DraftsFn(new FakeContentRepository());
+        var ctx = new TestFunctionContext(); // no principal → no oid
+        var resp = (TestHttpResponseData)await fn.Submit(TestHttp.Raw(ctx, "POST", "http://localhost/api/drafts/d1/submit", ""), ctx, "d1", Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    // ── Members writes-disabled and existing-member branches ─────────────────
+
+    [Fact]
+    public async Task Members_invite_503_when_writes_disabled()
+    {
+        var fn = MembersFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext().WithUser("admin-oid", "Admin", "Admin");
+        var resp = (TestHttpResponseData)await fn.Invite(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/members/invite", new { email = "x@y.com", displayName = "X", roles = new[] { "Member" } }), ctx, Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Members_update_roles_503_when_writes_disabled()
+    {
+        var fn = MembersFn(new FakeContentRepository { Writes = false });
+        var resp = (TestHttpResponseData)await fn.UpdateRoles(
+            TestHttp.Json(new TestFunctionContext(), "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } }), "m1", Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Members_invite_updates_existing_invited_member()
+    {
+        // existing member with AcceptedAt = null → Status stays "invited"
+        var existing = new Member("m1", "x@y.com", "Old Name", new[] { "Member" }, "invited", DateTime.UtcNow) { Etag = "etag-1" };
+        var repo = new FakeContentRepository { MemberByEmail = existing };
+        var fn = MembersFn(repo);
+        var ctx = new TestFunctionContext().WithUser("admin-oid", "Admin", "Admin");
+        var resp = (TestHttpResponseData)await fn.Invite(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/members/invite", new { email = "x@y.com", displayName = "New Name", roles = new[] { "Member" } }), ctx, Ct);
+        Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
+        Assert.Contains("New Name", resp.ReadBodyAsString());
+    }
+
+    [Fact]
+    public async Task Members_invite_updates_existing_accepted_member_to_active()
+    {
+        // existing member with AcceptedAt set → Status becomes "active"
+        var existing = new Member("m1", "x@y.com", "Alice", new[] { "Member" }, "invited", DateTime.UtcNow,
+            AcceptedAt: DateTime.UtcNow) { Etag = "etag-1" };
+        var repo = new FakeContentRepository { MemberByEmail = existing };
+        var fn = MembersFn(repo);
+        var ctx = new TestFunctionContext().WithUser("admin-oid", "Admin", "Admin");
+        var resp = (TestHttpResponseData)await fn.Invite(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/members/invite", new { email = "x@y.com", displayName = "Alice", roles = new[] { "Member" } }), ctx, Ct);
+        Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
     }
 }

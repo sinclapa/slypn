@@ -175,4 +175,14 @@ public class SwaggerTests
         MakeFilter().Apply(null!, doc); // Must not throw
         Assert.True(doc.Components.SecuritySchemes.ContainsKey("oauth2"));
     }
+
+    [Fact]
+    public void SwaggerOAuthFilter_initialises_null_components_and_security_schemes()
+    {
+        // Document with no Components/SecuritySchemes → ??= branches assign new instances
+        var doc = new OpenApiDocument { Paths = new OpenApiPaths() };
+        MakeFilter().Apply(null!, doc);
+        Assert.NotNull(doc.Components);
+        Assert.True(doc.Components.SecuritySchemes.ContainsKey("oauth2"));
+    }
 }

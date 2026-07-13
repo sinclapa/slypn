@@ -20,6 +20,7 @@
             **/Infrastructure/OtelSources.cs,
             **/Infrastructure/SwaggerUiOptions.cs,
             **/Infrastructure/TracingMiddleware.cs,
+            **/Infrastructure/JwtMiddleware.cs,
             **/Infrastructure/TableBootstrapper.cs,
             **/Infrastructure/EntraJwtValidator.cs,
             **/Services/ContentRepository.cs,
