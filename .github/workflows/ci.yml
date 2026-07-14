@@ -125,6 +125,7 @@ jobs:
           /d:sonar.typescript.lcov.reportPaths="src/web/coverage/lcov.info"
           /d:sonar.exclusions="**/node_modules/**,**/dist/**,**/coverage/**,**/playwright-report/**,**/test-results/**,**/bin/**,**/obj/**"
           /d:sonar.test.inclusions="src/web/src/**/*.spec.ts,src/web/src/**/*.test.ts,src/web/e2e/**"
+          /d:sonar.qualitygate.wait=true
 
       - name: Restore (API)
         run: dotnet restore src/api/Slypn.Api/Slypn.Api.csproj
@@ -143,4 +144,4 @@ jobs:
       - name: End SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: dotnet-sonarscanner end /d:sonar.qualitygate.wait=true
+        run: dotnet-sonarscanner end
