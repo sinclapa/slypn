@@ -200,8 +200,9 @@ async function remove(r: Resource) {
         </h3>
         <form class="mt-4 space-y-4" @submit.prevent="save">
           <div>
-            <label class="block text-sm font-medium text-slypn-800">Title</label>
+            <label for="resource-title" class="block text-sm font-medium text-slypn-800">Title</label>
             <input
+              id="resource-title"
               v-model="form.title"
               type="text"
               maxlength="200"
@@ -210,8 +211,9 @@ async function remove(r: Resource) {
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-slypn-800">Description</label>
+            <label for="resource-description" class="block text-sm font-medium text-slypn-800">Description</label>
             <textarea
+              id="resource-description"
               v-model="form.description"
               rows="3"
               maxlength="500"
@@ -220,8 +222,9 @@ async function remove(r: Resource) {
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-slypn-800">URL</label>
+            <label for="resource-url" class="block text-sm font-medium text-slypn-800">URL</label>
             <input
+              id="resource-url"
               v-model="form.url"
               type="url"
               maxlength="500"
@@ -231,8 +234,9 @@ async function remove(r: Resource) {
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-slypn-800">Category</label>
+            <label for="resource-category" class="block text-sm font-medium text-slypn-800">Category</label>
             <input
+              id="resource-category"
               v-model="form.category"
               type="text"
               maxlength="60"
