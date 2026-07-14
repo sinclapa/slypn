@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import EventsIcon from '@/components/common/EventsIcon.vue'
 import EventCard from '@/components/common/EventCard.vue'
 import EventCalendar from '@/components/common/EventCalendar.vue'
 import PillFilter from '@/components/common/PillFilter.vue'
@@ -99,6 +100,10 @@ onBeforeUnmount(() => observer?.disconnect())
     title="Coffee meet-ups, drinks, Q&amp;As, and activities"
     subtitle="Most of our events are weekend or evening meet-ups around South London. Drop-in, no booking — just turn up. Partners and carers welcome. Some are limited capacity so please check."
   >
+    <template #brand>
+      <EventsIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+    </template>
+
     <template #actions>
       <div class="inline-flex rounded-md border border-slypn-200 bg-white p-1">
         <button
