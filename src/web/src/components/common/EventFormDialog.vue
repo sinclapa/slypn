@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { apiFetch } from '@/lib/api'
+import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { EVENT_TYPES } from '@/lib/eventTypes'
 import type { CommunityEvent } from '@/types/content'
 
@@ -93,10 +93,7 @@ async function submit() {
     if (isEdit && props.event!._etag) headers['If-Match'] = `"${props.event!._etag}"`
 
     const resp = await apiFetch(url, { method, body, headers })
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${text ? ` — ${text}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     const saved = await resp.json() as CommunityEvent
     emit('saved', saved)
     emit('close')
@@ -133,8 +130,9 @@ async function submit() {
           <!-- form -->
           <form class="space-y-4 px-6 py-5" @submit.prevent="submit">
             <div>
-              <label class="block text-sm font-medium text-slypn-800">Title</label>
+              <label for="event-title" class="block text-sm font-medium text-slypn-800">Title</label>
               <input
+                id="event-title"
                 v-model="title"
                 type="text"
                 required
@@ -144,8 +142,9 @@ async function submit() {
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-slypn-800">Type</label>
+              <label for="event-type" class="block text-sm font-medium text-slypn-800">Type</label>
               <select
+                id="event-type"
                 v-model="type"
                 required
                 class="mt-1 w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
@@ -156,8 +155,9 @@ async function submit() {
 
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-medium text-slypn-800">Starts at</label>
+                <label for="event-starts-at" class="block text-sm font-medium text-slypn-800">Starts at</label>
                 <input
+                  id="event-starts-at"
                   v-model="startsAt"
                   type="datetime-local"
                   required
@@ -165,8 +165,9 @@ async function submit() {
                 />
               </div>
               <div>
-                <label class="block text-sm font-medium text-slypn-800">Ends at</label>
+                <label for="event-ends-at" class="block text-sm font-medium text-slypn-800">Ends at</label>
                 <input
+                  id="event-ends-at"
                   v-model="endsAt"
                   type="datetime-local"
                   required
@@ -176,8 +177,9 @@ async function submit() {
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-slypn-800">Location</label>
+              <label for="event-location" class="block text-sm font-medium text-slypn-800">Location</label>
               <input
+                id="event-location"
                 v-model="location"
                 type="text"
                 required
@@ -187,8 +189,9 @@ async function submit() {
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-slypn-800">Description</label>
+              <label for="event-description" class="block text-sm font-medium text-slypn-800">Description</label>
               <textarea
+                id="event-description"
                 v-model="description"
                 required
                 maxlength="2000"
@@ -198,10 +201,11 @@ async function submit() {
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-slypn-800">
+              <label for="event-signup-url" class="block text-sm font-medium text-slypn-800">
                 Sign-up URL <span class="font-normal text-slypn-400">(optional)</span>
               </label>
               <input
+                id="event-signup-url"
                 v-model="signupUrl"
                 type="url"
                 class="mt-1 w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"

@@ -19,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
 
 if (-not (Test-DockerRunning)) {
-    Write-Err 'Docker daemon is not running; nothing to clean.'
+    Show-Err 'Docker daemon is not running; nothing to clean.'
     exit 1
 }
 
@@ -29,8 +29,8 @@ foreach ($name in @($AzuriteContainer)) {
             docker stop $name | Out-Null
         }
         docker rm $name | Out-Null
-        Write-Ok "removed $name"
+        Show-Ok "removed $name"
     } else {
-        Write-Warn "$name does not exist"
+        Show-Warn "$name does not exist"
     }
 }

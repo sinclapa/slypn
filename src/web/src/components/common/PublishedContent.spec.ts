@@ -4,7 +4,10 @@ import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { defineComponent, h } from 'vue'
 
 const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }))
-vi.mock('@/lib/api', () => ({ apiFetch, apiJson: vi.fn() }))
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return { ...actual, apiFetch, apiJson: vi.fn() }
+})
 
 import PublishedContent from './PublishedContent.vue'
 import { useAuthStore } from '@/stores/auth'

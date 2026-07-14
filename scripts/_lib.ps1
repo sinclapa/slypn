@@ -17,16 +17,16 @@ $script:AzuriteBlobPort  = 10000
 $script:AzuriteQueuePort = 10001
 $script:AzuriteTablePort = 10002
 
-function Write-Step($msg) {
+function Show-Step($msg) {
     Write-Host "==> $msg" -ForegroundColor Cyan
 }
-function Write-Ok($msg) {
+function Show-Ok($msg) {
     Write-Host "    $msg" -ForegroundColor Green
 }
-function Write-Warn($msg) {
+function Show-Warn($msg) {
     Write-Host "    $msg" -ForegroundColor Yellow
 }
-function Write-Err($msg) {
+function Show-Err($msg) {
     Write-Host "    $msg" -ForegroundColor Red
 }
 
@@ -39,7 +39,7 @@ function Stop-Port($port) {
     foreach ($procId in ($procIds | Sort-Object -Unique)) {
         if ($procId) {
             $name = (Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName
-            Write-Host "    killing PID $procId ($name) on port $port" -ForegroundColor DarkGray
+            Write-Output "    killing PID $procId ($name) on port $port"
             Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
         }
     }

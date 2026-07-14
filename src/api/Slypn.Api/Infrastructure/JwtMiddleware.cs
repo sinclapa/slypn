@@ -22,6 +22,7 @@ public sealed class JwtMiddleware(
     private static readonly ConcurrentDictionary<string, RequireRoleAttribute?> AttrCache = new();
 
     public const string PrincipalContextKey = "Slypn.Principal";
+    private const string RolesClaimType = "roles";
 
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
     {
@@ -48,25 +49,7 @@ public sealed class JwtMiddleware(
         // member persona correctly gets 403 on Admin-only endpoints.
         if (options.Value.SkipAuth)
         {
-            logger.LogWarning("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
-            var persona = DevPersonas.Resolve(GetHeader(httpReq, DevPersonas.HeaderName));
-            var identity = new ClaimsIdentity("dev", "name", "roles");
-            identity.AddClaim(new Claim("name",  persona.Name));
-            identity.AddClaim(new Claim("oid",   persona.Oid));
-            identity.AddClaim(new Claim("email", persona.Email));
-            foreach (var role in persona.Roles)
-                identity.AddClaim(new Claim("roles", role));
-            var devPrincipal = new ClaimsPrincipal(identity);
-
-            if (attr.Roles.Length > 0 && !attr.Roles.Any(r => devPrincipal.IsInRole(r)))
-            {
-                await ShortCircuit(context, httpReq, HttpStatusCode.Forbidden,
-                    $"Required role: {string.Join(" or ", attr.Roles)}.");
-                return;
-            }
-
-            context.Items[PrincipalContextKey] = devPrincipal;
-            await next(context);
+            await InvokeDevPersonaAsync(context, httpReq, attr, next);
             return;
         }
 
@@ -84,53 +67,90 @@ public sealed class JwtMiddleware(
             return;
         }
 
-        ClaimsPrincipal principal;
+        var principal = await ValidateTokenAsync(token, context, httpReq);
+        if (principal is null)
+            return;
+
+        await EnrichRolesFromCosmosAsync(principal, context.CancellationToken);
+
+        if (!await EnforceRoleAsync(context, httpReq, attr, principal))
+            return;
+
+        context.Items[PrincipalContextKey] = principal;
+        await next(context);
+    }
+
+    private async Task InvokeDevPersonaAsync(
+        FunctionContext context, HttpRequestData httpReq, RequireRoleAttribute attr, FunctionExecutionDelegate next)
+    {
+        logger.LogWarning("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
+        var persona = DevPersonas.Resolve(GetHeader(httpReq, DevPersonas.HeaderName));
+        var identity = new ClaimsIdentity("dev", "name", RolesClaimType);
+        identity.AddClaim(new Claim("name",  persona.Name));
+        identity.AddClaim(new Claim("oid",   persona.Oid));
+        identity.AddClaim(new Claim("email", persona.Email));
+        foreach (var role in persona.Roles)
+            identity.AddClaim(new Claim(RolesClaimType, role));
+        var devPrincipal = new ClaimsPrincipal(identity);
+
+        if (!await EnforceRoleAsync(context, httpReq, attr, devPrincipal))
+            return;
+
+        context.Items[PrincipalContextKey] = devPrincipal;
+        await next(context);
+    }
+
+    private async Task<ClaimsPrincipal?> ValidateTokenAsync(string token, FunctionContext context, HttpRequestData httpReq)
+    {
         try
         {
-            principal = await validator.ValidateAsync(token, context.CancellationToken);
+            return await validator.ValidateAsync(token, context.CancellationToken);
         }
         catch (SecurityTokenException ex)
         {
             logger.LogInformation(ex, "JWT validation failed: {Message}", ex.Message);
             await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, $"Invalid token: {ex.Message}");
-            return;
+            return null;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected error validating JWT");
             await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, "Token validation error.");
-            return;
+            return null;
         }
+    }
 
+    private async Task EnrichRolesFromCosmosAsync(ClaimsPrincipal principal, CancellationToken ct)
+    {
         // Enrich principal with Cosmos roles (source of truth — overrides any JWT roles).
-        if (repo.SupportsWrites && principal.FindFirst("oid")?.Value is { Length: > 0 } callerOid)
-        {
-            try
-            {
-                var member = await repo.GetMemberByOidAsync(callerOid, context.CancellationToken);
-                if (member?.Roles is { Count: > 0 } cosmosRoles
-                    && principal.Identity is ClaimsIdentity identity)
-                {
-                    foreach (var role in cosmosRoles)
-                        if (!identity.HasClaim("roles", role))
-                            identity.AddClaim(new Claim("roles", role));
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Cosmos role enrichment failed for OID {Oid}", callerOid);
-            }
-        }
-
-        if (attr.Roles.Length > 0 && !attr.Roles.Any(r => principal.IsInRole(r)))
-        {
-            await ShortCircuit(context, httpReq, HttpStatusCode.Forbidden,
-                $"Required role: {string.Join(" or ", attr.Roles)}.");
+        if (!repo.SupportsWrites || principal.FindFirst("oid")?.Value is not { Length: > 0 } callerOid)
             return;
-        }
 
-        context.Items[PrincipalContextKey] = principal;
-        await next(context);
+        try
+        {
+            var member = await repo.GetMemberByOidAsync(callerOid, ct);
+            if (member?.Roles is { Count: > 0 } cosmosRoles
+                && principal.Identity is ClaimsIdentity identity)
+            {
+                foreach (var role in cosmosRoles.Where(role => !identity.HasClaim(RolesClaimType, role)))
+                    identity.AddClaim(new Claim(RolesClaimType, role));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Cosmos role enrichment failed for OID {Oid}", callerOid);
+        }
+    }
+
+    private static async Task<bool> EnforceRoleAsync(
+        FunctionContext context, HttpRequestData httpReq, RequireRoleAttribute attr, ClaimsPrincipal principal)
+    {
+        if (attr.Roles.Length == 0 || attr.Roles.Any(r => principal.IsInRole(r)))
+            return true;
+
+        await ShortCircuit(context, httpReq, HttpStatusCode.Forbidden,
+            $"Required role: {string.Join(" or ", attr.Roles)}.");
+        return false;
     }
 
     private static RequireRoleAttribute? GetRoleAttribute(FunctionContext context)

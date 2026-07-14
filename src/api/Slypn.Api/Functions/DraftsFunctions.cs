@@ -16,6 +16,8 @@ namespace Slypn.Api.Functions;
 
 public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sanitizer, ILogger<DraftsFunctions> log)
 {
+    private const string TokenMissingOidClaim = "Token missing oid claim.";
+
     [Function("ListMyDrafts")]
     [RequireRole("Admin", "Contributor")]
     [OpenApiOperation(operationId: "drafts.listMine", tags: new[] { "drafts" }, Summary = "List my drafts", Description = "Returns drafts for the authenticated author.")]
@@ -28,7 +30,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var authorId = context.GetUserOid();
-        if (authorId is null) return await BadRequest(req, "Token missing oid claim.");
+        if (authorId is null) return await BadRequest(req, TokenMissingOidClaim);
         try
         {
             var drafts = await repo.ListDraftsByAuthorAsync(authorId, ct);
@@ -52,7 +54,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var authorId = context.GetUserOid();
-        if (authorId is null) return await BadRequest(req, "Token missing oid claim.");
+        if (authorId is null) return await BadRequest(req, TokenMissingOidClaim);
         try
         {
             var draft = await repo.GetDraftAsync(id, authorId, ct);
@@ -82,7 +84,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
         if (!repo.SupportsWrites) return await WritesDisabled(req);
 
         var authorId = context.GetUserOid();
-        if (authorId is null) return await BadRequest(req, "Token missing oid claim.");
+        if (authorId is null) return await BadRequest(req, TokenMissingOidClaim);
 
         var (input, err) = await ReadValidatedAsync<DraftInput>(req, ct);
         if (err is not null) return err;
@@ -136,7 +138,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var authorId = context.GetUserOid();
-        if (authorId is null) return await BadRequest(req, "Token missing oid claim.");
+        if (authorId is null) return await BadRequest(req, TokenMissingOidClaim);
         try
         {
             await repo.DeleteDraftAsync(id, authorId, IfMatch(req), ct);
@@ -164,7 +166,7 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var authorId = context.GetUserOid();
-        if (authorId is null) return await BadRequest(req, "Token missing oid claim.");
+        if (authorId is null) return await BadRequest(req, TokenMissingOidClaim);
 
         try
         {

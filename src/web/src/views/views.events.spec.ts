@@ -3,7 +3,10 @@ import { mount, RouterLinkStub, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 
 const { apiJson, apiFetch } = vi.hoisted(() => ({ apiJson: vi.fn(), apiFetch: vi.fn() }))
-vi.mock('@/lib/api', () => ({ apiJson, apiFetch }))
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return { ...actual, apiJson, apiFetch }
+})
 const route = { params: {} as Record<string, string>, query: {} as Record<string, string> }
 const router = { push: vi.fn(), replace: vi.fn().mockResolvedValue(undefined), back: vi.fn() }
 vi.mock('vue-router', async (orig) => {

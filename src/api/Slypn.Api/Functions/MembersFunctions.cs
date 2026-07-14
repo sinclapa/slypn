@@ -68,8 +68,10 @@ public sealed class MembersFunctions(
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
         var now = DateTime.UtcNow;
-        var member = existing is null
-            ? new Member(
+        Member member;
+        if (existing is null)
+        {
+            member = new Member(
                 Id:          Guid.NewGuid().ToString("N"),
                 Email:       email,
                 DisplayName: input.DisplayName.Trim(),
@@ -78,14 +80,19 @@ public sealed class MembersFunctions(
                 InvitedAt:   now,
                 AcceptedAt:  null,
                 InvitedBy:   context.GetUserOid(),
-                Oid:         null)
-            : existing with
+                Oid:         null);
+        }
+        else
+        {
+            var status = existing.AcceptedAt is null ? "invited" : "active";
+            member = existing with
             {
                 DisplayName = input.DisplayName.Trim(),
                 Roles       = input.Roles.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-                Status      = existing.AcceptedAt is null ? "invited" : "active",
+                Status      = status,
                 InvitedBy   = context.GetUserOid(),
             };
+        }
 
         Member saved;
         try { saved = await repo.UpsertMemberAsync(member, existing?.Etag, ct); }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiFetch } from '@/lib/api'
+import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import DraftEditor from '@/components/editor/DraftEditor.vue'
 
@@ -108,8 +108,7 @@ async function edit(item: PublishedItem) {
   try {
     const resp = await apiFetch(`/articles/${item.id}/edit`, { method: 'POST' })
     if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
+      throw new Error(await apiErrorMessage(resp))
     }
     const draft = await resp.json() as { id: string }
     editDraftId.value = draft.id
@@ -150,7 +149,7 @@ async function remove(item: PublishedItem) {
   const prompt = auth.isAdmin
     ? `Delete "${item.title}" (${label})?\n\nThis can't be undone.`
     : `Request deletion of "${item.title}" (${label})?\n\nAn admin must approve before it is removed.`
-  if (!window.confirm(prompt)) return
+  if (!globalThis.confirm(prompt)) return
 
   busy.value = { ...busy.value, [item.id]: true }
   errors.value = { ...errors.value, [item.id]: null }
@@ -159,8 +158,7 @@ async function remove(item: PublishedItem) {
       ? await apiFetch(`/articles/${item.id}?status=published`, { method: 'DELETE' })
       : await apiFetch(`/articles/${item.id}/request-deletion`, { method: 'POST' })
     if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
+      throw new Error(await apiErrorMessage(resp))
     }
     if (auth.isAdmin) {
       items.value = items.value.filter(x => x.id !== item.id)

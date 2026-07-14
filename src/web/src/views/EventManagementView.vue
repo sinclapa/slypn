@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import MonthRangePicker from '@/components/common/MonthRangePicker.vue'
 import EventFormDialog from '@/components/common/EventFormDialog.vue'
-import { apiFetch, apiJson } from '@/lib/api'
+import { apiErrorMessage, apiFetch, apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useAuthStore } from '@/stores/auth'
 import type { CommunityEvent } from '@/types/content'
@@ -142,10 +142,7 @@ async function deleteEvent(event: CommunityEvent) {
     const headers: Record<string, string> = {}
     if (event._etag) headers['If-Match'] = `"${event._etag}"`
     const resp = await apiFetch(`/events/${event.id}`, { method: 'DELETE', headers })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     refresh()
   } catch (err) {
     deleteError.value = err instanceof Error ? err.message : String(err)
@@ -183,6 +180,7 @@ async function deleteEvent(event: CommunityEvent) {
         <input
           v-model="searchQuery"
           type="search"
+          aria-label="Search events"
           placeholder="Search by title, location, type, or date…"
           class="w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
         />

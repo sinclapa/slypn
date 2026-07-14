@@ -162,8 +162,9 @@ const fmtDate = (iso: string) =>
         <form class="mt-4 space-y-4" @submit.prevent="submitInvite">
           <div class="space-y-4">
             <div>
-              <label class="block text-sm font-medium text-slypn-800">Email</label>
+              <label for="invite-email" class="block text-sm font-medium text-slypn-800">Email</label>
               <input
+                id="invite-email"
                 v-model="invEmail"
                 type="email"
                 required
@@ -171,8 +172,9 @@ const fmtDate = (iso: string) =>
               />
             </div>
             <div>
-              <label class="block text-sm font-medium text-slypn-800">Display name</label>
+              <label for="invite-name" class="block text-sm font-medium text-slypn-800">Display name</label>
               <input
+                id="invite-name"
                 v-model="invName"
                 type="text"
                 required

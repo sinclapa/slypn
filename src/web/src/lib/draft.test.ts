@@ -20,12 +20,12 @@ describe('draft helpers', () => {
     expect(ids.size).toBe(50)
   })
 
-  it('falls back to Math.random when crypto.randomUUID is absent', () => {
+  it('falls back to crypto.getRandomValues when crypto.randomUUID is absent', () => {
     const orig = globalThis.crypto
-    vi.stubGlobal('crypto', { getRandomValues: vi.fn() })
+    vi.stubGlobal('crypto', { getRandomValues: (arr: Uint8Array) => arr.fill(0xab) })
     try {
       const id = makeDraftId()
-      expect(id).toMatch(/^[0-9a-f]+$/)
+      expect(id).toBe('ab'.repeat(16))
     } finally {
       vi.stubGlobal('crypto', orig)
     }

@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
-import { apiFetch } from '@/lib/api'
+import { apiErrorMessage, apiFetch } from '@/lib/api'
 
 const props = defineProps<{
   modelValue: string
@@ -121,10 +121,7 @@ async function onFileChosen(event: Event) {
     const fd = new FormData()
     fd.append('file', file)
     const resp = await apiFetch('/media', { method: 'POST', body: fd })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     const { url } = await resp.json() as { name: string; url: string }
     editor.chain().focus().setImage({ src: url, alt: file.name }).run()
   } catch (err) {
@@ -183,8 +180,10 @@ const buttons: ToolbarButton[] = [
         {{ uploading ? '…' : '📷' }}
       </button>
       <input
+        id="rich-text-image-upload"
         ref="fileInput"
         type="file"
+        aria-label="Insert image"
         accept="image/png,image/jpeg,image/webp"
         class="hidden"
         @change="onFileChosen"
@@ -206,8 +205,9 @@ const buttons: ToolbarButton[] = [
         </h3>
         <div class="mt-4 space-y-3">
           <div>
-            <label class="block text-sm font-medium text-slypn-800">Text</label>
+            <label for="link-text" class="block text-sm font-medium text-slypn-800">Text</label>
             <input
+              id="link-text"
               v-model="linkDialog.text"
               type="text"
               placeholder="Link text"
@@ -215,8 +215,9 @@ const buttons: ToolbarButton[] = [
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-slypn-800">URL</label>
+            <label for="link-url" class="block text-sm font-medium text-slypn-800">URL</label>
             <input
+              id="link-url"
               v-model="linkDialog.url"
               type="url"
               placeholder="https://"

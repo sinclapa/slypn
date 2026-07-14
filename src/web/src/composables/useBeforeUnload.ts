@@ -9,7 +9,7 @@ export function useBeforeUnload(shouldWarn: Ref<boolean>) {
   function handler(event: BeforeUnloadEvent) {
     if (!shouldWarn.value) return
     event.preventDefault()
-    event.returnValue = ''
+    event.returnValue = '' // NOSONAR - deprecated but still required by some browsers to trigger the prompt
   }
 
   watchEffect(() => {

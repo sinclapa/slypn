@@ -32,7 +32,7 @@ function decodeJwtPayload(token: string): { roles: string[]; oid: string | null 
   try {
     const segment = token.split('.')[1]
     if (!segment) return { roles: [], oid: null }
-    const padded  = segment.replace(/-/g, '+').replace(/_/g, '/')
+    const padded  = segment.replaceAll('-', '+').replaceAll('_', '/')
     const padding = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
     const payload = JSON.parse(atob(padded + padding)) as { roles?: unknown; oid?: unknown }
     return {
@@ -159,8 +159,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(returnTo?: string) {
     if (isDevSkipAuth) {
       account.value = makeDevAccount()
-      if (returnTo && returnTo !== window.location.href) {
-        window.location.href = returnTo
+      if (returnTo && returnTo !== globalThis.location.href) {
+        globalThis.location.href = returnTo
       }
       return
     }
@@ -171,7 +171,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await msalInstance.loginRedirect({
         scopes: [apiScope],
-        redirectStartPage: returnTo ?? window.location.href,
+        redirectStartPage: returnTo ?? globalThis.location.href,
       })
     } catch (err) {
       if (err instanceof BrowserAuthError && err.errorCode === 'interaction_in_progress') {
@@ -180,7 +180,7 @@ export const useAuthStore = defineStore('auth', () => {
         await ensureMsalInitialized()
         await msalInstance.loginRedirect({
           scopes: [apiScope],
-          redirectStartPage: returnTo ?? window.location.href,
+          redirectStartPage: returnTo ?? globalThis.location.href,
         })
         return
       }
@@ -193,7 +193,7 @@ export const useAuthStore = defineStore('auth', () => {
       account.value  = null
       apiRoles.value = []
       apiOid.value   = null
-      window.location.href = window.location.origin
+      globalThis.location.href = globalThis.location.origin
       return
     }
     if (!msalInstance || !account.value) {
@@ -213,7 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
   function setPersona(key: DevPersonaKey) {
     if (!isDevSkipAuth) return
     setActivePersonaKey(key)
-    window.location.reload()
+    globalThis.location.reload()
   }
 
   /**

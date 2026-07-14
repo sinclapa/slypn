@@ -4,6 +4,9 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"] },
+    // Adds String#replaceAll (ES2021) on top of the base ES2020 lib — well
+    // supported in all browsers this app targets, unlike bumping the whole target.
+    "lib": ["ES2020", "ES2021.String", "DOM", "DOM.Iterable"]
   }
 }

@@ -22,7 +22,7 @@ public sealed class TableBootstrapper(
     private static readonly string[] Tables =
         ["articles", "drafts", "events", "resources", "newsletters", "members"];
 
-    public async Task StartAsync(CancellationToken ct)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (!store.IsConfigured)
         {
@@ -33,19 +33,19 @@ public sealed class TableBootstrapper(
 
         foreach (var name in Tables)
         {
-            await TableFor(name).CreateIfNotExistsAsync(ct);
+            await TableFor(name).CreateIfNotExistsAsync(cancellationToken);
             logger.LogInformation("Table ready: {Table}", name);
         }
 
         if (entra.Value.SkipAuth)
-            await SeedDevPersonasAsync(ct);
+            await SeedDevPersonasAsync(cancellationToken);
     }
 
     /// <summary>
     /// Idempotently upserts the local test personas (admin/contributor/member) as
     /// active member records. Local-dev only — gated on SkipAuth.
     /// </summary>
-    private async Task SeedDevPersonasAsync(CancellationToken ct)
+    private async Task SeedDevPersonasAsync(CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
         foreach (var persona in DevPersonas.All)
@@ -62,7 +62,7 @@ public sealed class TableBootstrapper(
                 Oid:         persona.Oid);
             try
             {
-                await repo.UpsertMemberAsync(member, ifMatch: null, ct);
+                await repo.UpsertMemberAsync(member, ifMatch: null, cancellationToken);
                 logger.LogInformation("Seeded dev persona member: {Email}", persona.Email);
             }
             catch (Exception ex)
@@ -72,7 +72,7 @@ public sealed class TableBootstrapper(
         }
     }
 
-    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private Azure.Data.Tables.TableClient TableFor(string name) => name switch
     {

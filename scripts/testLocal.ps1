@@ -109,7 +109,7 @@ New-Item -ItemType Directory -Path $resultsDir | Out-Null
 
 # ── API tests + coverage ──────────────────────────────────────────────────────
 if (-not $SkipApi) {
-    Write-Step 'API tests (.NET) with coverage'
+    Show-Step 'API tests (.NET) with coverage'
     & dotnet test $apiTestsProj `
         --settings $apiRunSettings `
         --collect:"XPlat Code Coverage" `
@@ -127,14 +127,14 @@ if (-not $SkipApi) {
     $suites += [pscustomobject]@{ Name = 'API (.NET)'; Passed = $passed; Failed = $failed; Skipped = $skipped }
 
     $cov = Read-Cobertura 'API (.NET)' $apiCovDir
-    if ($cov) { $covSources += $cov } else { Write-Warn 'No API Cobertura report produced.' }
+    if ($cov) { $covSources += $cov } else { Show-Warn 'No API Cobertura report produced.' }
 } else {
-    Write-Warn 'Skipping API tests (-SkipApi).'
+    Show-Warn 'Skipping API tests (-SkipApi).'
 }
 
 # ── UI unit tests (Vitest) + coverage ─────────────────────────────────────────
 if (-not $SkipUnit) {
-    Write-Step 'UI unit tests (Vitest) with coverage'
+    Show-Step 'UI unit tests (Vitest) with coverage'
     Push-Location $WebDir
     try {
         & npx vitest run --coverage `
@@ -158,14 +158,14 @@ if (-not $SkipUnit) {
     $suites += [pscustomobject]@{ Name = 'UI unit'; Passed = $passed; Failed = $failed; Skipped = $skipped }
 
     $cov = Read-Cobertura 'UI (Vitest)' $webCovDir
-    if ($cov) { $covSources += $cov } else { Write-Warn 'No UI Cobertura report produced.' }
+    if ($cov) { $covSources += $cov } else { Show-Warn 'No UI Cobertura report produced.' }
 } else {
-    Write-Warn 'Skipping UI unit tests (-SkipUnit).'
+    Show-Warn 'Skipping UI unit tests (-SkipUnit).'
 }
 
 # ── UI e2e tests (Playwright) ─────────────────────────────────────────────────
 if (-not $SkipE2e) {
-    Write-Step 'UI e2e tests (Playwright)'
+    Show-Step 'UI e2e tests (Playwright)'
     Push-Location $WebDir
     try {
         & npx playwright install chromium 2>&1 | Out-Null   # idempotent
@@ -191,7 +191,7 @@ if (-not $SkipE2e) {
     }
     $suites += [pscustomobject]@{ Name = 'UI e2e'; Passed = $passed; Failed = $failed; Skipped = $skipped; Flaky = $flaky }
 } else {
-    Write-Warn 'Skipping UI e2e tests (-SkipE2e).'
+    Show-Warn 'Skipping UI e2e tests (-SkipE2e).'
 }
 
 # ── Test summary ──────────────────────────────────────────────────────────────
@@ -200,7 +200,7 @@ $totalFailed  = ($suites | Measure-Object -Property Failed  -Sum).Sum
 $totalSkipped = ($suites | Measure-Object -Property Skipped -Sum).Sum
 
 Write-Host ''
-Write-Step 'Test summary'
+Show-Step 'Test summary'
 foreach ($s in $suites) {
     $flakyNote = if ($s.PSObject.Properties.Name -contains 'Flaky' -and $s.Flaky -gt 0) { "   (flaky $($s.Flaky))" } else { '' }
     Write-Host ("    {0,-12} passed {1,4}   failed {2,4}   skipped {3,4}{4}" -f $s.Name, $s.Passed, $s.Failed, $s.Skipped, $flakyNote)
@@ -211,7 +211,7 @@ Write-Host ("    {0,-12} passed {1,4}   failed {2,4}   skipped {3,4}" -f 'TOTAL'
 
 # ── Coverage report ───────────────────────────────────────────────────────────
 Write-Host ''
-Write-Step "Coverage  ·  fail <$FailUnder%  ·  satisfactory <$GoodAtLeast%  ·  good >=$GoodAtLeast%"
+Show-Step "Coverage  ·  fail <$FailUnder%  ·  satisfactory <$GoodAtLeast%  ·  good >=$GoodAtLeast%"
 
 $combinedLinePct = $null
 if ($covSources.Count -gt 0) {
@@ -232,21 +232,21 @@ if ($covSources.Count -gt 0) {
     Write-Rated '  branch'       $combinedBranchPct ("{0}/{1} branches" -f $bc, $bv)
     Write-Rated '  total (line)' $combinedLinePct   ("{0}/{1} lines"    -f $lc, $lv)
 } else {
-    Write-Warn 'Coverage not measured (no instrumented suite ran).'
+    Show-Warn 'Coverage not measured (no instrumented suite ran).'
 }
 
 # ── Changed-file (branch diff) coverage ──────────────────────────────────────
 Write-Host ''
-Write-Step 'Changed-file coverage  (current branch vs main)'
+Show-Step 'Changed-file coverage  (current branch vs main)'
 
 $diffBase    = if (git rev-parse --verify origin/main 2>$null) { 'origin/main' } else { 'main' }
 $changedFiles = (git diff "$diffBase...HEAD" --name-only 2>$null) -split "`n" |
     Where-Object { $_ -match '\.(cs|ts|vue)$' -and $_ -notmatch '\.(spec|test)\.' -and $_ -notmatch '[\\/]test[\\/]' }
 
 if (-not $changedFiles) {
-    Write-Warn 'No changed source files detected on this branch.'
+    Show-Warn 'No changed source files detected on this branch.'
 } elseif ($covSources.Count -eq 0) {
-    Write-Warn 'No coverage data — run without -SkipApi/-SkipUnit to instrument.'
+    Show-Warn 'No coverage data — run without -SkipApi/-SkipUnit to instrument.'
 } else {
     $allXml = foreach ($c in $covSources) {
         if (Test-Path $c.File) { [xml](Get-Content $c.File -Raw) }
@@ -282,19 +282,19 @@ if (-not $changedFiles) {
         Write-Rated "  $label" $linePct ("{0}/{1} lines{2}" -f $lc, $lv, $brStr)
     }
     if (-not $anyFound) {
-        Write-Warn 'Changed files not found in coverage data (test/config files only?).'
+        Show-Warn 'Changed files not found in coverage data (test/config files only?).'
     }
 }
 
 # ── Verdict / exit ────────────────────────────────────────────────────────────
 Write-Host ''
 if ($totalFailed -gt 0 -or $runError) {
-    Write-Err 'FAIL — one or more tests failed.'
+    Show-Err 'FAIL — one or more tests failed.'
     exit 1
 }
 if ($null -ne $combinedLinePct -and $combinedLinePct -lt $FailUnder) {
-    Write-Err ("FAIL — combined coverage {0:N1}% is below the {1}% threshold." -f $combinedLinePct, $FailUnder)
+    Show-Err ("FAIL — combined coverage {0:N1}% is below the {1}% threshold." -f $combinedLinePct, $FailUnder)
     exit 2
 }
-Write-Ok 'PASS — all tests green and coverage gate met.'
+Show-Ok 'PASS — all tests green and coverage gate met.'
 exit 0

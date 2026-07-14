@@ -30,8 +30,8 @@ const msalConfig: Configuration = {
     clientId,
     authority,
     knownAuthorities: authority ? [new URL(authority).host] : [],
-    redirectUri:          `${window.location.origin}/auth/callback`,
-    postLogoutRedirectUri: window.location.origin,
+    redirectUri:          `${globalThis.location.origin}/auth/callback`,
+    postLogoutRedirectUri: globalThis.location.origin,
     navigateToLoginRequestUrl: true,
   },
   cache: {
@@ -52,10 +52,8 @@ let initPromise: Promise<AuthenticationResult | null> | null = null
  */
 export function ensureMsalInitialized(): Promise<AuthenticationResult | null> {
   if (!msalInstance) return Promise.resolve(null)
-  if (!initPromise) {
-    initPromise = msalInstance.initialize()
-      .then(() => msalInstance!.handleRedirectPromise())
-  }
+  initPromise ??= msalInstance.initialize()
+    .then(() => msalInstance!.handleRedirectPromise())
   return initPromise
 }
 
