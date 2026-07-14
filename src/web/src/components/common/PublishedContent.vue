@@ -226,6 +226,7 @@ onMounted(load)
         <input
           v-model="search"
           type="search"
+          aria-label="Search title or summary"
           placeholder="Search title or summary…"
           class="w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
         />
