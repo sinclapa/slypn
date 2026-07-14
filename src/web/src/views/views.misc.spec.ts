@@ -8,7 +8,7 @@ vi.mock('@/lib/api', () => ({ apiJson, apiFetch }))
 const route = { params: {} as Record<string, string>, query: {} as Record<string, string>, hash: '', fullPath: '/missing' }
 const router = {
   push: vi.fn(), replace: vi.fn(), back: vi.fn(),
-  options: { history: { state: { back: undefined as any } } },
+  options: { history: { state: { back: undefined as string | undefined } } },
 }
 vi.mock('vue-router', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)

@@ -357,6 +357,7 @@ describe('EventManagementView', () => {
   })
 
   it('deletes an event without an etag (no If-Match header)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructuring-omit pattern
     const { _etag: _, ...noEtag } = evt()
     apiJson.mockResolvedValue([noEtag])
     apiFetch.mockResolvedValue(ok({}))
