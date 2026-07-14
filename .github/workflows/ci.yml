@@ -120,7 +120,6 @@ jobs:
           /k:"sinclapa_slypn"
           /o:"cookingcode"
           /d:sonar.host.url="https://sonarcloud.io"
-          /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
           /d:sonar.cs.cobertura.reportsPaths="src/api/Slypn.Api.Tests/TestResults/**/coverage.cobertura.xml"
           /d:sonar.javascript.lcov.reportPaths="src/web/coverage/lcov.info"
           /d:sonar.typescript.lcov.reportPaths="src/web/coverage/lcov.info"
@@ -144,4 +143,4 @@ jobs:
       - name: End SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+        run: dotnet-sonarscanner end
