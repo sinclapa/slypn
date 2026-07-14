@@ -26,7 +26,7 @@ export default defineConfig({
     env: { VITE_DEV_SKIP_AUTH: 'true' },
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'cobertura'],
+      reporter: ['text', 'cobertura', 'lcov'],
       reportsDirectory: './coverage',
       include: ['src/**/*.{ts,vue}'],
       exclude: [
