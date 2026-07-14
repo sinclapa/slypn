@@ -25,7 +25,7 @@ describe('CookieBanner', () => {
 
   it('shows the dialog while no choice has been made', () => {
     const w = mountBanner()
-    expect(w.find('[role="dialog"]').exists()).toBe(true)
+    expect(w.find('dialog').exists()).toBe(true)
     expect(w.text()).toContain('We’d like to use cookies')
   })
 
@@ -44,6 +44,6 @@ describe('CookieBanner', () => {
   it('hides the dialog once a choice exists', () => {
     choice.value = 'accepted'
     const w = mountBanner()
-    expect(w.find('[role="dialog"]').exists()).toBe(false)
+    expect(w.find('dialog').exists()).toBe(false)
   })
 })

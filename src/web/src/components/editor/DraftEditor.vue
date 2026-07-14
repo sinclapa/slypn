@@ -4,7 +4,7 @@ import RichTextEditor from '@/components/editor/RichTextEditor.vue'
 import SaveIndicator from '@/components/editor/SaveIndicator.vue'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { useBeforeUnload } from '@/composables/useBeforeUnload'
-import { apiFetch } from '@/lib/api'
+import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { EMPTY_DRAFT, type DraftPayload, type DraftSummary } from '@/lib/draft'
 
 const props = defineProps<{
@@ -90,10 +90,7 @@ async function save(value: DraftPayload) {
     }
     throw new Error('412 — another tab updated this draft.')
   }
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => '')
-    throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-  }
+  if (!resp.ok) throw new Error(await apiErrorMessage(resp))
   currentEtag.value = resp.headers.get('ETag') ?? currentEtag.value
   emit('saved', {
     id: props.draftId,
@@ -117,10 +114,7 @@ async function submitForReview() {
   try {
     await save(draft.value)
     const resp = await apiFetch(`/drafts/${props.draftId}/submit`, { method: 'POST' })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     emit('submitted', props.draftId)
   } catch (err) {
     submitError.value = err instanceof Error ? err.message : String(err)
@@ -284,10 +278,11 @@ watch(() => draft.value.body, (html) => {
       </fieldset>
 
       <div>
-        <label class="block text-sm font-medium text-slypn-800">
+        <label for="draft-title" class="block text-sm font-medium text-slypn-800">
           Title <span class="text-rose-500">*</span>
         </label>
         <input
+          id="draft-title"
           v-model="draft.title"
           type="text"
           maxlength="200"
@@ -299,8 +294,9 @@ watch(() => draft.value.body, (html) => {
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-slypn-800">Category</label>
+        <label for="draft-category" class="block text-sm font-medium text-slypn-800">Category</label>
         <input
+          id="draft-category"
           v-model="draft.category"
           type="text"
           maxlength="60"
@@ -316,8 +312,9 @@ watch(() => draft.value.body, (html) => {
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-slypn-800">Summary</label>
+        <label for="draft-summary" class="block text-sm font-medium text-slypn-800">Summary</label>
         <textarea
+          id="draft-summary"
           v-model="draft.summary"
           maxlength="500"
           rows="2"

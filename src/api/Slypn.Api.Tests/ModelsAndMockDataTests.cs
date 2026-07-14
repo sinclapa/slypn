@@ -1,3 +1,4 @@
+using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
 using Slypn.Api.Services;
 using Xunit;
@@ -55,5 +56,36 @@ public class ModelsAndMockDataTests
         Assert.NotEmpty(mock.Events);
         Assert.Equal(9, mock.Resources.Count);
         Assert.Equal(4, mock.Newsletters.Count);
+    }
+
+    [Fact]
+    public void BlogPost_record_round_trips_all_fields()
+    {
+        var published = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var p = new BlogPost("id1", "my-slug", "Title", "Excerpt", "Body", "Author", published);
+        Assert.Equal("id1", p.Id);
+        Assert.Equal("my-slug", p.Slug);
+        Assert.Equal("Title", p.Title);
+        Assert.Equal("Excerpt", p.Excerpt);
+        Assert.Equal("Body", p.Body);
+        Assert.Equal("Author", p.Author);
+        Assert.Equal(published, p.PublishedAt);
+    }
+
+    [Fact]
+    public void GraphOptions_stores_tenant_and_client_ids()
+    {
+        var opts = new GraphOptions { TenantId = "t1", ClientId = "c1" };
+        Assert.Equal("t1", opts.TenantId);
+        Assert.Equal("c1", opts.ClientId);
+        Assert.True(opts.IsConfigured);
+    }
+
+    [Fact]
+    public void OtelOptions_stores_headers_and_reports_configured()
+    {
+        var opts = new OtelOptions { Endpoint = "https://otlp.example.com", Headers = "Authorization=Basic abc" };
+        Assert.Equal("Authorization=Basic abc", opts.Headers);
+        Assert.True(opts.IsConfigured);
     }
 }

@@ -38,11 +38,15 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return fetch(`/api${path}`, { ...init, headers })
 }
 
+/** Formats a failed Response as `"<status> <statusText> — <body>"` (body omitted if empty). */
+export async function apiErrorMessage(resp: Response): Promise<string> {
+  const body = await resp.text().catch(() => '')
+  const suffix = body ? ` — ${body}` : ''
+  return `${resp.status} ${resp.statusText}${suffix}`
+}
+
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const resp = await apiFetch(path, init)
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => '')
-    throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-  }
+  if (!resp.ok) throw new Error(await apiErrorMessage(resp))
   return resp.json() as Promise<T>
 }

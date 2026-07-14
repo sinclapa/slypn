@@ -28,7 +28,7 @@ $runtimeDir = Join-Path $PSScriptRoot '.runtime'
 $pidFile    = Join-Path $runtimeDir 'pids.json'
 
 if (Test-Path $pidFile) {
-    Write-Step 'Stopping vite + func by recorded PIDs'
+    Show-Step 'Stopping vite + func by recorded PIDs'
     $procIds = Get-Content $pidFile -Raw | ConvertFrom-Json
     foreach ($key in @('web', 'api')) {
         $procId = $procIds.$key
@@ -46,13 +46,13 @@ if (Test-Path $pidFile) {
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
 }
 
-Write-Step "Sweeping app ports $WebPort, $ApiPort"
+Show-Step "Sweeping app ports $WebPort, $ApiPort"
 Stop-Port $WebPort
 Stop-Port $ApiPort
 
 if (-not $KeepEmulators) {
     if (Test-DockerRunning) {
-        Write-Step 'Stopping emulator containers'
+        Show-Step 'Stopping emulator containers'
         foreach ($name in @($AzuriteContainer)) {
             if (Test-ContainerRunning $name) {
                 Write-Host "    stopping $name" -ForegroundColor DarkGray
@@ -60,11 +60,11 @@ if (-not $KeepEmulators) {
             }
         }
     } else {
-        Write-Warn 'Docker not reachable; skipping emulator stop.'
+        Show-Warn 'Docker not reachable; skipping emulator stop.'
     }
 }
 
 Start-Sleep -Milliseconds 500
 foreach ($p in @($WebPort, $ApiPort)) {
-    if (Test-Port $p) { Write-Warn "Port $p still in use." } else { Write-Ok "Port $p free" }
+    if (Test-Port $p) { Show-Warn "Port $p still in use." } else { Show-Ok "Port $p free" }
 }

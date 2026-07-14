@@ -87,4 +87,142 @@ public class AuthExtensionFunctionsTests
         var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
         Assert.Contains("showBlockPage", Read(resp));
     }
+
+    [Fact]
+    public async Task Blocks_on_extension_id_mismatch()
+    {
+        var fn = Make(new FakeContentRepository { Writes = false }, new SignupGateOptions { ExtensionId = "correct-ext-id" });
+        var body = "{\"data\":{\"tenantId\":null,\"customAuthenticationExtensionId\":\"wrong-ext-id\"," +
+                   "\"authenticationContext\":{\"user\":{\"mail\":\"a@b.com\"}}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
+
+    [Fact]
+    public async Task Parses_email_from_identity_array_with_emailAddress_signInType()
+    {
+        // Tests FirstIdentityEmail: email comes via identities array rather than user.mail
+        var repo = new FakeContentRepository { MemberByEmail = new Member("m1", "identity@example.com", "A", new[] { "Member" }, "invited", DateTime.UtcNow) };
+        var fn = Make(repo);
+        var body = "{\"data\":{\"tenantId\":null,\"authenticationContext\":{\"user\":{" +
+                   "\"identities\":[{\"signInType\":\"emailAddress\",\"issuerAssignedId\":\"identity@example.com\"}]}}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("continueWithDefaultBehavior", Read(resp));
+    }
+
+    [Fact]
+    public async Task Blocks_when_member_lookup_throws()
+    {
+        var repo = new FakeContentRepository { ThrowOnMemberEmailLookup = new Exception("Cosmos unavailable") };
+        var fn = Make(repo);
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", Body("a@b.com"));
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
+
+    [Fact]
+    public async Task Blocks_on_malformed_json_body()
+    {
+        var fn = Make(new FakeContentRepository { Writes = false });
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", "{ this is not valid json !");
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
+
+    [Fact]
+    public async Task Blocks_when_all_identities_are_non_email_and_have_no_at_symbol()
+    {
+        // Identity with non-emailAddress signInType and no '@' in the value — FirstIdentityEmail returns null.
+        var fn = Make(new FakeContentRepository { Writes = false });
+        var body = "{\"data\":{\"tenantId\":null,\"authenticationContext\":{\"user\":{" +
+                   "\"identities\":[{\"signInType\":\"federated\",\"issuerAssignedId\":\"opaqueId99\"}]}}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
+
+    [Fact]
+    public async Task Blocks_when_no_k_param_provided_but_secret_is_configured()
+    {
+        // gate.Secret is set but the URL has no ?k= → provided is null → FixedTimeEquals returns false
+        var fn = Make(new FakeContentRepository { Writes = false }, new SignupGateOptions { Secret = "expected" });
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", Body("a@b.com"));
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
+
+    [Fact]
+    public async Task Allows_email_parsed_from_userSignUpInfo_attributes()
+    {
+        // No authenticationContext.user.mail → falls through to userSignUpInfo.attributes.email
+        var repo = new FakeContentRepository { MemberByEmail = new Member("m1", "attr@example.com", "A", new[] { "Member" }, "invited", DateTime.UtcNow) };
+        var fn = Make(repo);
+        var body = "{\"data\":{\"tenantId\":null," +
+                   "\"userSignUpInfo\":{\"attributes\":{\"email\":{\"value\":\"attr@example.com\"}}}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("continueWithDefaultBehavior", Read(resp));
+    }
+
+    [Fact]
+    public async Task Allows_email_parsed_from_userDetails_mail()
+    {
+        // No authenticationContext or userSignUpInfo → falls through to userDetails.mail
+        var repo = new FakeContentRepository { MemberByEmail = new Member("m1", "detail@example.com", "A", new[] { "Member" }, "invited", DateTime.UtcNow) };
+        var fn = Make(repo);
+        var body = "{\"data\":{\"tenantId\":null," +
+                   "\"userDetails\":{\"mail\":\"detail@example.com\"}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("continueWithDefaultBehavior", Read(resp));
+    }
+
+    [Fact]
+    public async Task Allows_email_parsed_from_attributes_email()
+    {
+        // Falls through to the last fallback: data.attributes.email
+        var repo = new FakeContentRepository { MemberByEmail = new Member("m1", "attrs@example.com", "A", new[] { "Member" }, "invited", DateTime.UtcNow) };
+        var fn = Make(repo);
+        var body = "{\"data\":{\"tenantId\":null," +
+                   "\"attributes\":{\"email\":\"attrs@example.com\"}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("continueWithDefaultBehavior", Read(resp));
+    }
+
+    [Fact]
+    public async Task Allows_identity_email_with_at_symbol_in_issuer_assigned_id()
+    {
+        // issuerAssignedId contains '@' but signInType is not emailAddress — still treated as email
+        var repo = new FakeContentRepository { MemberByEmail = new Member("m1", "at@example.com", "A", new[] { "Member" }, "invited", DateTime.UtcNow) };
+        var fn = Make(repo);
+        var body = "{\"data\":{\"tenantId\":null,\"authenticationContext\":{\"user\":{" +
+                   "\"identities\":[{\"signInType\":\"federated\",\"issuerAssignedId\":\"at@example.com\"}]}}}}";
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", body);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("continueWithDefaultBehavior", Read(resp));
+    }
+
+    [Fact]
+    public async Task Blocks_and_truncates_long_payload_when_email_not_found()
+    {
+        // body longer than 4000 chars → log truncates to body[..4000]
+        var fn = Make(new FakeContentRepository());
+        var longPayload = "{\"data\":{\"tenantId\":null,\"authenticationContext\":{\"user\":{\"mail\":null," +
+                          "\"identities\":[{\"signInType\":\"federated\",\"issuerAssignedId\":\"no-email-here\"}]," +
+                          "\"padding\":\"" + new string('x', 4100) + "\"}}}}";;
+        var req = TestHttp.Raw(new TestFunctionContext(), "POST",
+            "http://localhost/api/auth/allow-signup", longPayload);
+        var resp = (TestHttpResponseData)await fn.AllowSignup(req, Ct);
+        Assert.Contains("showBlockPage", Read(resp));
+    }
 }

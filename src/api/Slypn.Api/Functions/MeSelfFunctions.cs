@@ -6,6 +6,7 @@ using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using Slypn.Api.Infrastructure;
+using Slypn.Api.Models;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
 
@@ -51,50 +52,52 @@ public sealed class MeSelfFunctions(
         if (string.IsNullOrEmpty(callerOid))
             return await Ok(req, new { roles = Array.Empty<string>(), status = (string?)null });
 
-        // OID is linked — fast path.
-        var member = await repo.GetMemberByOidAsync(callerOid, ct);
-
-        if (member is null)
-        {
-            // OID not linked yet, or stored OID is stale (e.g. seeded from az-cli which
-            // returns a different OID for personal Microsoft accounts than the JWT contains).
-            // Re-link whenever the stored OID doesn't match the validated JWT OID.
-            var email = context.GetPrincipal()
-                ?.FindFirst("email")?.Value
-                ?? context.GetPrincipal()?.FindFirst("preferred_username")?.Value;
-
-            if (!string.IsNullOrEmpty(email))
-            {
-                var byEmail = await repo.GetMemberByEmailAsync(email.Trim().ToLowerInvariant(), ct);
-                if (byEmail is not null && byEmail.Oid != callerOid)
-                {
-                    // Use the display name the user chose during CIAM sign-up; fall back
-                    // to the admin's placeholder only if the JWT carries no name claim.
-                    var jwtName = context.GetUserName();
-                    var activated = byEmail with
-                    {
-                        Oid         = callerOid,
-                        AcceptedAt  = byEmail.AcceptedAt ?? DateTime.UtcNow,
-                        Status      = byEmail.AcceptedAt is null ? "active" : byEmail.Status,
-                        DisplayName = !string.IsNullOrWhiteSpace(jwtName) ? jwtName : byEmail.DisplayName,
-                    };
-                    try
-                    {
-                        member = await repo.UpsertMemberAsync(activated, byEmail.Etag, ct);
-                        log.LogInformation("Linked OID {Oid} to member {Email}", callerOid, email);
-                    }
-                    catch (Exception ex)
-                    {
-                        log.LogWarning(ex, "Failed to link OID {Oid} to member {Email}", callerOid, email);
-                        member = byEmail;
-                    }
-                }
-            }
-        }
+        // OID is linked — fast path. Otherwise re-link via email (e.g. stored OID is
+        // stale because it was seeded from az-cli, which returns a different OID for
+        // personal Microsoft accounts than the JWT contains).
+        var member = await repo.GetMemberByOidAsync(callerOid, ct)
+            ?? await TryRelinkByEmailAsync(context, callerOid, ct);
 
         if (member is null)
             return await Ok(req, new { roles = Array.Empty<string>(), status = (string?)null });
 
         return await Ok(req, new { roles = member.Roles, status = member.Status });
+    }
+
+    /// <summary>
+    /// Looks up a member by the caller's JWT email/preferred_username and, if its stored
+    /// OID doesn't match the validated JWT OID, re-links it to the current caller.
+    /// </summary>
+    private async Task<Member?> TryRelinkByEmailAsync(FunctionContext context, string callerOid, CancellationToken ct)
+    {
+        var email = context.GetPrincipal()?.FindFirst("email")?.Value
+            ?? context.GetPrincipal()?.FindFirst("preferred_username")?.Value;
+        if (string.IsNullOrEmpty(email))
+            return null;
+
+        var byEmail = await repo.GetMemberByEmailAsync(email.Trim().ToLowerInvariant(), ct);
+        if (byEmail is null || byEmail.Oid == callerOid)
+            return null;
+
+        // Use the display name the user chose during CIAM sign-up; fall back
+        // to the admin's placeholder only if the JWT carries no name claim.
+        var jwtName = context.GetUserName();
+        var activated = byEmail with
+        {
+            Oid         = callerOid,
+            AcceptedAt  = byEmail.AcceptedAt ?? DateTime.UtcNow,
+            Status      = byEmail.AcceptedAt is null ? "active" : byEmail.Status,
+            DisplayName = !string.IsNullOrWhiteSpace(jwtName) ? jwtName : byEmail.DisplayName,
+        };
+        try
+        {
+            log.LogInformation("Linked OID {Oid} to member {Email}", callerOid, email);
+            return await repo.UpsertMemberAsync(activated, byEmail.Etag, ct);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Failed to link OID {Oid} to member {Email}", callerOid, email);
+            return byEmail;
+        }
     }
 }

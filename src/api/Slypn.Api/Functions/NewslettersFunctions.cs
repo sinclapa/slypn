@@ -121,24 +121,31 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
         var now = DateTime.UtcNow;
         var displayName = input.DisplayName?.Trim();
 
-        var record = existing is null
-            ? new Member(
+        Member record;
+        if (existing is null)
+        {
+            var newDisplayName = string.IsNullOrWhiteSpace(displayName) ? email : displayName!;
+            record = new Member(
                 Id:          Guid.NewGuid().ToString("N"),
                 Email:       email,
-                DisplayName: string.IsNullOrWhiteSpace(displayName) ? email : displayName!,
+                DisplayName: newDisplayName,
                 Roles:       Array.Empty<string>(),
                 Status:      "subscribed",
-                InvitedAt:   now)
-            : existing with
+                InvitedAt:   now);
+        }
+        else
+        {
+            // Promote any earlier "invited" -> still "subscribed" but keep
+            // their roles + oid if they're an actual member. For pure
+            // subscribers (no roles, no oid), we just refresh the timestamp.
+            var isExistingMember = existing.Roles.Count > 0 || existing.Oid is not null;
+            var resolvedDisplayName = string.IsNullOrWhiteSpace(displayName) ? existing.DisplayName : displayName!;
+            record = existing with
             {
-                // Promote any earlier "invited" -> still "subscribed" but keep
-                // their roles + oid if they're an actual member. For pure
-                // subscribers (no roles, no oid), we just refresh the timestamp.
-                Status      = existing.Roles.Count > 0 || existing.Oid is not null
-                                ? existing.Status
-                                : "subscribed",
-                DisplayName = string.IsNullOrWhiteSpace(displayName) ? existing.DisplayName : displayName!,
+                Status      = isExistingMember ? existing.Status : "subscribed",
+                DisplayName = resolvedDisplayName,
             };
+        }
 
         try
         {

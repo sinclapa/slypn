@@ -28,8 +28,11 @@ internal sealed class FakeContentRepository : IContentRepository
     public List<Draft> Drafts = new();
     public Draft? DraftById;
 
-    /// <summary>Set to throw from the next write to exercise error mapping.</summary>
+    /// <summary>Set to throw from writes to exercise storage error mapping.</summary>
     public Exception? ThrowOnWrite { get; set; }
+
+    /// <summary>Set to throw from read operations that have catch (RequestFailedException) blocks.</summary>
+    public Exception? ThrowOnRead { get; set; }
 
     private T Guard<T>(T value)
     {
@@ -50,7 +53,10 @@ internal sealed class FakeContentRepository : IContentRepository
     public Task<CommunityEvent?> GetEventByIdAsync(string id, CancellationToken ct)
         => Task.FromResult(EventById);
     public Task<CommunityEvent?> GetEventWithNeighboursAsync(string id, CancellationToken ct)
-        => Task.FromResult(EventById);
+    {
+        if (ThrowOnRead is not null) throw ThrowOnRead;
+        return Task.FromResult(EventById);
+    }
     public Task<IReadOnlyList<Resource>> ListResourcesAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<Resource>>(Resources);
     public Task<IReadOnlyList<Newsletter>> ListNewslettersAsync(CancellationToken ct)
@@ -84,15 +90,38 @@ internal sealed class FakeContentRepository : IContentRepository
     public Task DeleteNewsletterAsync(string id, string year, string? ifMatch, CancellationToken ct)
         => Guard(Task.CompletedTask);
 
-    public Task<Member?> GetMemberByEmailAsync(string email, CancellationToken ct) => Task.FromResult(MemberByEmail);
-    public Task<Member?> GetMemberByIdAsync(string id, CancellationToken ct) => Task.FromResult(MemberById);
+    /// <summary>Set to throw from the next GetMemberByEmailAsync call (e.g. to test lookup-error branches).</summary>
+    public Exception? ThrowOnMemberEmailLookup { get; set; }
+
+    public Task<Member?> GetMemberByEmailAsync(string email, CancellationToken ct)
+    {
+        if (ThrowOnMemberEmailLookup is not null) throw ThrowOnMemberEmailLookup;
+        return Task.FromResult(MemberByEmail);
+    }
+    public Task<Member?> GetMemberByIdAsync(string id, CancellationToken ct)
+    {
+        if (ThrowOnRead is not null) throw ThrowOnRead;
+        return Task.FromResult(MemberById);
+    }
     public Task<Member?> GetMemberByOidAsync(string oid, CancellationToken ct) => Task.FromResult(MemberByOid);
-    public Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Member>>(Members);
+    public Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct)
+    {
+        if (ThrowOnRead is not null) throw ThrowOnRead;
+        return Task.FromResult<IReadOnlyList<Member>>(Members);
+    }
     public Task<Member> UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct) => Task.FromResult(Guard(member));
     public Task DeleteMemberAsync(string id, string? ifMatch, CancellationToken ct) => Guard(Task.CompletedTask);
 
-    public Task<Draft?> GetDraftAsync(string id, string authorId, CancellationToken ct) => Task.FromResult(DraftById);
-    public Task<IReadOnlyList<Draft>> ListDraftsByAuthorAsync(string authorId, CancellationToken ct) => Task.FromResult<IReadOnlyList<Draft>>(Drafts);
+    public Task<Draft?> GetDraftAsync(string id, string authorId, CancellationToken ct)
+    {
+        if (ThrowOnRead is not null) throw ThrowOnRead;
+        return Task.FromResult(DraftById);
+    }
+    public Task<IReadOnlyList<Draft>> ListDraftsByAuthorAsync(string authorId, CancellationToken ct)
+    {
+        if (ThrowOnRead is not null) throw ThrowOnRead;
+        return Task.FromResult<IReadOnlyList<Draft>>(Drafts);
+    }
     public Task<Draft> UpsertDraftAsync(Draft draft, string? ifMatch, CancellationToken ct) => Task.FromResult(Guard(draft));
     public Task DeleteDraftAsync(string id, string authorId, string? ifMatch, CancellationToken ct) => Guard(Task.CompletedTask);
 

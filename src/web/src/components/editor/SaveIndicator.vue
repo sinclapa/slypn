@@ -11,7 +11,10 @@ const props = defineProps<{
 const label = computed(() => {
   if (props.status === 'pending') return 'Editing&hellip;'
   if (props.status === 'saving')  return 'Saving&hellip;'
-  if (props.status === 'error')   return `Save failed${props.error ? `: ${props.error}` : ''}`
+  if (props.status === 'error') {
+    const suffix = props.error ? `: ${props.error}` : ''
+    return `Save failed${suffix}`
+  }
   if (props.status === 'saved' || props.lastSavedAt) {
     return `Saved at ${formatTime(props.lastSavedAt ?? new Date())}`
   }

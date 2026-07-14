@@ -16,7 +16,7 @@ const returnTo = computed(() => {
 async function signIn() {
   error.value = null
   try {
-    await auth.login(window.location.origin + returnTo.value)
+    await auth.login(globalThis.location.origin + returnTo.value)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   }

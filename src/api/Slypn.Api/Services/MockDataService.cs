@@ -88,7 +88,7 @@ public sealed class MockDataService : IMockDataService
             new DateTimeOffset(2026, 6, 4, 20, 30, 0, TimeSpan.FromHours(1)),
             "Online (Zoom)",
             "An hour-and-a-half with Dr Priya Iyer (King's College Hospital).",
-            "https://example.com/slypn/qa-june"),
+            "https://example.com/slypn/qa-june"), // NOSONAR - fixture data, not real config
         new CommunityEvent("e3", "Summer drinks - Greenwich", "Drinks",
             new DateTimeOffset(2026, 6, 13, 19, 0, 0, TimeSpan.FromHours(1)),
             new DateTimeOffset(2026, 6, 13, 22, 0, 0, TimeSpan.FromHours(1)),
@@ -112,7 +112,7 @@ public sealed class MockDataService : IMockDataService
             new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.FromHours(1)),
             "Hyde Park, London W2",
             "Our autumn fundraiser for Parkinson's UK.",
-            "https://example.com/slypn/5k-autumn"),
+            "https://example.com/slypn/5k-autumn"), // NOSONAR - fixture data, not real config
         new CommunityEvent("e7", "Coffee meet-up - Tooting", "Coffee meet-up",
             new DateTimeOffset(2026, 7, 23, 18, 30, 0, TimeSpan.FromHours(1)),
             new DateTimeOffset(2026, 7, 23, 20, 30, 0, TimeSpan.FromHours(1)),
@@ -123,41 +123,42 @@ public sealed class MockDataService : IMockDataService
 
     public IReadOnlyList<Resource> Resources { get; } = new[]
     {
+        // Fixture data — the URLs below are real external reference links, not config.
         new Resource("r1", "Parkinson's UK helpline",
             "Free, confidential support from trained advisers. Mon-Fri 9am-7pm, Sat 10am-2pm.",
-            "https://www.parkinsons.org.uk/information-and-support/helpline-and-local-advisers",
+            "https://www.parkinsons.org.uk/information-and-support/helpline-and-local-advisers", // NOSONAR
             "Parkinson's UK"),
         new Resource("r2", "Parkinson's UK - for the newly diagnosed",
             "The single best starting point if you've been diagnosed in the last few months.",
-            "https://www.parkinsons.org.uk/information-and-support/newly-diagnosed",
+            "https://www.parkinsons.org.uk/information-and-support/newly-diagnosed", // NOSONAR
             "Parkinson's UK"),
         new Resource("r3", "NHS - Parkinson's disease overview",
             "Plain-English summary of symptoms, treatment, and what to expect from NHS care.",
-            "https://www.nhs.uk/conditions/parkinsons-disease/",
+            "https://www.nhs.uk/conditions/parkinsons-disease/", // NOSONAR
             "NHS"),
         new Resource("r4", "King's College Hospital movement disorders clinic",
             "The specialist movement-disorders unit at King's College Hospital, Denmark Hill.",
-            "https://www.kch.nhs.uk/services/neurology",
+            "https://www.kch.nhs.uk/services/neurology", // NOSONAR
             "Local"),
         new Resource("r5", "Deep brain stimulation (DBS) - Parkinson's UK",
             "What DBS is, who it might suit, and how to be referred for an assessment.",
-            "https://www.parkinsons.org.uk/information-and-support/deep-brain-stimulation",
+            "https://www.parkinsons.org.uk/information-and-support/deep-brain-stimulation", // NOSONAR
             "Parkinson's UK"),
         new Resource("r6", "Personal Independence Payment (PIP)",
             "The main UK benefit you may be entitled to as a working-age adult with Parkinson's.",
-            "https://www.gov.uk/pip",
+            "https://www.gov.uk/pip", // NOSONAR
             "Benefits"),
         new Resource("r7", "Access to Work - disability employment support",
             "A government grant scheme to pay for workplace adjustments your employer cannot reasonably cover.",
-            "https://www.gov.uk/access-to-work",
+            "https://www.gov.uk/access-to-work", // NOSONAR
             "Benefits"),
         new Resource("r8", "Carers UK",
             "Advice, peer support, and a helpline specifically for unpaid carers.",
-            "https://www.carersuk.org/",
+            "https://www.carersuk.org/", // NOSONAR
             "Carers"),
         new Resource("r9", "Parkinson's UK - current research",
             "The charity's research overview, including ways to take part in clinical studies.",
-            "https://www.parkinsons.org.uk/research",
+            "https://www.parkinsons.org.uk/research", // NOSONAR
             "Research"),
     };
 

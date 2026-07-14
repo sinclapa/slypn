@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { EMPTY_DRAFT, makeDraftId } from './draft'
 
 describe('draft helpers', () => {
@@ -18,5 +18,16 @@ describe('draft helpers', () => {
   it('makeDraftId returns unique ids', () => {
     const ids = new Set(Array.from({ length: 50 }, () => makeDraftId()))
     expect(ids.size).toBe(50)
+  })
+
+  it('falls back to crypto.getRandomValues when crypto.randomUUID is absent', () => {
+    const orig = globalThis.crypto
+    vi.stubGlobal('crypto', { getRandomValues: (arr: Uint8Array) => arr.fill(0xab) })
+    try {
+      const id = makeDraftId()
+      expect(id).toBe('ab'.repeat(16))
+    } finally {
+      vi.stubGlobal('crypto', orig)
+    }
   })
 })

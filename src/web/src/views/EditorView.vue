@@ -329,10 +329,11 @@ const fmtDate = (iso: string) =>
           <h3 class="font-display text-lg font-bold text-slypn-700">New draft</h3>
           <form class="mt-4 space-y-4" @submit.prevent="createDraft">
             <div>
-              <label class="block text-sm font-medium text-slypn-800">
+              <label for="new-draft-title" class="block text-sm font-medium text-slypn-800">
                 Title <span class="text-rose-500">*</span>
               </label>
               <input
+                id="new-draft-title"
                 ref="newTitleInput"
                 v-model="newTitle"
                 type="text"

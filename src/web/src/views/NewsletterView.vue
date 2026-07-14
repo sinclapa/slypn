@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import NewsletterCard from '@/components/common/NewsletterCard.vue'
-import { apiFetch, apiJson } from '@/lib/api'
+import { apiErrorMessage, apiFetch, apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
 import type { Newsletter } from '@/types/content'
 
@@ -24,10 +24,7 @@ async function subscribe() {
       method: 'POST',
       body: JSON.stringify({ email: email.value.trim() }),
     })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     submitted.value = true
     email.value = ''
   } catch (err) {

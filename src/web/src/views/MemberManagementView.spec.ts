@@ -96,4 +96,140 @@ describe('MemberManagementView', () => {
     await flushPromises()
     expect(w.text()).toContain("Couldn't load members")
   })
+
+  it('sorts members alphabetically when there are multiple', async () => {
+    apiJson.mockResolvedValue([
+      member({ id: 'm2', displayName: 'Zara', email: 'z@b.com' }),
+      member({ id: 'm1', displayName: 'Alice', email: 'a@b.com' }),
+    ])
+    const w = mountC()
+    await flushPromises()
+    const names = w.findAll('td, th, p, span').map(el => el.text()).join(' ')
+    expect(names.indexOf('Alice')).toBeLessThan(names.indexOf('Zara'))
+  })
+
+  it('shows a save error when setRole returns non-ok', async () => {
+    apiJson.mockResolvedValue([member()])
+    apiFetch.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden', text: () => Promise.resolve('') } as unknown as Response)
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Admin')!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('403')
+  })
+
+  it('shows a save error when deleteMember returns non-ok', async () => {
+    apiJson.mockResolvedValue([member()])
+    apiFetch.mockResolvedValue({ ok: false, status: 409, statusText: 'Conflict', text: () => Promise.resolve('') } as unknown as Response)
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Remove')!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('409')
+  })
+
+  it('dismisses a save error by clicking Dismiss', async () => {
+    apiJson.mockResolvedValue([member()])
+    apiFetch.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden', text: () => Promise.resolve('') } as unknown as Response)
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Admin')!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('403')
+    await w.findAll('button').find(b => b.text() === 'Dismiss')!.trigger('click')
+    expect(w.text()).not.toContain('403')
+  })
+
+  it('retries loading members when Retry is clicked after a load error', async () => {
+    apiJson.mockRejectedValue(new Error('boom'))
+    const w = mountC()
+    await flushPromises()
+    apiJson.mockResolvedValue([member()])
+    await w.findAll('button').find(b => b.text() === 'Retry')!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('Alice')
+  })
+
+  it('shows an invite error when the invite API returns non-ok', async () => {
+    apiJson.mockResolvedValue([])
+    apiFetch.mockResolvedValue({ ok: false, status: 400, statusText: 'Bad Request', text: () => Promise.resolve('Email already in use') } as unknown as Response)
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text()?.includes('Invite a member'))!.trigger('click')
+    await w.find('input[type="email"]').setValue('dup@x.com')
+    await w.find('input[type="text"]').setValue('Someone')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(w.text()).toContain('400')
+  })
+
+  it('can switch the invite role to Admin before submitting', async () => {
+    apiJson.mockResolvedValue([])
+    apiFetch.mockResolvedValue(ok({ member: { email: 'admin@x.com' }, inviteSent: true, redeemUrl: null, inviteReason: null }))
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text()?.includes('Invite a member'))!.trigger('click')
+    await w.findAll('button').find(b => b.text() === 'Admin')!.trigger('click')
+    await w.find('input[type="email"]').setValue('admin@x.com')
+    await w.find('input[type="text"]').setValue('Admin Person')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(apiFetch).toHaveBeenCalledWith('/members/invite', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('cancels member deletion when confirm returns false', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => false))
+    apiJson.mockResolvedValue([member()])
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Remove')!.trigger('click')
+    await flushPromises()
+    expect(apiFetch).not.toHaveBeenCalledWith('/members/m1', expect.objectContaining({ method: 'DELETE' }))
+  })
+
+  it('ignores setRole when another save is already in progress', async () => {
+    apiJson.mockResolvedValue([member()])
+    let settle!: (r: Response) => void
+    apiFetch.mockImplementationOnce(() => new Promise<Response>(r => { settle = r }))
+    const w = mountC()
+    await flushPromises()
+    const adminBtn = w.findAll('button').find(b => b.text() === 'Admin')!
+    adminBtn.trigger('click') // first — starts PATCH, sets savingId
+    await adminBtn.trigger('click') // second — savingId set, early return
+    expect(apiFetch).toHaveBeenCalledTimes(1)
+    settle(ok({}))
+  })
+
+  it('ignores deleteMember when another delete is already in progress', async () => {
+    apiJson.mockResolvedValue([member()])
+    let settle!: (r: Response) => void
+    apiFetch.mockImplementationOnce(() => new Promise<Response>(r => { settle = r }))
+    const w = mountC()
+    await flushPromises()
+    const removeBtn = w.findAll('button').find(b => b.text() === 'Remove')!
+    removeBtn.trigger('click') // first — sets deletingId
+    await removeBtn.trigger('click') // second — deletingId set, early return
+    expect(apiFetch).toHaveBeenCalledTimes(1)
+    settle(ok({}))
+  })
+
+  it('shows setRole error as string when rejection is not an Error', async () => {
+    apiJson.mockResolvedValue([member()])
+    apiFetch.mockRejectedValue('patch failed')
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Admin')!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('patch failed')
+  })
+
+  it('shows deleteMember error as string when rejection is not an Error', async () => {
+    apiJson.mockResolvedValue([member()])
+    apiFetch.mockRejectedValue('delete member failed')
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Remove')!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('delete member failed')
+  })
 })

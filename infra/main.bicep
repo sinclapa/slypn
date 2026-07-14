@@ -23,6 +23,9 @@ param env string = 'dev'
 @description('Azure region for Storage. SWA region is fixed (westeurope).')
 param location string = resourceGroup().location
 
+@description('Azure region for the Static Web App (SWA is only available in a limited set of regions).')
+param swaLocation string = 'westeurope'
+
 @description('GitHub repo to associate with the Static Web App.')
 param repositoryUrl string = 'https://github.com/sinclapa/slypn'
 
@@ -51,14 +54,24 @@ var tableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'         
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: take('${prefixFlat}st${nameSuffix}', 24)
   location: location
-  tags: tags
   sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
+  identity: {
+    type: 'None' // Access is via the SWA's managed identity (RBAC role assignments below), not the storage account's own identity.
+  }
+  tags: tags
   properties: {
     allowBlobPublicAccess: false
     allowSharedKeyAccess: true        // SWA / dev still uses connection strings; tightened to false post-rollout.
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
+    encryption: {
+      keySource: 'Microsoft.Storage'
+      services: {
+        blob: { enabled: true }
+        table: { enabled: true }
+      }
+    }
   }
 }
 
@@ -98,15 +111,15 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2024-01-0
 // ---------------------------------------------------------------------------
 resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
   name: 'swa-${prefixDash}'
-  location: 'westeurope'
-  tags: tags
-  identity: {
-    type: 'SystemAssigned'
-  }
+  location: swaLocation
   sku: {
     name: 'Standard'
     tier: 'Standard'
   }
+  identity: {
+    type: 'SystemAssigned'
+  }
+  tags: tags
   properties: {
     repositoryUrl: repositoryUrl
     branch: repositoryBranch

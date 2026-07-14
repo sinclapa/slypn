@@ -77,36 +77,36 @@ function Set-LocalAuthMode {
         @('# Created by scripts/setupLocal.ps1', "VITE_DEV_SKIP_AUTH=$skip") |
             Set-Content $envLocalPath -Encoding UTF8
         if ($Mode -eq 'on') {
-            Write-Warn '.env.local had no MSAL credentials — run infra/setup.ps1 to enable real local sign-in.'
+            Show-Warn '.env.local had no MSAL credentials — run infra/setup.ps1 to enable real local sign-in.'
         }
     }
-    Write-Ok "Set VITE_DEV_SKIP_AUTH=$skip in .env.local"
+    Show-Ok "Set VITE_DEV_SKIP_AUTH=$skip in .env.local"
 
     # --- local.settings.json : AzureAd__SkipAuth ---
     if (-not (Test-Path $localSettingsPath) -and (Test-Path $sampleSettingsPath)) {
         Copy-Item $sampleSettingsPath $localSettingsPath
-        Write-Ok 'Created local.settings.json from sample'
+        Show-Ok 'Created local.settings.json from sample'
     }
     if (Test-Path $localSettingsPath) {
         $ls = Get-Content $localSettingsPath -Raw | ConvertFrom-Json -AsHashtable
         $ls['Values']['AzureAd__SkipAuth'] = $skip
         $ls | ConvertTo-Json -Depth 5 | Set-Content $localSettingsPath -Encoding UTF8
-        Write-Ok "Set AzureAd__SkipAuth=$skip in local.settings.json"
+        Show-Ok "Set AzureAd__SkipAuth=$skip in local.settings.json"
     } else {
-        Write-Warn 'local.settings.json not found — skipped AzureAd__SkipAuth.'
+        Show-Warn 'local.settings.json not found — skipped AzureAd__SkipAuth.'
     }
 
     if ($Mode -eq 'on') {
-        Write-Ok 'Entra login ENABLED locally (real CIAM sign-in).'
+        Show-Ok 'Entra login ENABLED locally (real CIAM sign-in).'
     } else {
-        Write-Ok 'Entra login DISABLED locally (dev persona switcher active).'
+        Show-Ok 'Entra login DISABLED locally (dev persona switcher active).'
     }
-    Write-Warn 'Restart the stack for changes to take effect: .\scripts\stopLocal.ps1 then .\scripts\startLocal.ps1'
+    Show-Warn 'Restart the stack for changes to take effect: .\scripts\stopLocal.ps1 then .\scripts\startLocal.ps1'
 }
 
 # Toggle-only mode: flip auth and exit without running the full prereq setup.
 if ($EntraLogin) {
-    Write-Step "Toggling local Entra login: $EntraLogin"
+    Show-Step "Toggling local Entra login: $EntraLogin"
     Set-LocalAuthMode -Mode $EntraLogin
     return
 }
@@ -115,44 +115,44 @@ if ($EntraLogin) {
 # fail (EPERM) trying to delete files the running Vite/func processes have open.
 foreach ($p in @($WebPort, $ApiPort)) {
     if (Test-Port $p) {
-        Write-Err "Port $p is in use — the dev stack looks like it's running."
-        Write-Err 'Stop it first:  .\scripts\stopLocal.ps1   (then re-run setupLocal.ps1)'
+        Show-Err "Port $p is in use — the dev stack looks like it's running."
+        Show-Err 'Stop it first:  .\scripts\stopLocal.ps1   (then re-run setupLocal.ps1)'
         exit 1
     }
 }
 
 # --- Node 20+ ---------------------------------------------------------------
-Write-Step 'Checking Node.js'
+Show-Step 'Checking Node.js'
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if (-not $nodeCmd) {
-    Write-Err 'Node is not on PATH. Install Node 20+ from https://nodejs.org/.'
+    Show-Err 'Node is not on PATH. Install Node 20+ from https://nodejs.org/.'
     exit 1
 }
 $nodeVersion = & node --version
 $major = [int]($nodeVersion -replace '^v(\d+)\..*$', '$1')
 if ($major -lt 20) {
-    Write-Err "Node $nodeVersion is too old. Install Node 20+."
+    Show-Err "Node $nodeVersion is too old. Install Node 20+."
     exit 1
 }
-Write-Ok "Node $nodeVersion"
+Show-Ok "Node $nodeVersion"
 
 # --- .NET 8 SDK -------------------------------------------------------------
-Write-Step 'Checking .NET SDK'
+Show-Step 'Checking .NET SDK'
 $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
 if (-not $dotnetCmd) {
-    Write-Err 'dotnet is not on PATH. Install the .NET 8 SDK from https://dotnet.microsoft.com/.'
+    Show-Err 'dotnet is not on PATH. Install the .NET 8 SDK from https://dotnet.microsoft.com/.'
     exit 1
 }
 $sdks = & dotnet --list-sdks
 $hasNet8 = $sdks | Where-Object { $_ -match '^8\.' -or $_ -match '^9\.' }
 if (-not $hasNet8) {
-    Write-Err 'Need a .NET 8 SDK (or 9, which can target net8.0). Install from https://dotnet.microsoft.com/.'
+    Show-Err 'Need a .NET 8 SDK (or 9, which can target net8.0). Install from https://dotnet.microsoft.com/.'
     exit 1
 }
-Write-Ok "Found a compatible SDK ($(& dotnet --version))"
+Show-Ok "Found a compatible SDK ($(& dotnet --version))"
 
 # --- Azure Functions Core Tools v4 -----------------------------------------
-Write-Step 'Checking Azure Functions Core Tools'
+Show-Step 'Checking Azure Functions Core Tools'
 $funcCmd  = Get-Command func -ErrorAction SilentlyContinue
 $funcHome = Join-Path $env:LOCALAPPDATA 'AzureFunctionsCoreTools'
 
@@ -163,7 +163,7 @@ if (-not $funcCmd -and (Test-Path (Join-Path $funcHome 'func.exe'))) {
 }
 
 if (-not $funcCmd) {
-    Write-Warn 'func not found. Downloading the standalone CLI from the Azure releases...'
+    Show-Warn 'func not found. Downloading the standalone CLI from the Azure releases...'
     # Pin to a known-good min build (smaller, ~65 MB; uses system .NET). Override
     # via $env:SLYPN_FUNC_VERSION if you want a specific release.
     $funcVersionPin = if ($env:SLYPN_FUNC_VERSION) { $env:SLYPN_FUNC_VERSION } else { '4.12.0' }
@@ -181,79 +181,79 @@ if (-not $funcCmd) {
         if ($userPath -notmatch [regex]::Escape($funcHome)) {
             $userPathNew = if ($userPath) { "$funcHome;$userPath" } else { $funcHome }
             [Environment]::SetEnvironmentVariable('PATH', $userPathNew, 'User')
-            Write-Warn "Added $funcHome to User PATH (effective in new shells)."
+            Show-Warn "Added $funcHome to User PATH (effective in new shells)."
         }
         $funcCmd = Get-Command func -ErrorAction SilentlyContinue
     } catch {
-        Write-Err "Failed to download/extract Functions Core Tools: $_"
-        Write-Err 'Install manually from https://learn.microsoft.com/azure/azure-functions/functions-run-local.'
+        Show-Err "Failed to download/extract Functions Core Tools: $_"
+        Show-Err 'Install manually from https://learn.microsoft.com/azure/azure-functions/functions-run-local.'
         exit 1
     }
 }
 
 if ($funcCmd) {
     $funcVersion = (& func --version) 2>&1 | Select-Object -First 1
-    Write-Ok "func $funcVersion"
+    Show-Ok "func $funcVersion"
 } else {
-    Write-Err 'func installation appeared to succeed but the command is still missing on PATH.'
+    Show-Err 'func installation appeared to succeed but the command is still missing on PATH.'
     exit 1
 }
 
 # --- Docker (for local emulators) ------------------------------------------
-Write-Step 'Checking Docker (for Azurite)'
+Show-Step 'Checking Docker (for Azurite)'
 if (Test-DockerRunning) {
     $dockerVersion = docker version --format '{{.Server.Version}}' 2>$null
-    Write-Ok "Docker $dockerVersion"
+    Show-Ok "Docker $dockerVersion"
 } else {
-    Write-Warn 'Docker daemon is not reachable. Start Docker Desktop before running scripts/startLocal.ps1.'
-    Write-Warn 'Without Docker, startLocal.ps1 must be invoked with -NoEmulators (API will skip Table/Blob storage).'
+    Show-Warn 'Docker daemon is not reachable. Start Docker Desktop before running scripts/startLocal.ps1.'
+    Show-Warn 'Without Docker, startLocal.ps1 must be invoked with -NoEmulators (API will skip Table/Blob storage).'
 }
 
 # --- web deps ---------------------------------------------------------------
-Write-Step "npm ci in $WebDir"
+Show-Step "npm ci in $WebDir"
 Push-Location $WebDir
 try {
     npm ci --no-fund --no-audit
     if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
-    Write-Ok 'web dependencies installed'
+    Show-Ok 'web dependencies installed'
 }
 finally { Pop-Location }
 
 # --- API deps ---------------------------------------------------------------
-Write-Step "dotnet restore in $ApiDir"
+Show-Step "dotnet restore in $ApiDir"
 Push-Location $ApiDir
 try {
     dotnet restore
     if ($LASTEXITCODE -ne 0) { throw 'dotnet restore failed' }
-    Write-Ok 'API dependencies restored'
+    Show-Ok 'API dependencies restored'
 }
 finally { Pop-Location }
 
 # --- local.settings.json ----------------------------------------------------
-Write-Step 'Local Functions settings'
+Show-Step 'Local Functions settings'
 $localSettings  = Join-Path $ApiDir 'local.settings.json'
 $sampleSettings = Join-Path $ApiDir 'local.settings.sample.json'
 if (Test-Path $localSettings) {
-    Write-Ok 'local.settings.json already exists'
+    Show-Ok 'local.settings.json already exists'
 } else {
     Copy-Item $sampleSettings $localSettings
-    Write-Ok 'Created local.settings.json from local.settings.sample.json'
+    Show-Ok 'Created local.settings.json from local.settings.sample.json'
 }
 
 # --- local auth mode (report only; toggle with -EntraLogin) -----------------
-Write-Step 'Local auth mode'
+Show-Step 'Local auth mode'
 $mode = Get-LocalAuthMode
 switch ($mode) {
-    'on'  { Write-Ok  'Entra login is ENABLED (real CIAM sign-in).' }
-    'off' { Write-Ok  'Entra login is DISABLED (dev persona switcher active).' }
+    'on'  { Show-Ok  'Entra login is ENABLED (real CIAM sign-in).' }
+    'off' { Show-Ok  'Entra login is DISABLED (dev persona switcher active).' }
     default {
-        Write-Warn 'Entra login mode unknown — run infra/setup.ps1 (capability) then toggle below.'
+        Show-Warn 'Entra login mode unknown — run infra/setup.ps1 (capability) then toggle below.'
     }
 }
 Write-Host "    Toggle: .\scripts\setupLocal.ps1 -EntraLogin on|off" -ForegroundColor DarkGray
 
 # --- Grafana Faro (optional) -------------------------------------------------
-Write-Step 'Grafana Faro observability'
+Show-Step 'Grafana Faro observability'
 
 function Get-EnvLocalVar([string]$name) {
     if (-not (Test-Path $envLocalPath)) { return '' }
@@ -319,16 +319,16 @@ if ($faroKvPairs.Count -gt 0) {
     }
     $lines | Set-Content $envLocalPath -Encoding UTF8
     if (-not [string]::IsNullOrWhiteSpace($faroUrl)) {
-        Write-Ok "VITE_FARO_URL set in .env.local"
-        Write-Ok "VITE_FARO_APP_NAME=$faroAppName"
-        Write-Ok "VITE_FARO_ENV=local (fixed for local dev)"
+        Show-Ok "VITE_FARO_URL set in .env.local"
+        Show-Ok "VITE_FARO_APP_NAME=$faroAppName"
+        Show-Ok "VITE_FARO_ENV=local (fixed for local dev)"
     }
-    if (-not [string]::IsNullOrWhiteSpace($faroSmEndpoint)) { Write-Ok "FARO_SOURCEMAP_ENDPOINT set in .env.local" }
-    if (-not [string]::IsNullOrWhiteSpace($faroSmAppId))    { Write-Ok "FARO_SOURCEMAP_APP_ID=$faroSmAppId" }
-    if (-not [string]::IsNullOrWhiteSpace($faroSmStackId))  { Write-Ok "FARO_SOURCEMAP_STACK_ID=$faroSmStackId" }
-    if (-not [string]::IsNullOrWhiteSpace($faroSmApiKey))   { Write-Ok 'FARO_SOURCEMAP_API_KEY set (masked)' }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmEndpoint)) { Show-Ok "FARO_SOURCEMAP_ENDPOINT set in .env.local" }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmAppId))    { Show-Ok "FARO_SOURCEMAP_APP_ID=$faroSmAppId" }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmStackId))  { Show-Ok "FARO_SOURCEMAP_STACK_ID=$faroSmStackId" }
+    if (-not [string]::IsNullOrWhiteSpace($faroSmApiKey))   { Show-Ok 'FARO_SOURCEMAP_API_KEY set (masked)' }
 } else {
-    Write-Warn 'Faro URL not set — observability disabled locally. Re-run to configure.'
+    Show-Warn 'Faro URL not set — observability disabled locally. Re-run to configure.'
 }
 
 Write-Host ''

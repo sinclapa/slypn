@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { apiFetch } from '@/lib/api'
+import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { useApprovalsStore } from '@/stores/approvals'
 
 interface PendingArticle {
@@ -92,10 +92,7 @@ async function publish(article: PendingArticle) {
   errors.value = { ...errors.value, [article.id]: null }
   try {
     const resp = await apiFetch(`/articles/${article.id}/publish`, { method: 'POST' })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     articles.value = articles.value.filter(a => a.id !== article.id)
     syncPendingCount()
   } catch (err) {
@@ -111,10 +108,7 @@ async function approveDeletion(item: PendingArticle) {
   errors.value = { ...errors.value, [item.id]: null }
   try {
     const resp = await apiFetch(`/articles/${item.id}?status=published`, { method: 'DELETE' })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     deletions.value = deletions.value.filter(d => d.id !== item.id)
     syncPendingCount()
   } catch (err) {
@@ -129,10 +123,7 @@ async function keepArticle(item: PendingArticle) {
   errors.value = { ...errors.value, [item.id]: null }
   try {
     const resp = await apiFetch(`/articles/${item.id}/cancel-deletion`, { method: 'POST' })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     deletions.value = deletions.value.filter(d => d.id !== item.id)
     syncPendingCount()
   } catch (err) {
@@ -162,10 +153,7 @@ async function confirmRevise() {
       method: 'POST',
       body: JSON.stringify({ feedback: feedback.trim() }),
     })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`${resp.status} ${resp.statusText}${body ? ` — ${body}` : ''}`)
-    }
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     articles.value = articles.value.filter(a => a.id !== article.id)
     syncPendingCount()
   } catch (err) {
@@ -357,8 +345,9 @@ onMounted(load)
           <strong>{{ reviseDialog.article?.title }}</strong> will be sent back to the author as a draft with your feedback.
         </p>
         <div class="mt-4">
-          <label class="block text-sm font-medium text-slypn-800">Feedback for the author</label>
+          <label for="revise-feedback" class="block text-sm font-medium text-slypn-800">Feedback for the author</label>
           <textarea
+            id="revise-feedback"
             v-model="reviseDialog.feedback"
             rows="4"
             maxlength="1000"

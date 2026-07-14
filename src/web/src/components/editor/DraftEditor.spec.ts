@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }))
-vi.mock('@/lib/api', () => ({ apiFetch }))
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return { ...actual, apiFetch }
+})
 
 import DraftEditor from './DraftEditor.vue'
 

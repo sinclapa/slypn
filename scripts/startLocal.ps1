@@ -37,7 +37,7 @@ $pidFile = Join-Path $runtimeDir 'pids.json'
 # are handled below — those map onto existing containers).
 foreach ($p in @($WebPort, $ApiPort)) {
     if (Test-Port $p) {
-        Write-Err "Port $p is already in use. Run .\scripts\stopLocal.ps1 first."
+        Show-Err "Port $p is already in use. Run .\scripts\stopLocal.ps1 first."
         exit 1
     }
 }
@@ -48,40 +48,40 @@ if (-not (Test-Path $localSettings)) {
     $sample = Join-Path $ApiDir 'local.settings.sample.json'
     if (Test-Path $sample) {
         Copy-Item $sample $localSettings
-        Write-Warn 'Created local.settings.json from sample (run setupLocal.ps1 if anything else looks off).'
+        Show-Warn 'Created local.settings.json from sample (run setupLocal.ps1 if anything else looks off).'
     }
 }
 
 # --- emulators --------------------------------------------------------------
 if (-not $NoEmulators) {
     if (-not (Test-DockerRunning)) {
-        Write-Err 'Docker daemon is not running. Start Docker Desktop (or pass -NoEmulators).'
+        Show-Err 'Docker daemon is not running. Start Docker Desktop (or pass -NoEmulators).'
         exit 1
     }
 
-    Write-Step 'Ensuring Azurite container'
+    Show-Step 'Ensuring Azurite container'
     if (Test-ContainerRunning $AzuriteContainer) {
-        Write-Ok "$AzuriteContainer already running"
+        Show-Ok "$AzuriteContainer already running"
     } elseif (Test-ContainerExists $AzuriteContainer) {
         docker start $AzuriteContainer | Out-Null
-        Write-Ok "$AzuriteContainer started"
+        Show-Ok "$AzuriteContainer started"
     } else {
         docker run -d --name $AzuriteContainer `
             -p "${AzuriteBlobPort}:10000" `
             -p "${AzuriteQueuePort}:10001" `
             -p "${AzuriteTablePort}:10002" `
             $AzuriteImage | Out-Null
-        Write-Ok "$AzuriteContainer created"
+        Show-Ok "$AzuriteContainer created"
     }
     if (-not (Wait-Port $AzuriteBlobPort 30)) {
-        Write-Err "Azurite blob port $AzuriteBlobPort did not come up in 30s. See: docker logs $AzuriteContainer"
+        Show-Err "Azurite blob port $AzuriteBlobPort did not come up in 30s. See: docker logs $AzuriteContainer"
         exit 1
     }
     if (-not (Wait-Port $AzuriteTablePort 30)) {
-        Write-Err "Azurite table port $AzuriteTablePort did not come up in 30s. See: docker logs $AzuriteContainer"
+        Show-Err "Azurite table port $AzuriteTablePort did not come up in 30s. See: docker logs $AzuriteContainer"
         exit 1
     }
-    Write-Ok "Azurite ready on http://127.0.0.1:$AzuriteBlobPort/ (blob) + :$AzuriteTablePort (table)"
+    Show-Ok "Azurite ready on http://127.0.0.1:$AzuriteBlobPort/ (blob) + :$AzuriteTablePort (table)"
 }
 
 # --- web --------------------------------------------------------------------
@@ -95,19 +95,19 @@ function Resolve-WinExe($name) {
     return $null
 }
 
-Write-Step 'Starting Vite (web)'
+Show-Step 'Starting Vite (web)'
 $npmExe = Resolve-WinExe 'npm'
-if (-not $npmExe) { Write-Err 'npm.cmd not on PATH'; exit 1 }
+if (-not $npmExe) { Show-Err 'npm.cmd not on PATH'; exit 1 }
 
 $viteBinary = Join-Path $WebDir 'node_modules/.bin/vite.cmd'
 if (-not (Test-Path $viteBinary)) {
-    Write-Step 'Installing web dependencies (npm ci)'
+    Show-Step 'Installing web dependencies (npm ci)'
     Push-Location $WebDir
     & $npmExe ci --no-audit --no-fund
     $npmExit = $LASTEXITCODE
     Pop-Location
     if ($npmExit -ne 0) {
-        Write-Err 'npm ci failed. See the output above for details.'
+        Show-Err 'npm ci failed. See the output above for details.'
         exit 1
     }
 }
@@ -117,10 +117,10 @@ $webProc = Start-Process -FilePath $npmExe -ArgumentList 'run', 'dev' `
     -RedirectStandardOutput $webLog `
     -RedirectStandardError  "$webLog.err" `
     -WindowStyle Hidden -PassThru
-Write-Ok "vite PID $($webProc.Id), logging to $webLog"
+Show-Ok "vite PID $($webProc.Id), logging to $webLog"
 
 # --- API --------------------------------------------------------------------
-Write-Step 'Starting Functions host (API)'
+Show-Step 'Starting Functions host (API)'
 $funcExe = Resolve-WinExe 'func'
 if (-not $funcExe) {
     $funcHome = Join-Path $env:LOCALAPPDATA 'AzureFunctionsCoreTools'
@@ -128,7 +128,7 @@ if (-not $funcExe) {
     if (Test-Path $candidate) { $funcExe = $candidate }
 }
 if (-not $funcExe) {
-    Write-Err 'func not on PATH. Run setupLocal.ps1 first.'
+    Show-Err 'func not on PATH. Run setupLocal.ps1 first.'
     Stop-Process -Id $webProc.Id -Force -ErrorAction SilentlyContinue
     exit 1
 }
@@ -137,23 +137,23 @@ $apiProc = Start-Process -FilePath $funcExe -ArgumentList 'start' `
     -RedirectStandardOutput $apiLog `
     -RedirectStandardError  "$apiLog.err" `
     -WindowStyle Hidden -PassThru
-Write-Ok "func PID $($apiProc.Id), logging to $apiLog"
+Show-Ok "func PID $($apiProc.Id), logging to $apiLog"
 
 @{ web = $webProc.Id; api = $apiProc.Id } | ConvertTo-Json | Out-File -FilePath $pidFile -Encoding UTF8
 
 # --- wait for app ports -----------------------------------------------------
-Write-Step 'Waiting for vite + func to come up'
+Show-Step 'Waiting for vite + func to come up'
 if (-not (Wait-Port $WebPort 30)) {
-    Write-Err "vite did not start on $WebPort within 30s. See $webLog."
+    Show-Err "vite did not start on $WebPort within 30s. See $webLog."
     exit 1
 }
-Write-Ok "vite ready on http://localhost:$WebPort/"
+Show-Ok "vite ready on http://localhost:$WebPort/"
 
 if (-not (Wait-Port $ApiPort 90)) {
-    Write-Err "func did not start on $ApiPort within 90s. See $apiLog."
+    Show-Err "func did not start on $ApiPort within 90s. See $apiLog."
     exit 1
 }
-Write-Ok "func ready on http://localhost:$ApiPort/"
+Show-Ok "func ready on http://localhost:$ApiPort/"
 
 Write-Host ''
 Write-Host 'Dev stack is up.' -ForegroundColor Green

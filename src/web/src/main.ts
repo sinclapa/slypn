@@ -16,5 +16,6 @@ setupFaro()
 
 // Drive MSAL through initialize + handleRedirectPromise once before
 // the first render so the nav can show the signed-in account immediately.
+// NOSONAR - top-level await isn't available under this project's browser target (chrome87/safari14/etc).
 const auth = useAuthStore()
 auth.initialize().finally(() => app.mount('#app'))

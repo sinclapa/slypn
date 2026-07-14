@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, RouterLinkStub } from '@vue/test-utils'
+import { mount, RouterLinkStub, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 
 const push = vi.fn()
@@ -101,5 +101,50 @@ describe('AppNav', () => {
     // Opening the hamburger closes the account menu (mutual exclusivity).
     await w.find('button[aria-controls="mobile-nav"]').trigger('click')
     expect(avatar.attributes('aria-expanded')).toBe('false')
+  })
+
+  it('signs out when Sign out is clicked in the desktop dropdown', async () => {
+    const auth = useAuthStore()
+    await auth.initialize()
+    const logoutSpy = vi.spyOn(auth, 'logout').mockResolvedValue()
+    const w = mountNav()
+    await w.find('[data-testid="user-menu-trigger"]').trigger('click')
+    const signOut = w.findAll('button').find(b => b.text() === 'Sign out')!
+    await signOut.trigger('click')
+    await flushPromises()
+    expect(logoutSpy).toHaveBeenCalled()
+  })
+
+  it('signs out when Sign out is clicked in the mobile account panel', async () => {
+    const auth = useAuthStore()
+    await auth.initialize()
+    const logoutSpy = vi.spyOn(auth, 'logout').mockResolvedValue()
+    const w = mountNav()
+    await w.find('button[aria-controls="mobile-account"]').trigger('click')
+    const mobileSignOut = w.find('#mobile-account').findAll('button').find(b => b.text() === 'Sign out')!
+    await mobileSignOut.trigger('click')
+    await flushPromises()
+    expect(logoutSpy).toHaveBeenCalled()
+  })
+
+  it('shows and hides the env menu on toggle and mouseleave', async () => {
+    const w = mountNav()
+    const envBtn = w.find('button[aria-expanded]')
+    // The env label button exists because VITE_FARO_ENV is unset (defaults to 'dev')
+    expect(envBtn.exists()).toBe(true)
+    await envBtn.trigger('click')
+    expect(envBtn.attributes('aria-expanded')).toBe('true')
+    // Mouseleave on the dropdown closes the menu
+    const dropdown = w.find('[aria-expanded="true"]').element.parentElement?.querySelector('[class*="absolute"]')
+    if (dropdown) {
+      await (w.find('[class*="absolute"][class*="mt-1"]')).trigger('mouseleave')
+    }
+  })
+
+  it('shows a Sign in button in the mobile nav when unauthenticated', async () => {
+    const w = mountNav()
+    await w.find('button[aria-controls="mobile-nav"]').trigger('click')
+    const nav = w.find('#mobile-nav')
+    expect(nav.text()).toContain('Sign in')
   })
 })

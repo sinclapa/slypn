@@ -27,5 +27,10 @@ export const EMPTY_DRAFT: DraftPayload = {
 
 export function makeDraftId(): string {
   if ('randomUUID' in crypto) return crypto.randomUUID().replace(/-/g, '')
-  return Math.random().toString(16).slice(2).padEnd(32, '0')
+  return randomHexFallback()
+}
+
+function randomHexFallback(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }

@@ -25,12 +25,14 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     private const string ArticleBodyPrefix = "articles";
     private const string DraftBodyPrefix   = "drafts";
     private const string MembersPartition  = "member";
+    private const string ArticleType       = "article";
+    private const string InReviewStatus    = "in-review";
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     // ---- Articles reads -------------------------------------------------------
     public async Task<IReadOnlyList<Article>> ListArticlesAsync(string? status, CancellationToken ct)
-        => await ListArticlesAsync(status, type: "article", ct);
+        => await ListArticlesAsync(status, type: ArticleType, ct);
 
     public async Task<IReadOnlyList<Article>> ListBlogPostsAsync(string? status, CancellationToken ct)
         => await ListArticlesAsync(status, type: "blog", ct);
@@ -51,8 +53,8 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
 
         // Rows that predate the Type field deserialise with Type="article" (record default),
         // so missing-or-"article" counts as the article bucket.
-        bool MatchesType(Article a) => type == "article"
-            ? string.Equals(a.Type, "article", StringComparison.OrdinalIgnoreCase)
+        bool MatchesType(Article a) => type == ArticleType
+            ? string.Equals(a.Type, ArticleType, StringComparison.OrdinalIgnoreCase)
             : string.Equals(a.Type, type, StringComparison.OrdinalIgnoreCase);
 
         var articles = entities
@@ -463,9 +465,9 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             ReadingMinutes: draft.ReadingMinutes,
             Category:       draft.Category,
             Tags:           draft.Tags,
-            Status:         "in-review")
+            Status:         InReviewStatus)
         {
-            Type = string.Equals(draft.Type, "blog", StringComparison.OrdinalIgnoreCase) ? "blog" : "article",
+            Type = string.Equals(draft.Type, "blog", StringComparison.OrdinalIgnoreCase) ? "blog" : ArticleType,
             AuthorId = draft.AuthorId,
             ReplacesArticleId = draft.ReplacesArticleId,
         };
@@ -531,11 +533,11 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
 
         // Read the in-review article first so we can tell a fresh publish from a revision
         // that must replace an existing published article in place.
-        var review = await GetArticleAsync(id, "in-review", ct)
+        var review = await GetArticleAsync(id, InReviewStatus, ct)
             ?? throw new InvalidOperationException($"Article {id} is not in 'in-review'.");
 
         if (string.IsNullOrEmpty(review.ReplacesArticleId))
-            return await TransitionAsync(id, fromStatus: "in-review", toStatus: "published",
+            return await TransitionAsync(id, fromStatus: InReviewStatus, toStatus: "published",
                 update: a => a with { PublishedAt = DateTime.UtcNow, RejectionReason = null }, ct);
 
         // Revision: overwrite the target published article's content in place, keeping its
@@ -563,7 +565,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         var saved = await store.Articles.UpsertEntityAsync(ArticleEntity(replacement), TableUpdateMode.Replace, ct);
 
         // Remove the in-review revision and its (now redundant) body blob.
-        await store.Articles.DeleteEntityAsync("in-review", id, ETag.All, ct);
+        await store.Articles.DeleteEntityAsync(InReviewStatus, id, ETag.All, ct);
         await body.DeleteAsync(ArticleBodyPrefix, id, ct);
 
         return replacement with
@@ -609,7 +611,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         Article source;
         try
         {
-            var read = await store.Articles.GetEntityAsync<TableEntity>("in-review", id, cancellationToken: ct);
+            var read = await store.Articles.GetEntityAsync<TableEntity>(InReviewStatus, id, cancellationToken: ct);
             source = Deserialize<Article>(read.Value);
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
@@ -641,7 +643,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
 
         await body.PutAsync(DraftBodyPrefix, draft.Id, articleBody, ct);
         var upserted = await store.Drafts.UpsertEntityAsync(DraftEntity(draft), TableUpdateMode.Replace, ct);
-        await store.Articles.DeleteEntityAsync("in-review", id, ETag.All, ct);
+        await store.Articles.DeleteEntityAsync(InReviewStatus, id, ETag.All, ct);
         await body.DeleteAsync(ArticleBodyPrefix, id, ct);
         return draft with { Etag = EncodeEtag(upserted.Headers.ETag!.Value) };
     }

@@ -24,15 +24,15 @@ var named = ParseNamed((docxPath is null ? argList : argList.Skip(1)).ToArray())
 
 if (!named.TryGetValue("connection-string", out var connectionString))
 {
-    Console.Error.WriteLine("Missing --connection-string.");
+    await Console.Error.WriteLineAsync("Missing --connection-string.");
     return 1;
 }
 var table = named.GetValueOrDefault("table", "newsletters");
 
 if (docxPath is null && !demo)
 {
-    Console.Error.WriteLine("usage: dotnet run -- [<docx-path>] --connection-string <cs> [--table <name>] [--demo]");
-    Console.Error.WriteLine("Pass a docx path to seed the newsletter and/or --demo to seed demo content.");
+    await Console.Error.WriteLineAsync("usage: dotnet run -- [<docx-path>] --connection-string <cs> [--table <name>] [--demo]");
+    await Console.Error.WriteLineAsync("Pass a docx path to seed the newsletter and/or --demo to seed demo content.");
     return 1;
 }
 
@@ -41,7 +41,7 @@ if (docxPath is not null)
 {
     if (!File.Exists(docxPath))
     {
-        Console.Error.WriteLine($"docx not found: {docxPath}");
+        await Console.Error.WriteLineAsync($"docx not found: {docxPath}");
         return 2;
     }
 
@@ -52,20 +52,20 @@ if (docxPath is not null)
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"docx parse failed: {ex.Message}");
+        await Console.Error.WriteLineAsync($"docx parse failed: {ex.Message}");
         return 2;
     }
 
-    Console.WriteLine($"Parsed newsletter: id={newsletter.Id} title='{newsletter.Title}' issue={newsletter.IssueDate} year={newsletter.Year} topics={newsletter.Topics.Count}");
+    await Console.Out.WriteLineAsync($"Parsed newsletter: id={newsletter.Id} title='{newsletter.Title}' issue={newsletter.IssueDate} year={newsletter.Year} topics={newsletter.Topics.Count}");
 
     try
     {
         await UpsertAsync(connectionString, table, newsletter);
-        Console.WriteLine($"Upserted into table {table}.");
+        await Console.Out.WriteLineAsync($"Upserted into table {table}.");
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"Table upsert failed: {ex.Message}");
+        await Console.Error.WriteLineAsync($"Table upsert failed: {ex.Message}");
         return 3;
     }
 }
@@ -79,7 +79,7 @@ if (demo)
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"Demo seed failed: {ex.Message}");
+        await Console.Error.WriteLineAsync($"Demo seed failed: {ex.Message}");
         return 3;
     }
 }
@@ -126,7 +126,7 @@ static SeedNewsletter BuildFromDocx(string path)
 
     return new SeedNewsletter(
         Id:        $"newsletter-{issueDate:yyyy-MM}",
-        Title:     derivedTitle,
+        Title:     title,
         IssueDate: issueDate,
         Summary:   summary,
         Topics:    headings.Count > 0 ? headings : new List<string> { "Newsletter" },
