@@ -11,7 +11,7 @@ const { choice, accept, decline } = useCookieConsent()
       open
       aria-labelledby="cookie-title"
       aria-describedby="cookie-desc"
-      class="fixed inset-x-0 bottom-0 z-50 m-0 max-w-none border-0 border-t border-slypn-100 bg-white/95 p-0 text-slypn-900 shadow-lg backdrop-blur"
+      class="fixed inset-x-0 bottom-0 z-50 m-0 w-full max-w-none border-0 border-t border-slypn-100 bg-white/95 p-0 text-slypn-900 shadow-lg backdrop-blur"
     >
       <div class="page-container flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
         <div class="text-sm text-slypn-900/85">
