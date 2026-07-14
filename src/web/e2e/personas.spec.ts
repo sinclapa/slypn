@@ -17,7 +17,7 @@ test.describe('dev persona switcher', () => {
 
     await page.getByTestId('user-menu-trigger').click()
     await expect(page.getByRole('link', { name: 'Members' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Admin' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Approvals' })).toBeVisible()
 
     await page.goto('/admin')
     await expect(page).toHaveURL(/\/admin$/)
@@ -29,7 +29,7 @@ test.describe('dev persona switcher', () => {
 
     await page.getByTestId('user-menu-trigger').click()
     await expect(page.getByRole('link', { name: 'Members' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Admin' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Approvals' })).toHaveCount(0)
 
     // Router guard redirects unauthorised roles back home with ?forbidden=.
     await page.goto('/admin/members')
