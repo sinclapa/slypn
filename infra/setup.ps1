@@ -973,10 +973,11 @@ if (-not $SkipGitHub) {
         Ok "Authenticated to GitHub"
 
         # Helper: set a secret and report idempotently.
+        $script:setSecretNames = @()
         function Set-GhSecret([string]$name, [string]$value) {
             if ([string]::IsNullOrWhiteSpace($value)) { Warn "Skipping $name — value not available"; return }
             $value | gh secret set $name --repo $gitHubRepo
-            if ($LASTEXITCODE -eq 0) { Ok $name } else { Warn "Failed to set $name" }
+            if ($LASTEXITCODE -eq 0) { Ok $name; $script:setSecretNames += $name } else { Warn "Failed to set $name" }
         }
 
         # SWA deployment token — fetch fresh from Azure each run.
@@ -1077,6 +1078,21 @@ if (-not $SkipGitHub) {
         if ($s.Contains('spaObjectId'))     { Set-GhSecret 'SPA_OBJECT_ID'      $s['spaObjectId'] }
         if ($s.Contains('ciClientId'))      { Set-GhSecret 'CIAM_CLIENT_ID'     $s['ciClientId'] }
         if ($s.Contains('ciClientSecret'))  { Set-GhSecret 'CIAM_CLIENT_SECRET' $s['ciClientSecret'] }
+
+        # SonarCloud analysis token — used by the "sonarcloud" CI job.
+        $sonarToken = Ask $s 'sonarToken' 'SonarCloud token (sonarcloud.io -> My Account -> Security, Enter to skip)'
+        Set-GhSecret 'SONAR_TOKEN' $sonarToken
+
+        # ── Validate all expected secrets are present ────────────────────────
+        Step 'Phase 4 · Validating GitHub secrets'
+        $actualSecretNames   = @(gh secret list --repo $gitHubRepo --json name -q '.[].name' 2>$null)
+        $expectedSecretNames = @($script:setSecretNames | Select-Object -Unique)
+        $missingSecretNames  = @($expectedSecretNames | Where-Object { $_ -notin $actualSecretNames })
+        if ($missingSecretNames.Count -eq 0) {
+            Ok "All $($expectedSecretNames.Count) secret(s) confirmed present on $gitHubRepo"
+        } else {
+            Warn "Missing on $gitHubRepo`: $($missingSecretNames -join ', ')"
+        }
     }
 }
 

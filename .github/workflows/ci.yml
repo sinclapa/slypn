@@ -66,3 +66,82 @@ jobs:
 
       - name: Test (API)
         run: dotnet test src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj --configuration Release --logger "trx;LogFileName=test-results.trx" --verbosity normal
+
+  sonarcloud:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    needs: [web, api]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: src/web/package-lock.json
+
+      - name: Set up JDK 17 (required by SonarScanner)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Install SonarScanner for .NET
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Install web dependencies
+        working-directory: src/web
+        run: npm ci --no-fund --no-audit --ignore-scripts
+
+      - name: Web unit tests with coverage
+        working-directory: src/web
+        run: npm run test:unit:coverage
+
+      - name: Begin SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          dotnet-sonarscanner begin
+          /k:"sinclapa_slypn"
+          /o:"cookingcode"
+          /d:sonar.host.url="https://sonarcloud.io"
+          /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+          /d:sonar.cs.cobertura.reportsPaths="src/api/Slypn.Api.Tests/TestResults/**/coverage.cobertura.xml"
+          /d:sonar.javascript.lcov.reportPaths="src/web/coverage/lcov.info"
+          /d:sonar.typescript.lcov.reportPaths="src/web/coverage/lcov.info"
+          /d:sonar.exclusions="**/node_modules/**,**/dist/**,**/coverage/**,**/playwright-report/**,**/test-results/**,**/bin/**,**/obj/**"
+          /d:sonar.test.inclusions="src/web/src/**/*.spec.ts,src/web/src/**/*.test.ts,src/web/e2e/**"
+
+      - name: Restore (API)
+        run: dotnet restore src/api/Slypn.Api/Slypn.Api.csproj
+
+      - name: Build (API)
+        run: dotnet build src/api/Slypn.Api/Slypn.Api.csproj --no-restore --configuration Release
+
+      - name: Test (API) with coverage
+        run: >
+          dotnet test src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj
+          --configuration Release
+          --collect:"XPlat Code Coverage"
+          --settings src/api/Slypn.Api.Tests/coverlet.runsettings
+          --results-directory src/api/Slypn.Api.Tests/TestResults
+
+      - name: End SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
