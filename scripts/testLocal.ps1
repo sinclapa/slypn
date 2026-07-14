@@ -166,6 +166,10 @@ if (-not $SkipUnit) {
 # ── UI e2e tests (Playwright) ─────────────────────────────────────────────────
 if (-not $SkipE2e) {
     Show-Step 'UI e2e tests (Playwright)'
+
+    Show-Step 'Starting Azurite + Functions host for e2e'
+    $e2eBackend = Start-E2eBackend (Join-Path $resultsDir 'e2e-backend')
+
     Push-Location $WebDir
     try {
         & npx playwright install chromium 2>&1 | Out-Null   # idempotent
@@ -175,6 +179,7 @@ if (-not $SkipE2e) {
         Remove-Item Env:PLAYWRIGHT_JSON_OUTPUT_NAME -ErrorAction SilentlyContinue
     } finally {
         Pop-Location
+        Stop-E2eBackend $e2eBackend
     }
 
     $passed = 0; $failed = 0; $skipped = 0; $flaky = 0
