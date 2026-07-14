@@ -33,8 +33,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests with coverage
+        run: npm run test:unit:coverage
+
       - name: Build (includes typecheck via vue-tsc)
         run: npm run build
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-coverage
+          path: src/web/coverage
+          retention-days: 1
 
   api:
     name: API (.NET Functions)
@@ -64,8 +74,21 @@ jobs:
       - name: Build (Seed CLI)
         run: dotnet build src/api/Slypn.Seed/Slypn.Seed.csproj --configuration Release
 
-      - name: Test (API)
-        run: dotnet test src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj --configuration Release --logger "trx;LogFileName=test-results.trx" --verbosity normal
+      - name: Test (API) with coverage
+        run: >
+          dotnet test src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj
+          --configuration Release
+          --collect:"XPlat Code Coverage"
+          --settings src/api/Slypn.Api.Tests/coverlet.runsettings
+          --results-directory src/api/Slypn.Api.Tests/TestResults
+          --verbosity normal
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: src/api/Slypn.Api.Tests/TestResults
+          retention-days: 1
 
   sonarcloud:
     name: SonarCloud
@@ -80,6 +103,14 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
+
+      - name: NuGet cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('src/api/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -104,13 +135,24 @@ jobs:
       - name: Install SonarScanner for .NET
         run: dotnet tool install --global dotnet-sonarscanner
 
+      # Sonar's JS/TS analyzer wants node_modules present to resolve types, but
+      # the test suite itself already ran in the "web" job — reuse its coverage
+      # instead of reinstalling+retesting here.
       - name: Install web dependencies
         working-directory: src/web
         run: npm ci --no-fund --no-audit --ignore-scripts
 
-      - name: Web unit tests with coverage
-        working-directory: src/web
-        run: npm run test:unit:coverage
+      - name: Download web coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: web-coverage
+          path: src/web/coverage
+
+      - name: Download API coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: api-coverage
+          path: src/api/Slypn.Api.Tests/TestResults
 
       - name: Begin SonarCloud analysis
         env:
@@ -127,19 +169,14 @@ jobs:
           /d:sonar.test.inclusions="src/web/src/**/*.spec.ts,src/web/src/**/*.test.ts,src/web/e2e/**"
           /d:sonar.qualitygate.wait=true
 
+      # dotnet build must run between begin/end (not just once in the "api" job)
+      # for SonarScanner's Roslyn instrumentation to capture the C# analysis —
+      # the test run itself is not repeated, its coverage is downloaded above.
       - name: Restore (API)
         run: dotnet restore src/api/Slypn.Api/Slypn.Api.csproj
 
       - name: Build (API)
         run: dotnet build src/api/Slypn.Api/Slypn.Api.csproj --no-restore --configuration Release
-
-      - name: Test (API) with coverage
-        run: >
-          dotnet test src/api/Slypn.Api.Tests/Slypn.Api.Tests.csproj
-          --configuration Release
-          --collect:"XPlat Code Coverage"
-          --settings src/api/Slypn.Api.Tests/coverlet.runsettings
-          --results-directory src/api/Slypn.Api.Tests/TestResults
 
       - name: End SonarCloud analysis
         env:
