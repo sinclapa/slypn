@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Wall calendar with binder loops, a full date grid, and a highlighted
-// meet-up date, outlined — events icon.
+// Wall calendar with binder loops, a full date grid, and a hand-drawn cross
+// marking the meet-up date, outlined — events icon.
 // Monochrome via currentColor; inherits surrounding text colour.
 </script>
 
@@ -15,7 +15,7 @@
     <path d="M200 66 V188" stroke-width="3" />
     <path d="M20 106 H260" stroke-width="3" />
     <path d="M20 146 H260" stroke-width="3" />
-    <circle cx="170" cy="126" r="16" />
-    <circle cx="170" cy="126" r="4" fill="currentColor" stroke="none" />
+    <path d="M156 113 Q170 124 185 140" stroke-width="5" />
+    <path d="M186 114 Q168 127 155 139" stroke-width="5" />
   </svg>
 </template>
