@@ -15,7 +15,7 @@
     <path d="M200 66 V188" stroke-width="3" />
     <path d="M20 106 H260" stroke-width="3" />
     <path d="M20 146 H260" stroke-width="3" />
-    <path d="M156 113 Q170 124 185 140" stroke-width="5" />
-    <path d="M186 114 Q168 127 155 139" stroke-width="5" />
+    <path d="M160 117 Q170 125 181 136" stroke-width="8" />
+    <path d="M181 118 Q169 126 159 136" stroke-width="8" />
   </svg>
 </template>
