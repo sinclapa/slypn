@@ -11,4 +11,4 @@ public sealed record SeedNewsletter(
     DateOnly IssueDate,
     string Summary,
     IReadOnlyList<string> Topics,
-    string Year);
+    string? FileName = null);

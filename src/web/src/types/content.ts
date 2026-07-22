@@ -86,4 +86,6 @@ export interface Newsletter {
   issueDate: string
   summary: string
   topics: string[]
+  /** Canonical download filename of the attached issue, present only when a file exists. */
+  fileName?: string
 }

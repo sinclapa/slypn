@@ -42,7 +42,8 @@ public interface IContentRepository
 
     Task<Newsletter> CreateNewsletterAsync   (NewsletterInput input, CancellationToken ct);
     Task<Newsletter> ReplaceNewsletterAsync  (string id, NewsletterInput input, string? ifMatch, CancellationToken ct);
-    Task             DeleteNewsletterAsync   (string id, string year, string? ifMatch, CancellationToken ct);
+    Task             DeleteNewsletterAsync   (string id, string? ifMatch, CancellationToken ct);
+    Task<BlobDownload?> OpenNewsletterFileAsync(string id, CancellationToken ct);
 
     // Members --------------------------------------------------------------
     Task<Member?>              GetMemberByEmailAsync(string email, CancellationToken ct);

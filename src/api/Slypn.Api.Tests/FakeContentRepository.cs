@@ -87,8 +87,13 @@ internal sealed class FakeContentRepository : IContentRepository
         => Task.FromResult(Guard(new Newsletter("new-id", input.Title, input.IssueDate, input.Summary, input.Topics)));
     public Task<Newsletter> ReplaceNewsletterAsync(string id, NewsletterInput input, string? ifMatch, CancellationToken ct)
         => Task.FromResult(Guard(new Newsletter(id, input.Title, input.IssueDate, input.Summary, input.Topics)));
-    public Task DeleteNewsletterAsync(string id, string year, string? ifMatch, CancellationToken ct)
+    public Task DeleteNewsletterAsync(string id, string? ifMatch, CancellationToken ct)
         => Guard(Task.CompletedTask);
+
+    /// <summary>Stubbed newsletter file, keyed by newsletter id, returned by OpenNewsletterFileAsync.</summary>
+    public Dictionary<string, BlobDownload> NewsletterFiles = new();
+    public Task<BlobDownload?> OpenNewsletterFileAsync(string id, CancellationToken ct)
+        => Task.FromResult(NewsletterFiles.TryGetValue(id, out var f) ? f : null);
 
     /// <summary>Set to throw from the next GetMemberByEmailAsync call (e.g. to test lookup-error branches).</summary>
     public Exception? ThrowOnMemberEmailLookup { get; set; }
