@@ -22,9 +22,11 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
 {
     public bool SupportsWrites => store.IsConfigured;
 
-    private const string ArticleBodyPrefix = "articles";
-    private const string DraftBodyPrefix   = "drafts";
-    private const string MembersPartition  = "member";
+    private const string ArticleBodyPrefix    = "articles";
+    private const string DraftBodyPrefix      = "drafts";
+    private const string NewsletterFilePrefix = "newsletters";
+    private const string MembersPartition     = "member";
+    private const string NewslettersPartition = "newsletter";
     private const string ArticleType       = "article";
     private const string InReviewStatus    = "in-review";
 
@@ -309,7 +311,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     {
         EnsureWrites();
         var n = new Newsletter(Guid.NewGuid().ToString("N"), input.Title, input.IssueDate, input.Summary, input.Topics);
-        var resp = await store.Newsletters.AddEntityAsync(Entity(n.Year, n.Id, n), ct);
+        var resp = await store.Newsletters.AddEntityAsync(Entity(NewslettersPartition, n.Id, n), ct);
         return n with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
@@ -318,15 +320,23 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         EnsureWrites();
         var n = new Newsletter(id, input.Title, input.IssueDate, input.Summary, input.Topics);
         var resp = await store.Newsletters.UpdateEntityAsync(
-            Entity(n.Year, n.Id, n), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+            Entity(NewslettersPartition, n.Id, n), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
         return n with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 
-    public async Task DeleteNewsletterAsync(string id, string year, string? ifMatch, CancellationToken ct)
+    public async Task DeleteNewsletterAsync(string id, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        await store.Newsletters.DeleteEntityAsync(year, id, DecodeEtag(ifMatch), ct);
+        // Remove the authoritative row first (so an ETag/precondition failure aborts
+        // before we touch storage), then best-effort delete the file blob. DeleteAsync
+        // is a no-op when the blob is absent, so newsletters without a file are fine.
+        await store.Newsletters.DeleteEntityAsync(NewslettersPartition, id, DecodeEtag(ifMatch), ct);
+        await body.DeleteAsync(NewsletterFilePrefix, id, ct);
     }
+
+    /// <summary>Open the attached issue file (PDF/DOCX) for streaming, or null if there is none.</summary>
+    public Task<BlobDownload?> OpenNewsletterFileAsync(string id, CancellationToken ct) =>
+        body.TryOpenFileAsync(NewsletterFilePrefix, id, ct);
 
     // ---- Members --------------------------------------------------------------
     public async Task<Member?> GetMemberByEmailAsync(string email, CancellationToken ct)

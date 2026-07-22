@@ -26,4 +26,18 @@ describe('NewsletterCard', () => {
     expect(w.text()).toContain('Meet-ups')
     expect(w.text()).toContain('Fundraising')
   })
+
+  it('shows a download link to the file endpoint when a file is attached', () => {
+    const w = mount(NewsletterCard, {
+      props: { newsletter: { ...newsletter, fileName: 'SLYPN-Newsletter-2026-05.docx' } },
+    })
+    const link = w.get('a[download]')
+    expect(link.attributes('href')).toBe('/api/newsletters/n1/file')
+    expect(w.text()).toContain('Download issue')
+  })
+
+  it('omits the download link when no file is attached', () => {
+    const w = mount(NewsletterCard, { props: { newsletter } })
+    expect(w.find('a[download]').exists()).toBe(false)
+  })
 })

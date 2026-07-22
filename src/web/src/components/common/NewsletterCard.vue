@@ -23,5 +23,17 @@ const formatDate = (iso: string) =>
         {{ topic }}
       </li>
     </ul>
+    <a
+      v-if="newsletter.fileName"
+      :href="`/api/newsletters/${newsletter.id}/file`"
+      class="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-slypn-600 hover:text-slypn-700 hover:underline"
+      download
+    >
+      <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path d="M10 2a1 1 0 0 1 1 1v7.586l2.293-2.293a1 1 0 1 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L9 10.586V3a1 1 0 0 1 1-1Z" />
+        <path d="M3 14a1 1 0 0 1 1 1v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1a1 1 0 1 1 2 0v1a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-1a1 1 0 0 1 1-1Z" />
+      </svg>
+      Download issue
+    </a>
   </article>
 </template>

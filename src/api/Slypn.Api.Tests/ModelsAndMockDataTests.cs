@@ -29,13 +29,6 @@ public class ModelsAndMockDataTests
     }
 
     [Fact]
-    public void Newsletter_Year_is_four_digit_issue_year()
-    {
-        var n = new Newsletter("id", "May 2026", new DateOnly(2026, 5, 1), "summary text", new[] { "t" });
-        Assert.Equal("2026", n.Year);
-    }
-
-    [Fact]
     public void Draft_and_Member_records_round_trip_etag()
     {
         var d = new Draft("id", "auth", "Author", "article", "T", "s", "sum", "body", "cat",

@@ -27,6 +27,44 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
         return await Ok(req, items);
     }
 
+    [Function("GetNewsletterFile")]
+    [OpenApiOperation(operationId: "newsletters.file", tags: new[] { "newsletters" }, Summary = "Download newsletter file", Description = "Streams the attached issue file (PDF/DOCX) for a newsletter.")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Newsletter id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/octet-stream", bodyType: typeof(byte[]), Description = "The newsletter file")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Description = "No file for this newsletter")]
+    public async Task<HttpResponseData> GetFile(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "newsletters/{id}/file")] HttpRequestData req,
+        string id, CancellationToken ct)
+    {
+        var file = await repo.OpenNewsletterFileAsync(id, ct);
+        if (file is null) return await NotFound(req, "No file for this newsletter.");
+
+        var resp = req.CreateResponse(HttpStatusCode.OK);
+        resp.Headers.Add("Content-Type", file.ContentType);
+        resp.Headers.Add("Content-Disposition", $"attachment; filename=\"{DownloadName(id, file.ContentType)}\"");
+        await using (file.Content)
+        {
+            await file.Content.CopyToAsync(resp.Body, ct);
+        }
+        return resp;
+    }
+
+    /// <summary>Clean, canonical download name, e.g. newsletter-2020-11 + application/pdf -> SLYPN-Newsletter-2020-11.pdf.</summary>
+    private static string DownloadName(string id, string contentType)
+    {
+        var stamp = id.StartsWith("newsletter-", StringComparison.OrdinalIgnoreCase)
+            ? id["newsletter-".Length..]
+            : id;
+        var ext = contentType switch
+        {
+            "application/pdf" => "pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
+            "application/msword" => "doc",
+            _ => "bin",
+        };
+        return $"SLYPN-Newsletter-{stamp}.{ext}";
+    }
+
     [Function("CreateNewsletter")]
     [RequireRole("Admin")]
     [OpenApiOperation(operationId: "newsletters.create", tags: new[] { "newsletters" }, Summary = "Create newsletter", Description = "Creates a newsletter issue.")]
@@ -72,22 +110,18 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
 
     [Function("DeleteNewsletter")]
     [RequireRole("Admin")]
-    [OpenApiOperation(operationId: "newsletters.delete", tags: new[] { "newsletters" }, Summary = "Delete newsletter", Description = "Deletes a newsletter using its id and partition key year.")]
+    [OpenApiOperation(operationId: "newsletters.delete", tags: new[] { "newsletters" }, Summary = "Delete newsletter", Description = "Deletes a newsletter by id.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Newsletter id.")]
-    [OpenApiParameter(name: "year", In = ParameterLocation.Query, Required = true, Type = typeof(string), Description = "Newsletter partition key year.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NoContent, Description = "Deleted")]
     public async Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "newsletters/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
-        var year = QueryParam(req, "year");
-        if (string.IsNullOrWhiteSpace(year))
-            return await BadRequest(req, "DELETE /api/newsletters/{id} requires ?year=YYYY.");
         try
         {
-            await repo.DeleteNewsletterAsync(id, year, IfMatch(req), ct);
+            await repo.DeleteNewsletterAsync(id, IfMatch(req), ct);
             return NoContent(req);
         }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }

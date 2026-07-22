@@ -58,6 +58,23 @@ public sealed class ContentBodyStore : IContentBodyStore
         }
     }
 
+    public async Task<BlobDownload?> TryOpenFileAsync(string prefix, string id, CancellationToken ct)
+    {
+        var blob = Blob(prefix, id);
+        try
+        {
+            var resp = await blob.DownloadStreamingAsync(cancellationToken: ct);
+            var contentType = resp.Value.Details.ContentType is { Length: > 0 } ct2
+                ? ct2
+                : "application/octet-stream";
+            return new BlobDownload(resp.Value.Content, contentType);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
     public async Task DeleteAsync(string prefix, string id, CancellationToken ct) =>
         await Blob(prefix, id).DeleteIfExistsAsync(cancellationToken: ct);
 

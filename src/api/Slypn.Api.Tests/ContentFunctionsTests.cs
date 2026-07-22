@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Slypn.Api.Functions;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
+using Slypn.Api.Services;
 using Xunit;
 
 namespace Slypn.Api.Tests;
@@ -168,7 +169,7 @@ public class ContentFunctionsTests
     }
 
     [Fact]
-    public async Task Newsletters_delete_503_and_400_and_204()
+    public async Task Newsletters_delete_503_then_204()
     {
         var repo = new FakeContentRepository { Writes = false };
         var fn = NewslettersFn(repo);
@@ -178,10 +179,7 @@ public class ContentFunctionsTests
         Assert.Equal(HttpStatusCode.ServiceUnavailable, disabled.StatusCode);
 
         repo.Writes = true;
-        var noYear = (TestHttpResponseData)await fn.Delete(TestHttp.Raw(ctx, "DELETE", "http://localhost/api/newsletters/n1", ""), "n1", Ct);
-        Assert.Equal(HttpStatusCode.BadRequest, noYear.StatusCode);
-
-        var ok = (TestHttpResponseData)await fn.Delete(TestHttp.Raw(ctx, "DELETE", "http://localhost/api/newsletters/n1?year=2026", ""), "n1", Ct);
+        var ok = (TestHttpResponseData)await fn.Delete(TestHttp.Raw(ctx, "DELETE", "http://localhost/api/newsletters/n1", ""), "n1", Ct);
         Assert.Equal(HttpStatusCode.NoContent, ok.StatusCode);
     }
 
@@ -258,7 +256,7 @@ public class ContentFunctionsTests
         var repo = new FakeContentRepository { ThrowOnWrite = new RequestFailedException(412, "Precondition failed") };
         var fn = NewslettersFn(repo);
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.Delete(TestHttp.Raw(ctx, "DELETE", "http://localhost/api/newsletters/n1?year=2026", ""), "n1", Ct);
+        var resp = (TestHttpResponseData)await fn.Delete(TestHttp.Raw(ctx, "DELETE", "http://localhost/api/newsletters/n1", ""), "n1", Ct);
         Assert.Equal(HttpStatusCode.PreconditionFailed, resp.StatusCode);
     }
 
@@ -296,6 +294,82 @@ public class ContentFunctionsTests
 
         var sub = (TestHttpResponseData)await fn.Subscribe(TestHttp.Json(ctx, "POST", "http://localhost/api/newsletter/subscribe", new { email = "me@example.com" }), Ct);
         Assert.Contains((int)sub.StatusCode, new[] { 200, 201 });
+    }
+
+    [Fact]
+    public async Task Newsletters_file_streams_bytes_with_headers()
+    {
+        var bytes = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D }; // %PDF-
+        var repo = new FakeContentRepository
+        {
+            NewsletterFiles = { ["newsletter-2020-11"] = new BlobDownload(new MemoryStream(bytes), "application/pdf") },
+        };
+        var fn = NewslettersFn(repo);
+        var ctx = new TestFunctionContext();
+
+        var resp = (TestHttpResponseData)await fn.GetFile(
+            TestHttp.Get(ctx, "http://localhost/api/newsletters/newsletter-2020-11/file"), "newsletter-2020-11", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("application/pdf", resp.Headers.GetValues("Content-Type").Single());
+        Assert.Contains("SLYPN-Newsletter-2020-11.pdf", resp.Headers.GetValues("Content-Disposition").Single());
+        resp.Body.Position = 0;
+        Assert.Equal(bytes, ((MemoryStream)resp.Body).ToArray());
+    }
+
+    [Fact]
+    public async Task Newsletters_file_404_when_absent()
+    {
+        var fn = NewslettersFn(new FakeContentRepository());
+        var ctx = new TestFunctionContext();
+        var resp = (TestHttpResponseData)await fn.GetFile(
+            TestHttp.Get(ctx, "http://localhost/api/newsletters/newsletter-1999-01/file"), "newsletter-1999-01", Ct);
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Newsletters_file_download_name_for_docx()
+    {
+        // Non-"newsletter-"-prefixed id: the shape CreateNewsletterAsync actually mints
+        // for admin-created newsletters (a GUID), so the stamp falls back to the raw id.
+        var id = "a1b2c3";
+        var repo = new FakeContentRepository
+        {
+            NewsletterFiles = { [id] = new BlobDownload(new MemoryStream([]),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document") },
+        };
+        var resp = (TestHttpResponseData)await NewslettersFn(repo).GetFile(
+            TestHttp.Get(new TestFunctionContext(), $"http://localhost/api/newsletters/{id}/file"), id, Ct);
+
+        Assert.Contains($"SLYPN-Newsletter-{id}.docx", resp.Headers.GetValues("Content-Disposition").Single());
+    }
+
+    [Fact]
+    public async Task Newsletters_file_download_name_for_doc()
+    {
+        var id = "newsletter-2021-03";
+        var repo = new FakeContentRepository
+        {
+            NewsletterFiles = { [id] = new BlobDownload(new MemoryStream([]), "application/msword") },
+        };
+        var resp = (TestHttpResponseData)await NewslettersFn(repo).GetFile(
+            TestHttp.Get(new TestFunctionContext(), $"http://localhost/api/newsletters/{id}/file"), id, Ct);
+
+        Assert.Contains("SLYPN-Newsletter-2021-03.doc", resp.Headers.GetValues("Content-Disposition").Single());
+    }
+
+    [Fact]
+    public async Task Newsletters_file_download_name_for_unknown_content_type()
+    {
+        var id = "newsletter-2021-04";
+        var repo = new FakeContentRepository
+        {
+            NewsletterFiles = { [id] = new BlobDownload(new MemoryStream([]), "application/octet-stream") },
+        };
+        var resp = (TestHttpResponseData)await NewslettersFn(repo).GetFile(
+            TestHttp.Get(new TestFunctionContext(), $"http://localhost/api/newsletters/{id}/file"), id, Ct);
+
+        Assert.Contains("SLYPN-Newsletter-2021-04.bin", resp.Headers.GetValues("Content-Disposition").Single());
     }
 
     [Fact]

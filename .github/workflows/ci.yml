@@ -154,6 +154,11 @@ jobs:
           name: api-coverage
           path: src/api/Slypn.Api.Tests/TestResults
 
+      # sonar.coverage.exclusions mirrors coverlet.runsettings' <ExcludeByFile> —
+      # coverlet excludes these files from local/CI instrumentation (Azure Storage
+      # wrappers etc. that need live infra, covered separately by e2e), but that
+      # exclusion doesn't tell Sonar's quality gate to stop requiring coverage for
+      # them. Keep the two lists in sync.
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -167,6 +172,7 @@ jobs:
           /d:sonar.typescript.lcov.reportPaths="src/web/coverage/lcov.info"
           /d:sonar.exclusions="**/node_modules/**,**/dist/**,**/coverage/**,**/playwright-report/**,**/test-results/**,**/bin/**,**/obj/**"
           /d:sonar.test.inclusions="src/web/src/**/*.spec.ts,src/web/src/**/*.test.ts,src/web/e2e/**"
+          /d:sonar.coverage.exclusions="**/Program.cs,**/Infrastructure/OpenApiConfig.cs,**/Infrastructure/OtelSources.cs,**/Infrastructure/SwaggerUiOptions.cs,**/Infrastructure/TracingMiddleware.cs,**/Infrastructure/JwtMiddleware.cs,**/Infrastructure/TableBootstrapper.cs,**/Infrastructure/EntraJwtValidator.cs,**/Services/ContentRepository.cs,**/Services/BlobService.cs,**/Services/ContentBodyStore.cs,**/Services/TableStore.cs,**/Services/EntraUserService.cs,**/Services/CiamInviteService.cs"
           /d:sonar.qualitygate.wait=true
 
       # dotnet build must run between begin/end (not just once in the "api" job)

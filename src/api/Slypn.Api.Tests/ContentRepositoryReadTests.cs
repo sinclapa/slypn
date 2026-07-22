@@ -23,6 +23,7 @@ file sealed class NoopBodyStore : IContentBodyStore
     public bool IsConfigured => false;
     public Task PutAsync(string prefix, string id, string html, CancellationToken ct) => Task.CompletedTask;
     public Task<string> GetAsync(string prefix, string id, CancellationToken ct) => Task.FromResult("");
+    public Task<BlobDownload?> TryOpenFileAsync(string prefix, string id, CancellationToken ct) => Task.FromResult<BlobDownload?>(null);
     public Task DeleteAsync(string prefix, string id, CancellationToken ct) => Task.CompletedTask;
 }
 

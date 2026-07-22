@@ -9,8 +9,12 @@ public sealed record Newsletter(
     string Summary,
     IReadOnlyList<string> Topics)
 {
-    /// <summary>Partition key — four-digit year of IssueDate.</summary>
-    public string Year => IssueDate.Year.ToString("D4");
+    /// <summary>
+    /// Canonical download filename of the attached issue (PDF/DOCX), or null when
+    /// no file is attached. The bytes live in the content blob container under
+    /// <c>newsletters/{Id}</c>; presence of this value signals the file exists.
+    /// </summary>
+    public string? FileName { get; init; }
 
     [JsonPropertyName("_etag")]
     [Newtonsoft.Json.JsonProperty("_etag")]

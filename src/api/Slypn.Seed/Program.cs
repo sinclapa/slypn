@@ -3,17 +3,22 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Azure.Data.Tables;
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Wordprocessing;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Slypn.Seed;
 
 // Args:
-//   [<docx-path>]  --connection-string <cs>  [--table <name>]  [--demo]
+//   [<docx-path>]  --connection-string <cs>  [--table <name>]  [--container <name>]
+//   [--dir <folder>]  [--demo]
 //
-// At least one of <docx-path> (seed the newsletter) or --demo (seed demo
-// events/articles/blogs/resources) is required.
-// Defaults: table = "newsletters".
-// Exit codes: 0 success, 1 bad args, 2 docx error, 3 storage error.
+// At least one of <docx-path> (seed one newsletter), --dir (bulk-import a folder
+// of YYYY-MM.pdf/.docx issues), or --demo (seed demo content) is required. Each
+// newsletter's file is uploaded to the content blob container under
+// newsletters/{id}; its metadata row is upserted into the newsletters table.
+// Defaults: table = "newsletters", container = "content".
+// Exit codes: 0 success, 1 bad args, 2 file error, 3 storage error.
+
+const string DocxContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 var argList = args.ToList();
 var demo = argList.Remove("--demo");
@@ -28,15 +33,17 @@ if (!named.TryGetValue("connection-string", out var connectionString))
     return 1;
 }
 var table = named.GetValueOrDefault("table", "newsletters");
+var container = named.GetValueOrDefault("container", "content");
+named.TryGetValue("dir", out var importDir);
 
-if (docxPath is null && !demo)
+if (docxPath is null && importDir is null && !demo)
 {
-    await Console.Error.WriteLineAsync("usage: dotnet run -- [<docx-path>] --connection-string <cs> [--table <name>] [--demo]");
-    await Console.Error.WriteLineAsync("Pass a docx path to seed the newsletter and/or --demo to seed demo content.");
+    await Console.Error.WriteLineAsync("usage: dotnet run -- [<docx-path>] --connection-string <cs> [--table <name>] [--container <name>] [--dir <folder>] [--demo]");
+    await Console.Error.WriteLineAsync("Pass a docx path or --dir to seed newsletters, and/or --demo to seed demo content.");
     return 1;
 }
 
-// ----- newsletter (from docx) -------------------------------------------------
+// ----- newsletter (single docx) -----------------------------------------------
 if (docxPath is not null)
 {
     if (!File.Exists(docxPath))
@@ -56,18 +63,58 @@ if (docxPath is not null)
         return 2;
     }
 
-    await Console.Out.WriteLineAsync($"Parsed newsletter: id={newsletter.Id} title='{newsletter.Title}' issue={newsletter.IssueDate} year={newsletter.Year} topics={newsletter.Topics.Count}");
-
     try
     {
+        await UploadFileAsync(connectionString, container, newsletter.Id, docxPath, DocxContentType);
         await UpsertAsync(connectionString, table, newsletter);
-        await Console.Out.WriteLineAsync($"Upserted into table {table}.");
+        await Console.Out.WriteLineAsync($"Seeded {newsletter.Id}: '{newsletter.Title}' (issue {newsletter.IssueDate}, {newsletter.Topics.Count} topics) + file.");
     }
     catch (Exception ex)
     {
-        await Console.Error.WriteLineAsync($"Table upsert failed: {ex.Message}");
+        await Console.Error.WriteLineAsync($"Seed failed: {ex.Message}");
         return 3;
     }
+}
+
+// ----- newsletters (bulk import from a folder) --------------------------------
+if (importDir is not null)
+{
+    if (!Directory.Exists(importDir))
+    {
+        await Console.Error.WriteLineAsync($"dir not found: {importDir}");
+        return 2;
+    }
+
+    var files = Directory.EnumerateFiles(importDir)
+        .Where(f => f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
+                 || f.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (files.Count == 0)
+    {
+        await Console.Error.WriteLineAsync($"No .pdf/.docx files in {importDir}.");
+        return 2;
+    }
+
+    var ok = 0;
+    foreach (var path in files)
+    {
+        try
+        {
+            var (newsletter, contentType) = BuildFromImportFile(path);
+            await UploadFileAsync(connectionString, container, newsletter.Id, path, contentType);
+            await UpsertAsync(connectionString, table, newsletter);
+            await Console.Out.WriteLineAsync($"  {newsletter.Id}  <- {Path.GetFileName(path)}  ({newsletter.Topics.Count} topics)");
+            ok++;
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"  FAILED {Path.GetFileName(path)}: {ex.Message}");
+            return 3;
+        }
+    }
+    await Console.Out.WriteLineAsync($"Imported {ok}/{files.Count} newsletters into table '{table}' + container '{container}'.");
 }
 
 // ----- demo content -----------------------------------------------------------
@@ -98,42 +145,47 @@ static Dictionary<string, string> ParseNamed(string[] args)
     return d;
 }
 
+// A single docx (e.g. brief/SLYPN_Newsletter_MAY_2026.docx). Date from the
+// SLYPN_Newsletter_<MONTH>_<YEAR> filename; metadata is derived, same as import.
 static SeedNewsletter BuildFromDocx(string path)
+    => NewsletterFor(IssueDateFromMonthName(path), ".docx");
+
+/// <summary>
+/// Bulk-import build: issue date comes from the YYYY-MM filename. Metadata is
+/// derived (not mined from the document) — these real-world PDFs/DOCX have no
+/// reliable title/heading structure (embedded shape text leaks digits into
+/// InnerText), so a clean, predictable "Month YYYY" title reads far better than
+/// scraped noise.
+/// </summary>
+static (SeedNewsletter Newsletter, string ContentType) BuildFromImportFile(string path)
 {
-    using var doc = WordprocessingDocument.Open(path, false);
-    var body = doc.MainDocumentPart?.Document.Body
-        ?? throw new InvalidOperationException("document has no body");
+    var stem = Path.GetFileNameWithoutExtension(path);
+    var m = Regex.Match(stem, @"(?<y>\d{4})-(?<m>\d{2})");
+    if (!m.Success)
+        throw new InvalidOperationException($"filename '{stem}' is not YYYY-MM");
 
-    var paragraphs = body.Descendants<Paragraph>()
-        .Select(p => p.InnerText.Trim())
-        .Where(t => t.Length > 0)
-        .ToList();
-
-    var headings = body.Descendants<Paragraph>()
-        .Where(p => p.ParagraphProperties?.ParagraphStyleId?.Val?.Value?.StartsWith("Heading", StringComparison.OrdinalIgnoreCase) == true)
-        .Select(p => p.InnerText.Trim())
-        .Where(t => t.Length > 0)
-        .Distinct()
-        .Take(8)
-        .ToList();
-
-    var (issueDate, derivedTitle) = ExtractIssueDateAndTitle(path);
-    var title = paragraphs.FirstOrDefault(p => p.Length is > 3 and < 100) ?? derivedTitle;
-
-    var summary = string.Join(' ', paragraphs.Skip(1).Take(4));
-    if (summary.Length > 800) summary = summary.Substring(0, 800) + "...";
-    if (summary.Length == 0) summary = $"SLYPN newsletter — {derivedTitle}.";
-
-    return new SeedNewsletter(
-        Id:        $"newsletter-{issueDate:yyyy-MM}",
-        Title:     title,
-        IssueDate: issueDate,
-        Summary:   summary,
-        Topics:    headings.Count > 0 ? headings : new List<string> { "Newsletter" },
-        Year:      issueDate.Year.ToString("D4", CultureInfo.InvariantCulture));
+    var issueDate = new DateOnly(
+        int.Parse(m.Groups["y"].Value, CultureInfo.InvariantCulture),
+        int.Parse(m.Groups["m"].Value, CultureInfo.InvariantCulture), 1);
+    var ext = Path.GetExtension(path).ToLowerInvariant();
+    var contentType = ext == ".docx" ? DocxContentType : "application/pdf";
+    return (NewsletterFor(issueDate, ext), contentType);
 }
 
-static (DateOnly IssueDate, string Title) ExtractIssueDateAndTitle(string path)
+/// <summary>Clean, predictable metadata for one issue, keyed by its month.</summary>
+static SeedNewsletter NewsletterFor(DateOnly issueDate, string ext)
+{
+    var monthYear = issueDate.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+    return new SeedNewsletter(
+        Id:        $"newsletter-{issueDate:yyyy-MM}",
+        Title:     $"SLYPN newsletter — {monthYear}.",
+        IssueDate: issueDate,
+        Summary:   $"The SLYPN community newsletter for {monthYear}.",
+        Topics:    new List<string> { "Newsletter" },
+        FileName:  $"SLYPN-Newsletter-{issueDate:yyyy-MM}{ext}");
+}
+
+static DateOnly IssueDateFromMonthName(string path)
 {
     // Expected filename shape: SLYPN_Newsletter_<MONTH>_<YEAR>.docx
     var name = Path.GetFileNameWithoutExtension(path);
@@ -142,10 +194,24 @@ static (DateOnly IssueDate, string Title) ExtractIssueDateAndTitle(string path)
     {
         var month = DateTime.ParseExact(match.Groups["m"].Value, "MMMM", CultureInfo.InvariantCulture).Month;
         var year  = int.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture);
-        var title = $"{CultureInfo.InvariantCulture.TextInfo.ToTitleCase(match.Groups["m"].Value.ToLowerInvariant())} {year}";
-        return (new DateOnly(year, month, 1), title);
+        return new DateOnly(year, month, 1);
     }
-    return (DateOnly.FromDateTime(DateTime.UtcNow), name);
+    return DateOnly.FromDateTime(DateTime.UtcNow);
+}
+
+static async Task UploadFileAsync(string connectionString, string container, string id, string localPath, string contentType)
+{
+    var blobs = new BlobContainerClient(connectionString, container);
+    await blobs.CreateIfNotExistsAsync(PublicAccessType.None);
+    // Idempotent: the blob key is the deterministic newsletter id, and passing
+    // BlobUploadOptions (no If-None-Match) overwrites any existing blob, so a
+    // re-run replaces the file in place rather than failing on "already exists".
+    var blob = blobs.GetBlobClient($"newsletters/{id}");
+    await using var stream = File.OpenRead(localPath);
+    await blob.UploadAsync(stream, new BlobUploadOptions
+    {
+        HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+    });
 }
 
 static async Task UpsertAsync(string connectionString, string table, SeedNewsletter newsletter)
@@ -157,6 +223,9 @@ static async Task UpsertAsync(string connectionString, string table, SeedNewslet
     var client = new TableClient(connectionString, table);
     await client.CreateIfNotExistsAsync();
 
-    var entity = new TableEntity(newsletter.Year, newsletter.Id) { ["Json"] = json };
+    // Idempotent: newsletters use a single constant partition (mirrors the API's
+    // ContentRepository.NewslettersPartition), and Upsert/Replace insert-or-replaces
+    // the row keyed by Id — re-running never duplicates newsletters.
+    var entity = new TableEntity("newsletter", newsletter.Id) { ["Json"] = json };
     await client.UpsertEntityAsync(entity, TableUpdateMode.Replace);
 }
