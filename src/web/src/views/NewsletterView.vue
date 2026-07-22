@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import NewsletterIcon from '@/components/common/NewsletterIcon.vue'
 import NewsletterCard from '@/components/common/NewsletterCard.vue'
 import { apiErrorMessage, apiFetch, apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
@@ -41,6 +42,10 @@ async function subscribe() {
     title="A monthly note from the SLYPN team"
     subtitle="Meet-up dates, a featured article, fundraising progress, and the odd member story. About five minutes to read. Free, no tracking."
   >
+    <template #brand>
+      <NewsletterIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+    </template>
+
     <template #actions>
       <form
         class="flex w-full max-w-md flex-col gap-2 sm:flex-row"

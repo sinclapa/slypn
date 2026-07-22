@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import BlogIcon from '@/components/common/BlogIcon.vue'
 import PillFilter from '@/components/common/PillFilter.vue'
 import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
@@ -45,7 +46,11 @@ const formatDate = (iso: string) =>
     eyebrow="Blog"
     title="Shorter, more frequent updates"
     subtitle="Meet-up recaps, thank-yous, member news. If you want to write something for the blog, mention it at the next meet-up."
-  />
+  >
+    <template #brand>
+      <BlogIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+    </template>
+  </HeroBanner>
 
   <section class="page-container-prose py-16">
     <PillFilter v-model="selected" :options="categories" class="mb-8" />

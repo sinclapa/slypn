@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
+import ResourcesIcon from '@/components/common/ResourcesIcon.vue'
 import ResourceCard from '@/components/common/ResourceCard.vue'
 import PillFilter from '@/components/common/PillFilter.vue'
 import { apiJson } from '@/lib/api'
@@ -32,7 +33,11 @@ const visible = computed(() => {
     eyebrow="Resources"
     title="Where to read more &mdash; or get help today"
     subtitle="A curated list of links our members come back to most often: the Parkinson's UK helpline and information pages, NHS overviews, local clinics, benefits, and research."
-  />
+  >
+    <template #brand>
+      <ResourcesIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+    </template>
+  </HeroBanner>
 
   <section class="page-container py-16">
     <PillFilter v-model="selected" :options="categories" />
