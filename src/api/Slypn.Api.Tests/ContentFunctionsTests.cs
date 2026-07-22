@@ -328,6 +328,51 @@ public class ContentFunctionsTests
     }
 
     [Fact]
+    public async Task Newsletters_file_download_name_for_docx()
+    {
+        // Non-"newsletter-"-prefixed id: the shape CreateNewsletterAsync actually mints
+        // for admin-created newsletters (a GUID), so the stamp falls back to the raw id.
+        var id = "a1b2c3";
+        var repo = new FakeContentRepository
+        {
+            NewsletterFiles = { [id] = new BlobDownload(new MemoryStream([]),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document") },
+        };
+        var resp = (TestHttpResponseData)await NewslettersFn(repo).GetFile(
+            TestHttp.Get(new TestFunctionContext(), $"http://localhost/api/newsletters/{id}/file"), id, Ct);
+
+        Assert.Contains($"SLYPN-Newsletter-{id}.docx", resp.Headers.GetValues("Content-Disposition").Single());
+    }
+
+    [Fact]
+    public async Task Newsletters_file_download_name_for_doc()
+    {
+        var id = "newsletter-2021-03";
+        var repo = new FakeContentRepository
+        {
+            NewsletterFiles = { [id] = new BlobDownload(new MemoryStream([]), "application/msword") },
+        };
+        var resp = (TestHttpResponseData)await NewslettersFn(repo).GetFile(
+            TestHttp.Get(new TestFunctionContext(), $"http://localhost/api/newsletters/{id}/file"), id, Ct);
+
+        Assert.Contains("SLYPN-Newsletter-2021-03.doc", resp.Headers.GetValues("Content-Disposition").Single());
+    }
+
+    [Fact]
+    public async Task Newsletters_file_download_name_for_unknown_content_type()
+    {
+        var id = "newsletter-2021-04";
+        var repo = new FakeContentRepository
+        {
+            NewsletterFiles = { [id] = new BlobDownload(new MemoryStream([]), "application/octet-stream") },
+        };
+        var resp = (TestHttpResponseData)await NewslettersFn(repo).GetFile(
+            TestHttp.Get(new TestFunctionContext(), $"http://localhost/api/newsletters/{id}/file"), id, Ct);
+
+        Assert.Contains("SLYPN-Newsletter-2021-04.bin", resp.Headers.GetValues("Content-Disposition").Single());
+    }
+
+    [Fact]
     public async Task Resources_create_412_when_storage_fails()
     {
         var repo = new FakeContentRepository { ThrowOnWrite = new RequestFailedException(412, "Precondition failed") };
