@@ -318,7 +318,14 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     public async Task<Newsletter> ReplaceNewsletterAsync(string id, NewsletterInput input, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        var n = new Newsletter(id, input.Title, input.IssueDate, input.Summary, input.Topics);
+        // Metadata edits go through this JSON-only endpoint and never touch the
+        // attached file, so carry the existing FileName forward — otherwise every
+        // edit would silently detach the issue file from the row (the blob itself
+        // is untouched, but the row would stop pointing at it).
+        var read = await store.Newsletters.GetEntityAsync<TableEntity>(NewslettersPartition, id, cancellationToken: ct);
+        var existingFileName = Deserialize<Newsletter>(read.Value).FileName;
+
+        var n = new Newsletter(id, input.Title, input.IssueDate, input.Summary, input.Topics) { FileName = existingFileName };
         var resp = await store.Newsletters.UpdateEntityAsync(
             Entity(NewslettersPartition, n.Id, n), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
         return n with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
@@ -337,6 +344,21 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     /// <summary>Open the attached issue file (PDF/DOCX) for streaming, or null if there is none.</summary>
     public Task<BlobDownload?> OpenNewsletterFileAsync(string id, CancellationToken ct) =>
         body.TryOpenFileAsync(NewsletterFilePrefix, id, ct);
+
+    /// <summary>Uploads/replaces the attached issue file and records its display filename on the row.</summary>
+    public async Task<Newsletter> PutNewsletterFileAsync(string id, Stream content, string contentType, string fileName, string? ifMatch, CancellationToken ct)
+    {
+        EnsureWrites();
+        var read = await store.Newsletters.GetEntityAsync<TableEntity>(NewslettersPartition, id, cancellationToken: ct);
+        var source = Deserialize<Newsletter>(read.Value);
+
+        await body.PutFileAsync(NewsletterFilePrefix, id, content, contentType, ct);
+
+        var updated = source with { FileName = fileName };
+        var resp = await store.Newsletters.UpdateEntityAsync(
+            Entity(NewslettersPartition, id, updated), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        return updated with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
+    }
 
     // ---- Members --------------------------------------------------------------
     public async Task<Member?> GetMemberByEmailAsync(string email, CancellationToken ct)

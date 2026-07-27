@@ -25,6 +25,9 @@ public interface IContentBodyStore
     /// </summary>
     Task<BlobDownload?> TryOpenFileAsync(string prefix, string id, CancellationToken ct);
 
+    /// <summary>Write (overwrite) a binary file blob (e.g. a newsletter PDF/DOCX).</summary>
+    Task PutFileAsync(string prefix, string id, Stream content, string contentType, CancellationToken ct);
+
     /// <summary>Delete the body blob. No-op if it doesn't exist.</summary>
     Task DeleteAsync(string prefix, string id, CancellationToken ct);
 }

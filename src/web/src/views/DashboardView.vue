@@ -105,6 +105,16 @@ onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
           Add, edit, and remove the links on the public Resources page.
         </p>
       </RouterLink>
+      <RouterLink
+        v-if="auth.isAdmin"
+        to="/admin/newsletters"
+        class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+      >
+        <p class="font-display font-bold text-slypn-700">Newsletters</p>
+        <p class="mt-2 text-sm text-slypn-900/75">
+          Add, edit, and remove newsletter issues, and attach their files.
+        </p>
+      </RouterLink>
     </section>
   </main>
 </template>

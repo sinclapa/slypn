@@ -58,6 +58,14 @@ public sealed class ContentBodyStore : IContentBodyStore
         }
     }
 
+    public async Task PutFileAsync(string prefix, string id, Stream content, string contentType, CancellationToken ct)
+    {
+        var blob = Blob(prefix, id);
+        await blob.UploadAsync(content,
+            new BlobHttpHeaders { ContentType = contentType },
+            cancellationToken: ct);
+    }
+
     public async Task<BlobDownload?> TryOpenFileAsync(string prefix, string id, CancellationToken ct)
     {
         var blob = Blob(prefix, id);

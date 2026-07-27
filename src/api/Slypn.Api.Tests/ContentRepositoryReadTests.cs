@@ -24,6 +24,7 @@ file sealed class NoopBodyStore : IContentBodyStore
     public Task PutAsync(string prefix, string id, string html, CancellationToken ct) => Task.CompletedTask;
     public Task<string> GetAsync(string prefix, string id, CancellationToken ct) => Task.FromResult("");
     public Task<BlobDownload?> TryOpenFileAsync(string prefix, string id, CancellationToken ct) => Task.FromResult<BlobDownload?>(null);
+    public Task PutFileAsync(string prefix, string id, Stream content, string contentType, CancellationToken ct) => Task.CompletedTask;
     public Task DeleteAsync(string prefix, string id, CancellationToken ct) => Task.CompletedTask;
 }
 
@@ -131,6 +132,8 @@ public class ContentRepositoryReadTests
             () => Repo().CreateArticleAsync(new ArticleInput(), Ct));
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => Repo().CreateResourceAsync(new ResourceInput(), Ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Repo().PutNewsletterFileAsync("n1", new MemoryStream(), "application/pdf", "issue.pdf", null, Ct));
     }
 
     [Fact]
