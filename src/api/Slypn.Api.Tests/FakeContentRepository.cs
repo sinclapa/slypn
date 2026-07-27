@@ -1,3 +1,4 @@
+using Azure;
 using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
@@ -86,7 +87,10 @@ internal sealed class FakeContentRepository : IContentRepository
     public Task<Newsletter> CreateNewsletterAsync(NewsletterInput input, CancellationToken ct)
         => Task.FromResult(Guard(new Newsletter("new-id", input.Title, input.IssueDate, input.Summary, input.Topics)));
     public Task<Newsletter> ReplaceNewsletterAsync(string id, NewsletterInput input, string? ifMatch, CancellationToken ct)
-        => Task.FromResult(Guard(new Newsletter(id, input.Title, input.IssueDate, input.Summary, input.Topics)));
+    {
+        var existingFileName = Newsletters.FirstOrDefault(n => n.Id == id)?.FileName;
+        return Task.FromResult(Guard(new Newsletter(id, input.Title, input.IssueDate, input.Summary, input.Topics) { FileName = existingFileName }));
+    }
     public Task DeleteNewsletterAsync(string id, string? ifMatch, CancellationToken ct)
         => Guard(Task.CompletedTask);
 
@@ -94,6 +98,20 @@ internal sealed class FakeContentRepository : IContentRepository
     public Dictionary<string, BlobDownload> NewsletterFiles = new();
     public Task<BlobDownload?> OpenNewsletterFileAsync(string id, CancellationToken ct)
         => Task.FromResult(NewsletterFiles.TryGetValue(id, out var f) ? f : null);
+
+    public Task<Newsletter> PutNewsletterFileAsync(string id, Stream content, string contentType, string fileName, string? ifMatch, CancellationToken ct)
+    {
+        var idx = Newsletters.FindIndex(n => n.Id == id);
+        if (idx < 0) throw new RequestFailedException(404, $"Newsletter {id} not found.");
+
+        using var ms = new MemoryStream();
+        content.CopyTo(ms);
+        NewsletterFiles[id] = new BlobDownload(new MemoryStream(ms.ToArray()), contentType);
+
+        var updated = Newsletters[idx] with { FileName = fileName };
+        Newsletters[idx] = updated;
+        return Task.FromResult(Guard(updated));
+    }
 
     /// <summary>Set to throw from the next GetMemberByEmailAsync call (e.g. to test lookup-error branches).</summary>
     public Exception? ThrowOnMemberEmailLookup { get; set; }

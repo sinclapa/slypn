@@ -46,6 +46,8 @@ public class ServicesTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.PutAsync("articles", "a1", "<p>x</p>", Ct));
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.GetAsync("articles", "a1", Ct));
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DeleteAsync("articles", "a1", Ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.PutFileAsync("newsletters", "n1", new MemoryStream(), "application/pdf", Ct));
     }
 
     [Fact]

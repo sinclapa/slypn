@@ -72,6 +72,7 @@ describe('AppNav', () => {
     await trigger.trigger('click')
     expect(w.text()).toContain('Dashboard')
     expect(w.text()).toContain('Approvals')
+    expect(w.text()).toContain('Newsletters')
     expect(w.text()).toContain('Sign out')
   })
 
@@ -90,6 +91,7 @@ describe('AppNav', () => {
     const account = w.find('#mobile-account')
     expect(account.text()).toContain('Dashboard')
     expect(account.text()).toContain('Members')
+    expect(account.text()).toContain('Newsletters')
     expect(account.text()).toContain('Sign out')
 
     // The primary-nav drawer holds navigation only — no admin tools.

@@ -23,7 +23,7 @@ To keep it simple and cheap we:
 | `drafts` | `authorId` | `id` | `content/drafts/{id}` | Drafts are private; queries are "my drafts" (contributor) or a single draft by id. Partitioning on `authorId` keeps those single-partition. |
 | `events` | `yearMonth` (e.g. `2026-05`) | `id` | — | Listing events is by date range; a year-month partition keeps "this month + next" cheap. The API derives `yearMonth` from `startsAt` on write. |
 | `resources` | `category` | `id` | — | The Resources page filters by category. Partitioning matches the access pattern. |
-| `newsletters` | `year` (four digits) | `id` | — | Archive views are by year; ~12 issues per partition. |
+| `newsletters` | `"newsletter"` (constant) | `id` | `content/newsletters/{id}` (attached issue file, PDF/DOCX) | Volumes are small (~12 issues/year); a single partition keeps `ListNewsletters` a single-partition scan. |
 | `members` | `"member"` (constant) | `id` | — | Member counts are small; a single partition makes `ListMembers` and the email/oid lookups single-partition scans, and point reads by id are PK+RK lookups. |
 
 ## Concurrency

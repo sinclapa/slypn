@@ -1,5 +1,6 @@
 using System.Net;
 using Azure;
+using HttpMultipartParser;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -63,6 +64,73 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
             _ => "bin",
         };
         return $"SLYPN-Newsletter-{stamp}.{ext}";
+    }
+
+    private static readonly HashSet<string> AllowedFileContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+    };
+
+    [Function("UploadNewsletterFile")]
+    [RequireRole("Admin")]
+    [OpenApiOperation(operationId: "newsletters.uploadFile", tags: new[] { "newsletters" }, Summary = "Upload newsletter file", Description = "Uploads/replaces the attached issue file (PDF/DOCX) for a newsletter.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Newsletter id.")]
+    [OpenApiRequestBody(contentType: "multipart/form-data", bodyType: typeof(object), Required = true, Description = "Multipart form body with a single file part named file.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Newsletter), Description = "Updated newsletter")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Description = "Newsletter not found")]
+    public async Task<HttpResponseData> UploadFile(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "newsletters/{id}/file")] HttpRequestData req,
+        string id, CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+
+        var contentType = req.Headers.TryGetValues("Content-Type", out var ctHeader)
+            ? ctHeader.FirstOrDefault()
+            : null;
+        if (contentType is null || !contentType.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase))
+        {
+            return await Reject(req, HttpStatusCode.UnsupportedMediaType,
+                "Expected multipart/form-data with a 'file' part.");
+        }
+
+        MultipartFormDataParser parsed;
+        try
+        {
+            parsed = await MultipartFormDataParser.ParseAsync(req.Body);
+        }
+        catch (Exception ex)
+        {
+            return await BadRequest(req, $"Could not parse multipart body: {ex.Message}");
+        }
+
+        var file = parsed.Files.FirstOrDefault(f => f.Name == "file") ?? parsed.Files.FirstOrDefault();
+        if (file is null)
+        {
+            return await BadRequest(req, "No file part in the upload.");
+        }
+
+        if (!AllowedFileContentTypes.Contains(file.ContentType))
+        {
+            return await Reject(req, HttpStatusCode.UnsupportedMediaType,
+                $"Content type '{file.ContentType}' not allowed. Allowed: {string.Join(", ", AllowedFileContentTypes)}.");
+        }
+
+        try
+        {
+            var n = await repo.PutNewsletterFileAsync(id, file.Data, file.ContentType, file.FileName, IfMatch(req), ct);
+            return await Ok(req, n, n.Etag);
+        }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+    }
+
+    private static async Task<HttpResponseData> Reject(HttpRequestData req, HttpStatusCode code, string message)
+    {
+        var resp = req.CreateResponse(code);
+        await resp.WriteStringAsync(message);
+        return resp;
     }
 
     [Function("CreateNewsletter")]

@@ -63,6 +63,8 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
     { path: '/admin/resources', name: 'admin-resources', component: () => import('@/views/ResourceManagementView.vue'),
       meta: { requiresAuth: true, requiresRole: ['Admin'] } },
+    { path: '/admin/newsletters', name: 'admin-newsletters', component: () => import('@/views/NewsletterManagementView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['Admin'] } },
     { path: '/admin/approvals', name: 'admin-approvals', component: () => import('@/views/ApprovalsView.vue'),
       meta: { requiresAuth: true, requiresRole: ['Admin'] } },
     { path: '/admin/events', name: 'admin-events', component: EventManagementView,

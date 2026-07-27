@@ -38,6 +38,7 @@ const accountLinks = computed(() => ([
   { to: '/admin/events',    label: 'Event management',   show: auth.isContributor || auth.isAdmin },
   { to: '/admin/members',   label: 'Members',            show: auth.isAdmin },
   { to: '/admin/resources', label: 'Resources',          show: auth.isAdmin },
+  { to: '/admin/newsletters', label: 'Newsletters',      show: auth.isAdmin },
 ] as { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }[]).filter(l => l.show))
 
 const envMenuOpen = ref(false)
