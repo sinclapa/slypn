@@ -99,14 +99,15 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
         MultipartFormDataParser parsed;
         try
         {
-            parsed = await MultipartFormDataParser.ParseAsync(req.Body);
+            parsed = await MultipartFormDataParser.ParseAsync(req.Body, cancellationToken: ct);
         }
         catch (Exception ex)
         {
             return await BadRequest(req, $"Could not parse multipart body: {ex.Message}");
         }
 
-        var file = parsed.Files.FirstOrDefault(f => f.Name == "file") ?? parsed.Files.FirstOrDefault();
+        var file = parsed.Files.FirstOrDefault(f => f.Name == "file")
+            ?? (parsed.Files.Count > 0 ? parsed.Files[0] : null);
         if (file is null)
         {
             return await BadRequest(req, "No file part in the upload.");
@@ -226,7 +227,7 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
         Member record;
         if (existing is null)
         {
-            var newDisplayName = string.IsNullOrWhiteSpace(displayName) ? email : displayName!;
+            var newDisplayName = string.IsNullOrWhiteSpace(displayName) ? email : displayName;
             record = new Member(
                 Id:          Guid.NewGuid().ToString("N"),
                 Email:       email,
@@ -241,7 +242,7 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
             // their roles + oid if they're an actual member. For pure
             // subscribers (no roles, no oid), we just refresh the timestamp.
             var isExistingMember = existing.Roles.Count > 0 || existing.Oid is not null;
-            var resolvedDisplayName = string.IsNullOrWhiteSpace(displayName) ? existing.DisplayName : displayName!;
+            var resolvedDisplayName = string.IsNullOrWhiteSpace(displayName) ? existing.DisplayName : displayName;
             record = existing with
             {
                 Status      = isExistingMember ? existing.Status : "subscribed",

@@ -151,12 +151,12 @@ async function remove(n: Newsletter) {
 
     <div v-else-if="error" class="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
       Couldn&rsquo;t load newsletters: {{ error }}.
-      <button class="ml-2 underline" @click="refresh">Retry</button>
+      <button type="button" class="ml-2 underline" @click="refresh">Retry</button>
     </div>
 
     <p v-if="listError" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
       {{ listError }}
-      <button class="ml-2 underline" @click="listError = null">Dismiss</button>
+      <button type="button" class="ml-2 underline" @click="listError = null">Dismiss</button>
     </p>
 
     <div class="divide-y divide-slypn-100 rounded-xl border border-slypn-100 bg-white shadow-sm">
