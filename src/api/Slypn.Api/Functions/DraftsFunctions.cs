@@ -107,7 +107,6 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
             Summary:          input.Summary,
             Body:             sanitizer.Sanitize(input.Body),
             Category:         input.Category,
-            Tags:             input.Tags,
             ReadingMinutes:   input.ReadingMinutes,
             CreatedAt:        existing?.CreatedAt ?? now,
             UpdatedAt:        now,

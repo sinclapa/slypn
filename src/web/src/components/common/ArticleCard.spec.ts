@@ -13,7 +13,6 @@ const article: Article = {
   publishedAt: '2026-05-01T10:00:00Z',
   readingMinutes: 4,
   category: 'Community',
-  tags: ['x'],
 }
 
 function mountCard(a: Article = article) {

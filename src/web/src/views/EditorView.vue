@@ -41,7 +41,6 @@ interface PendingItem {
   summary?: string
   body?: string
   category?: string
-  tags?: string[]
   readingMinutes?: number
   publishedAt: string
   authorId?: string
@@ -126,7 +125,6 @@ async function openReadonly(item: PendingItem) {
     summary:        item.summary ?? '',
     body:           item.body ?? '',
     category:       item.category ?? '',
-    tags:           item.tags ?? [],
     readingMinutes: item.readingMinutes ?? 1,
   }
   draftId.value = item.id

@@ -2,7 +2,7 @@ namespace Slypn.Seed;
 
 public sealed record DemoArticle(
     string Title, string Summary, IReadOnlyList<string> Paragraphs,
-    IReadOnlyList<string> Tags, string Category, string Author);
+    string Category, string Author);
 
 public sealed record DemoResource(string Title, string Description, string Url, string Category);
 
@@ -29,7 +29,7 @@ public static class DemoContent
                 "In the UK, Parkinson's is covered by the Equality Act 2010. That means your employer must make reasonable adjustments once they know — flexible hours, a quieter desk, or more time for tasks affected by your best-medication window.",
                 "Go into the conversation with a short list of the adjustments that would actually help. It turns an awkward disclosure into a practical, forward-looking discussion.",
             },
-            new[] { "work", "rights", "disclosure" }, "Living with Parkinson's", "Helen Stoinanov"),
+            "Living with Parkinson's", "Helen Stoinanov"),
 
         new DemoArticle(
             "Understanding levodopa and your medication window",
@@ -40,7 +40,7 @@ public static class DemoContent
                 "Many people notice their medication working in a window — a couple of good hours after a dose, then a dip as it wears off. Keeping a simple diary of doses and how you feel helps your specialist nurse fine-tune the timing.",
                 "If you are getting \"off\" periods before your next dose is due, that is worth raising at your next appointment rather than quietly tolerating it.",
             },
-            new[] { "medication", "levodopa", "symptoms" }, "Treatment", "Kate Wellington"),
+            "Treatment", "Kate Wellington"),
 
         new DemoArticle(
             "Exercise and Parkinson's: what the evidence says",
@@ -51,7 +51,7 @@ public static class DemoContent
                 "You do not need a gym. Brisk walking, cycling, dancing and boxing-style classes all count, and many members find a class easier to stick with than exercising alone.",
                 "Start small and build a habit. Twenty minutes most days beats an ambitious plan you abandon after a fortnight.",
             },
-            new[] { "exercise", "evidence", "wellbeing" }, "Lifestyle", "Daniel Okafor"),
+            "Lifestyle", "Daniel Okafor"),
 
         new DemoArticle(
             "Sleep, fatigue and the non-motor side of Parkinson's",
@@ -62,7 +62,7 @@ public static class DemoContent
                 "Good sleep hygiene helps: a consistent bedtime, less screen time late on, and reviewing whether any medications are affecting your rest.",
                 "Fatigue is real and not a sign of laziness. Pacing your day around your best hours, and being honest with the people around you, makes a genuine difference.",
             },
-            new[] { "sleep", "fatigue", "non-motor" }, "Living with Parkinson's", "Sarah Webb"),
+            "Living with Parkinson's", "Sarah Webb"),
 
         new DemoArticle(
             "Deep brain stimulation: who it might suit",
@@ -73,7 +73,7 @@ public static class DemoContent
                 "DBS is not for everyone, and it is not a cure. A specialist team assesses whether the likely benefits outweigh the risks for you specifically.",
                 "If you are curious, the first step is a conversation with your neurologist about whether a referral for assessment makes sense.",
             },
-            new[] { "DBS", "treatment", "surgery" }, "Treatment", "Priya Iyer"),
+            "Treatment", "Priya Iyer"),
 
         new DemoArticle(
             "Driving and Parkinson's: what you need to know",
@@ -84,7 +84,7 @@ public static class DemoContent
                 "You will usually keep a licence that is reviewed periodically, and you should also inform your insurer.",
                 "If the time does come to stop, planning ahead for alternatives — local transport, lifts from the network — makes the change feel less abrupt.",
             },
-            new[] { "driving", "DVLA", "independence" }, "Living with Parkinson's", "Helen Stoinanov"),
+            "Living with Parkinson's", "Helen Stoinanov"),
 
         new DemoArticle(
             "Eating well when medication and food compete",
@@ -95,7 +95,7 @@ public static class DemoContent
                 "A common approach is to take levodopa around 30–45 minutes before eating, and to spread protein across the day rather than in one big hit.",
                 "Everyone is different — a dietitian or your specialist nurse can help you find a pattern that protects your medication without making food a chore.",
             },
-            new[] { "diet", "levodopa", "nutrition" }, "Treatment", "Kate Wellington"),
+            "Treatment", "Kate Wellington"),
 
         new DemoArticle(
             "Building a support network at any age",
@@ -106,7 +106,7 @@ public static class DemoContent
                 "Peer support is not about swapping symptoms. It is the relief of being in a room where you do not have to explain yourself.",
                 "If you are new, you do not need to bring anything but yourself. Come for a coffee and see how it feels.",
             },
-            new[] { "peer-support", "community", "newcomers" }, "Community", "Sarah Webb"),
+            "Community", "Sarah Webb"),
 
         new DemoArticle(
             "Talking to your children about your diagnosis",
@@ -117,7 +117,7 @@ public static class DemoContent
                 "Keep it concrete and age-appropriate: a part of the brain makes less of a chemical that helps movement, the medicine helps, and you are still you.",
                 "Let them ask questions over time. One conversation rarely covers everything, and that is fine.",
             },
-            new[] { "family", "children", "wellbeing" }, "Living with Parkinson's", "Daniel Okafor"),
+            "Living with Parkinson's", "Daniel Okafor"),
 
         new DemoArticle(
             "Mindfulness, mood and managing anxiety",
@@ -128,7 +128,7 @@ public static class DemoContent
                 "Simple practices help some people: breathing exercises, gentle routine, time outdoors, and staying socially connected even when you do not feel like it.",
                 "If low mood persists, talk to your GP or specialist nurse. Effective support exists, and asking for it early is a strength.",
             },
-            new[] { "mental-health", "anxiety", "wellbeing" }, "Lifestyle", "Priya Iyer"),
+            "Lifestyle", "Priya Iyer"),
     };
 
     public static readonly IReadOnlyList<DemoArticle> Blogs = new[]
@@ -142,7 +142,7 @@ public static class DemoContent
                 "As ever, the conversation ranged from medication timing to the football. That mix is exactly the point.",
                 "Next month we are back on the South Bank. Bring a friend.",
             },
-            new[] { "meet-up", "recap" }, "Community", "Sarah Webb"),
+            "Community", "Sarah Webb"),
 
         new DemoArticle(
             "Welcome to our newest members",
@@ -153,7 +153,7 @@ public static class DemoContent
                 "If you have just joined, your first meet-up can feel like a big step. It is not — people will be glad to see you.",
                 "Come and say hello at the next coffee morning.",
             },
-            new[] { "welcome", "members" }, "Community", "Helen Stoinanov"),
+            "Community", "Helen Stoinanov"),
 
         new DemoArticle(
             "Thank you to our spring 10k runners",
@@ -164,7 +164,7 @@ public static class DemoContent
                 "Between sponsorship and matched donations we raised a fantastic total for Parkinson's research.",
                 "Thank you to everyone who took part, and to the friends and family who stood in the rain to cheer.",
             },
-            new[] { "fundraising", "events" }, "Fundraising", "Kate Wellington"),
+            "Fundraising", "Kate Wellington"),
 
         new DemoArticle(
             "Q&A with a movement-disorder nurse",
@@ -175,7 +175,7 @@ public static class DemoContent
                 "The biggest theme was medication timing — and how a simple diary makes appointments far more productive.",
                 "We will share a fuller write-up in the next newsletter.",
             },
-            new[] { "q-and-a", "treatment" }, "News", "Priya Iyer"),
+            "News", "Priya Iyer"),
 
         new DemoArticle(
             "Notes from the carers' catch-up",
@@ -186,7 +186,7 @@ public static class DemoContent
                 "This month the conversation turned to looking after your own wellbeing — and why that is not selfish.",
                 "If you care for someone in the network, you are very welcome to come along.",
             },
-            new[] { "carers", "support" }, "Community", "Daniel Okafor"),
+            "Community", "Daniel Okafor"),
 
         new DemoArticle(
             "Summer social by the river",
@@ -197,7 +197,7 @@ public static class DemoContent
                 "No agenda, no talks — just good company and a chance to catch up properly.",
                 "Photos to follow in the next newsletter.",
             },
-            new[] { "social", "events" }, "Events", "Sarah Webb"),
+            "Events", "Sarah Webb"),
 
         new DemoArticle(
             "Five things we learned this year",
@@ -208,7 +208,7 @@ public static class DemoContent
                 "People value consistency — the same time, the same place — more than big one-off events.",
                 "And new members almost always say the same thing afterwards: I wish I'd come sooner.",
             },
-            new[] { "retrospective", "community" }, "News", "Helen Stoinanov"),
+            "News", "Helen Stoinanov"),
 
         new DemoArticle(
             "A member's story: the first year",
@@ -219,7 +219,7 @@ public static class DemoContent
                 "Exercise gave me something to control. The network gave me people who got it without explanation.",
                 "If you are at the start of this, be kind to yourself. It gets less overwhelming.",
             },
-            new[] { "member-story", "newly-diagnosed" }, "Community", "Kate Wellington"),
+            "Community", "Kate Wellington"),
 
         new DemoArticle(
             "Volunteers wanted for the autumn programme",
@@ -230,7 +230,7 @@ public static class DemoContent
                 "We are looking for a few volunteers to help with the autumn programme — nothing onerous, just a few hours here and there.",
                 "If you can help, have a word with one of the organisers at the next meet-up.",
             },
-            new[] { "volunteering", "events" }, "News", "Daniel Okafor"),
+            "News", "Daniel Okafor"),
 
         new DemoArticle(
             "Why we meet on the South Bank",
@@ -241,7 +241,7 @@ public static class DemoContent
                 "It is step-free, easy to reach by train and bus, and there is always somewhere to sit and talk.",
                 "If you have never been, the last Saturday of the month is the one to put in your diary.",
             },
-            new[] { "venue", "meet-up" }, "Community", "Priya Iyer"),
+            "Community", "Priya Iyer"),
     };
 
     public static readonly IReadOnlyList<DemoResource> Resources = new[]

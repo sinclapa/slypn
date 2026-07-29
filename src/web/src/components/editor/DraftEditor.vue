@@ -36,7 +36,7 @@ const loadedSnapshot = ref('')
 function snapshot(d: DraftPayload): string {
   return JSON.stringify({
     type: d.type, title: d.title, slug: d.slug,
-    summary: d.summary, body: d.body, category: d.category, tags: d.tags,
+    summary: d.summary, body: d.body, category: d.category,
   })
 }
 function isDirty(): boolean {

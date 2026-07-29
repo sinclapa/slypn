@@ -48,16 +48,6 @@ const formatDate = (iso: string) =>
 
     <div class="prose prose-slypn mt-8 max-w-none text-slypn-900/85" v-html="article.body" />
 
-    <ul class="mt-12 flex flex-wrap gap-2">
-      <li
-        v-for="tag in article.tags"
-        :key="tag"
-        class="rounded-full bg-slypn-50 px-3 py-1 text-xs font-medium text-slypn-700"
-      >
-        #{{ tag }}
-      </li>
-    </ul>
-
     <nav
       v-if="article.prev || article.next"
       class="mt-16 grid grid-cols-2 gap-4 border-t border-slypn-100 pt-8"

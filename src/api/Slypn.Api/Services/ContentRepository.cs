@@ -128,7 +128,6 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             PublishedAt:    DateTime.UtcNow,
             ReadingMinutes: input.ReadingMinutes,
             Category:       input.Category,
-            Tags:           input.Tags,
             Status:         input.Status);
 
         await body.PutAsync(ArticleBodyPrefix, article.Id, article.Body, ct);
@@ -149,7 +148,6 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             PublishedAt:    DateTime.UtcNow,
             ReadingMinutes: input.ReadingMinutes,
             Category:       input.Category,
-            Tags:           input.Tags,
             Status:         input.Status);
 
         await body.PutAsync(ArticleBodyPrefix, article.Id, article.Body, ct);
@@ -496,7 +494,6 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             PublishedAt:    DateTime.UtcNow, // submission time; updated on publish
             ReadingMinutes: draft.ReadingMinutes,
             Category:       draft.Category,
-            Tags:           draft.Tags,
             Status:         InReviewStatus)
         {
             Type = string.Equals(draft.Type, "blog", StringComparison.OrdinalIgnoreCase) ? "blog" : ArticleType,
@@ -550,7 +547,6 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             Summary:           published.Summary,
             Body:              published.Body,
             Category:          published.Category,
-            Tags:              published.Tags,
             ReadingMinutes:    published.ReadingMinutes,
             CreatedAt:         existing?.CreatedAt ?? now,
             UpdatedAt:         now,
@@ -582,7 +578,6 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             Title          = review.Title,
             Summary        = review.Summary,
             Category       = review.Category,
-            Tags           = review.Tags,
             ReadingMinutes = review.ReadingMinutes,
             Type           = review.Type,
             Status         = "published",
@@ -666,7 +661,6 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             Summary:          source.Summary,
             Body:             articleBody,
             Category:         source.Category,
-            Tags:             source.Tags,
             ReadingMinutes:   source.ReadingMinutes,
             CreatedAt:        now,
             UpdatedAt:        now,

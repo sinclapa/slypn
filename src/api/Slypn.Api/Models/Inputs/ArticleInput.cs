@@ -25,8 +25,6 @@ public sealed class ArticleInput
     [Required, StringLength(60)]
     public string Category { get; set; } = "";
 
-    public List<string> Tags { get; set; } = new();
-
     [Required, RegularExpression("^(draft|in-review|published|rejected)$",
         ErrorMessage = "Status must be one of: draft, in-review, published, rejected.")]
     public string Status { get; set; } = "draft";

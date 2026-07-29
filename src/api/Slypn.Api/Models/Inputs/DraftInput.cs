@@ -18,8 +18,6 @@ public sealed class DraftInput
     [StringLength(50_000)] public string Body { get; set; } = "";
     [StringLength(60)]  public string Category { get; set; } = "";
 
-    public List<string> Tags { get; set; } = new();
-
     [Range(0, 60)]
     public int ReadingMinutes { get; set; }
 

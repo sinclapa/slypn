@@ -31,7 +31,7 @@ public class ContentFunctionsTests
     public async Task Blog_list_returns_200()
     {
         var repo = new FakeContentRepository();
-        repo.Blogs.Add(new Article("b1", "s", "T", "Sum", "B", "A", DateTime.UtcNow, 3, "News", new[] { "x" }) { Type = "blog" });
+        repo.Blogs.Add(new Article("b1", "s", "T", "Sum", "B", "A", DateTime.UtcNow, 3, "News") { Type = "blog" });
         var fn = new BlogFunctions(repo);
         var resp = (TestHttpResponseData)await fn.GetBlogPosts(TestHttp.Get(new TestFunctionContext(), "http://localhost/api/blog"), Ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);

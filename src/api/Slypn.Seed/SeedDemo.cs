@@ -15,7 +15,7 @@ public sealed record SeedEvent(
 
 public sealed record SeedArticle(
     string Id, string Slug, string Title, string Summary, string Body, string Author,
-    DateTime PublishedAt, int ReadingMinutes, string Category, IReadOnlyList<string> Tags,
+    DateTime PublishedAt, int ReadingMinutes, string Category,
     string Status, string Type, string? AuthorId);
 
 public sealed record SeedResource(
@@ -145,7 +145,6 @@ public static class SeedDemo
                 PublishedAt:    DateTime.UtcNow.AddDays(-(i * 18 + 3)),
                 ReadingMinutes: ReadingMinutes(body),
                 Category:       c.Category,
-                Tags:           c.Tags,
                 Status:         "published",
                 Type:           type,
                 AuthorId:       null);

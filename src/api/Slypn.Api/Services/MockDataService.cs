@@ -13,8 +13,7 @@ public sealed class MockDataService : IMockDataService
             "A Parkinson's diagnosis at working age often comes with a stack of practical questions about the job.\n\nStart by reading the rights you already have. In the UK, Parkinson's is covered by the Equality Act 2010, meaning employers must make reasonable adjustments.\n\nWhen to disclose is personal. Many SLYPN members tell us they wished they'd waited - and just as many wish they'd told their manager sooner.\n\nFinally, the small daily things compound. Lay out clothes the night before. Tackle the hardest task in your best-medication window.",
             "Helen Stoinanov",
             new DateTime(2026, 5, 12, 9, 0, 0, DateTimeKind.Utc),
-            6, "Living with Parkinson's",
-            new[] { "work", "rights", "adjustments" }),
+            6, "Living with Parkinson's"),
         new Article(
             "a2", "medication-side-effects",
             "Understanding the medication side effects no one warned you about",
@@ -22,8 +21,7 @@ public sealed class MockDataService : IMockDataService
             "Levodopa is still the most effective treatment for Parkinson's, but the body's relationship with it is messy.\n\nDopamine agonists carry their own profile. Impulse-control issues are well documented but under-discussed.\n\nThis article is not medical advice - talk to your specialist nurse - but it's the conversation we wish we'd had earlier.",
             "Kate Wellington",
             new DateTime(2026, 4, 28, 9, 0, 0, DateTimeKind.Utc),
-            8, "Treatment",
-            new[] { "medication", "side-effects", "levodopa" }),
+            8, "Treatment"),
         new Article(
             "a3", "support-network-at-any-age",
             "Building a support network at any age",
@@ -31,8 +29,7 @@ public sealed class MockDataService : IMockDataService
             "We started SLYPN in 2011 because the support that existed at the time wasn't built around working-age people.\n\nFifteen years on, the format has barely changed: coffee meet-ups across South London, occasional drinks, a few activities a year.",
             "Sarah Webb",
             new DateTime(2026, 4, 10, 9, 0, 0, DateTimeKind.Utc),
-            5, "Community",
-            new[] { "peer-support", "history", "founders" }),
+            5, "Community"),
         new Article(
             "a4", "sleep-exercise-parkinsons",
             "Sleep, exercise, and Parkinson's - what the evidence actually says",
@@ -40,8 +37,7 @@ public sealed class MockDataService : IMockDataService
             "There is no shortage of advice online about lifestyle changes for Parkinson's. Some of it is genuinely useful. Some of it is wishful thinking.\n\nExercise - particularly aerobic and resistance training - has the strongest evidence for slowing symptom progression.",
             "Helen Stoinanov",
             new DateTime(2026, 3, 22, 9, 0, 0, DateTimeKind.Utc),
-            7, "Lifestyle",
-            new[] { "sleep", "exercise", "evidence" }),
+            7, "Lifestyle"),
         new Article(
             "a5", "what-to-bring-to-your-first-meetup",
             "What to bring (and expect) at your first SLYPN meet-up",
@@ -49,8 +45,7 @@ public sealed class MockDataService : IMockDataService
             "Just yourself. That's the honest answer.\n\nWe meet in coffee shops or pubs around South London, usually for a couple of hours in the evening.",
             "Kate Wellington",
             new DateTime(2026, 3, 4, 9, 0, 0, DateTimeKind.Utc),
-            3, "Community",
-            new[] { "newcomers", "meet-ups" }),
+            3, "Community"),
     };
 
     public IReadOnlyList<BlogPost> BlogPosts { get; } = new[]

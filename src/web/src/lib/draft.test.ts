@@ -5,7 +5,6 @@ describe('draft helpers', () => {
   it('EMPTY_DRAFT is an article skeleton with sane defaults', () => {
     expect(EMPTY_DRAFT.type).toBe('article')
     expect(EMPTY_DRAFT.title).toBe('')
-    expect(EMPTY_DRAFT.tags).toEqual([])
     expect(EMPTY_DRAFT.readingMinutes).toBe(1)
   })
 

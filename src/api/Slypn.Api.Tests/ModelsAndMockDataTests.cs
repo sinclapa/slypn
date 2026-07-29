@@ -11,7 +11,7 @@ public class ModelsAndMockDataTests
     public void Article_defaults_type_and_status()
     {
         var a = new Article("id", "slug", "Title", "Summary", "Body", "Author",
-            new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc), 5, "Community", new[] { "x" });
+            new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc), 5, "Community");
         Assert.Equal("article", a.Type);
         Assert.Equal("published", a.Status);
         Assert.Null(a.Etag);
@@ -32,7 +32,7 @@ public class ModelsAndMockDataTests
     public void Draft_and_Member_records_round_trip_etag()
     {
         var d = new Draft("id", "auth", "Author", "article", "T", "s", "sum", "body", "cat",
-            new[] { "x" }, 1, DateTime.UtcNow, DateTime.UtcNow) { Etag = "e1" };
+            1, DateTime.UtcNow, DateTime.UtcNow) { Etag = "e1" };
         Assert.Equal("e1", d.Etag);
 
         var m = new Member("id", "a@b.com", "Alice", new[] { "Member" }, "active", DateTime.UtcNow);
