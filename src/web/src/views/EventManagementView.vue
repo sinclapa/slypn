@@ -90,6 +90,7 @@ const filtered = computed(() => {
   const hi = rangeEnd.value ? ym(rangeEnd.value) : Infinity
   return [...(events.value ?? [])]
     .filter(e => {
+      if (!auth.isAdmin && e.createdBy !== auth.oid) return false
       const d = new Date(e.startsAt)
       if (!allDates.value && (ym(d) < lo || ym(d) > hi)) return false
       if (!q) return true
@@ -172,7 +173,7 @@ async function deleteEvent(event: CommunityEvent) {
         >+ Add event</button>
       </div>
       <p class="mt-2 text-sm text-slypn-900/75">
-        Admins can edit or delete any event. Contributors can only edit or delete events they created.
+        Admins see and can edit or delete any event. Contributors only see and can edit or delete events they created.
       </p>
 
       <!-- Search + date range -->
