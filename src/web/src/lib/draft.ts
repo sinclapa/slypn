@@ -7,7 +7,6 @@ export interface DraftPayload {
   summary: string
   body: string
   category: string
-  tags: string[]
   readingMinutes: number
   revisionFeedback?: string | null
 }
@@ -22,7 +21,7 @@ export interface DraftSummary {
 
 export const EMPTY_DRAFT: DraftPayload = {
   type: 'article', title: '', slug: '', summary: '',
-  body: '', category: '', tags: [], readingMinutes: 1,
+  body: '', category: '', readingMinutes: 1,
 }
 
 export function makeDraftId(): string {

@@ -165,7 +165,7 @@ internal sealed class FakeContentRepository : IContentRepository
         id, input?.Slug ?? "slug", input?.Title ?? "Title", input?.Summary ?? "Summary",
         input?.Body ?? "Body", input?.Author ?? "Author", DateTime.UtcNow,
         input?.ReadingMinutes ?? 5, input?.Category ?? "Community",
-        input?.Tags ?? new List<string>(), input?.Status ?? "published") { Etag = "etag-1" };
+        input?.Status ?? "published") { Etag = "etag-1" };
 
     private static CommunityEvent MakeEvent(string id, EventInput input, string? oid, string? name) => new(
         id, input.Title, input.Type, input.StartsAt, input.EndsAt, input.Location,
@@ -173,5 +173,5 @@ internal sealed class FakeContentRepository : IContentRepository
 
     private static Draft MakeDraft(string id, string oid, string name) => new(
         id, oid, name, "article", "Title", "slug", "Summary", "Body", "Community",
-        new List<string>(), 5, DateTime.UtcNow, DateTime.UtcNow) { Etag = "etag-1" };
+        5, DateTime.UtcNow, DateTime.UtcNow) { Etag = "etag-1" };
 }

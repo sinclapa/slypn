@@ -20,7 +20,7 @@ public class ArticlesFunctionsTests
     }
 
     private static Article Sample(string id = "a1") =>
-        new(id, "slug", "Title", "Summary", "Body", "Author", DateTime.UtcNow, 5, "Community", new[] { "t" }) { Etag = "e1" };
+        new(id, "slug", "Title", "Summary", "Body", "Author", DateTime.UtcNow, 5, "Community") { Etag = "e1" };
 
     [Fact]
     public async Task GetArticles_returns_200_with_list()

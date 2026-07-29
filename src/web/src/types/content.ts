@@ -19,7 +19,6 @@ export interface Article {
   publishedAt: string
   readingMinutes: number
   category: ArticleCategory
-  tags: string[]
   prev?: ArticleNeighbour
   next?: ArticleNeighbour
 }

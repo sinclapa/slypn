@@ -12,7 +12,6 @@ public sealed record Draft(
     string Summary,
     string Body,
     string Category,
-    IReadOnlyList<string> Tags,
     int ReadingMinutes,
     DateTime CreatedAt,
     DateTime UpdatedAt,

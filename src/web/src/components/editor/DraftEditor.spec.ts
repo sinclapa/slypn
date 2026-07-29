@@ -22,7 +22,7 @@ function resp(body: unknown, init: { ok?: boolean; status?: number; etag?: strin
 
 const draftPayload = {
   type: 'article', title: 'My draft', slug: '', summary: 'A summary',
-  body: '<p>Real content here</p>', category: 'Community', tags: [], readingMinutes: 1,
+  body: '<p>Real content here</p>', category: 'Community', readingMinutes: 1,
 }
 
 function mockApi(over: (url: string, method: string) => Response | undefined = () => undefined) {

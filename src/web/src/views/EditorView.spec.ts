@@ -30,7 +30,7 @@ const adminOid = '11111111-1111-1111-1111-111111111111'
 const draftSummary = (over = {}) => ({ id: 'd1', title: 'A draft', type: 'article', updatedAt: '2026-05-01T00:00:00Z', _etag: 'e1', ...over })
 const pendingItem = (over = {}) => ({
   id: 'r1', title: 'Pending Article', type: 'article', slug: 'pa-1',
-  summary: 'sum', body: 'body', category: 'Community', tags: [],
+  summary: 'sum', body: 'body', category: 'Community',
   readingMinutes: 3, publishedAt: '2026-05-01T00:00:00Z',
   authorId: adminOid, replacesArticleId: null, ...over,
 })

@@ -342,7 +342,7 @@ describe('EventDetailView', () => {
 })
 
 describe('ArticleDetailView', () => {
-  const art = (over = {}) => ({ id: 'a1', slug: 's', title: 'Deep dive', summary: 'sum', body: '<p>hi</p>', author: 'Jo', publishedAt: '2026-05-01T00:00:00Z', readingMinutes: 5, category: 'Community', tags: ['t'], ...over })
+  const art = (over = {}) => ({ id: 'a1', slug: 's', title: 'Deep dive', summary: 'sum', body: '<p>hi</p>', author: 'Jo', publishedAt: '2026-05-01T00:00:00Z', readingMinutes: 5, category: 'Community', ...over })
 
   it('renders the fetched article', async () => {
     route.params = { slug: 's' }

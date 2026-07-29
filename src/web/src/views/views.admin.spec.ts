@@ -35,7 +35,7 @@ beforeEach(() => {
 
 const pending = (over = {}) => ({
   id: 'p1', slug: 's', title: 'Pending piece', summary: 'sum', body: '<p>body</p>',
-  author: 'Jess', publishedAt: '2026-05-01T10:00:00Z', category: 'Community', tags: [],
+  author: 'Jess', publishedAt: '2026-05-01T10:00:00Z', category: 'Community',
   status: 'in-review', readingMinutes: 3, type: 'article', ...over,
 })
 

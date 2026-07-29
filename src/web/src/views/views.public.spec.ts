@@ -28,7 +28,7 @@ const mountView = (C: unknown) => mount(C as never, { global: { plugins: [create
 const article = (over = {}) => ({
   id: 'a1', slug: 'a-1', title: 'Article One', summary: 's', body: 'b',
   author: 'Jane', publishedAt: '2026-05-01T00:00:00Z', readingMinutes: 3,
-  category: 'Community', tags: [], ...over,
+  category: 'Community', ...over,
 })
 
 beforeEach(() => {

@@ -12,7 +12,6 @@ public sealed record Article(
     DateTime PublishedAt,
     int ReadingMinutes,
     string Category,
-    IReadOnlyList<string> Tags,
     string Status = "published")
 {
     /// <summary>"article" or "blog". Defaults to "article" for rows that predate the field.</summary>

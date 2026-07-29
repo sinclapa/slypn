@@ -85,7 +85,7 @@ public class AdminFunctionsTests
         new(repo, new HtmlSanitizer(), NullLogger<DraftsFunctions>.Instance);
 
     private static Draft Draft(string id = "d1") =>
-        new(id, "oid-1", "Author", "article", "T", "s", "Sum", "<p>b</p>", "Community", new[] { "x" }, 3, DateTime.UtcNow, DateTime.UtcNow) { Etag = "e1" };
+        new(id, "oid-1", "Author", "article", "T", "s", "Sum", "<p>b</p>", "Community", 3, DateTime.UtcNow, DateTime.UtcNow) { Etag = "e1" };
 
     [Fact]
     public async Task Drafts_list_requires_oid()
@@ -122,7 +122,7 @@ public class AdminFunctionsTests
         var fn = DraftsFn(repo);
         var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
 
-        var draftBody = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var draftBody = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", readingMinutes = 3 };
         var upsert = (TestHttpResponseData)await fn.Upsert(TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", draftBody), ctx, "d1", Ct);
         Assert.Equal(HttpStatusCode.OK, upsert.StatusCode);
 
@@ -230,7 +230,7 @@ public class AdminFunctionsTests
     [Fact]
     public async Task Drafts_upsert_412_when_get_fails_and_412_when_upsert_fails()
     {
-        var draftBody = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var draftBody = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", readingMinutes = 3 };
         var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
 
         // GetDraftAsync throws → line 96
@@ -401,7 +401,7 @@ public class AdminFunctionsTests
     {
         var fn = DraftsFn(new FakeContentRepository { Writes = false });
         var ctx = new TestFunctionContext().WithUser("oid-1", "A", "Contributor");
-        var body = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var body = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", readingMinutes = 3 };
         var resp = (TestHttpResponseData)await fn.Upsert(TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", body), ctx, "d1", Ct);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
     }
@@ -411,7 +411,7 @@ public class AdminFunctionsTests
     {
         var fn = DraftsFn(new FakeContentRepository());
         var ctx = new TestFunctionContext(); // no principal → no oid
-        var body = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var body = new { type = "article", title = "T", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", readingMinutes = 3 };
         var resp = (TestHttpResponseData)await fn.Upsert(TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", body), ctx, "d1", Ct);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
@@ -428,7 +428,7 @@ public class AdminFunctionsTests
         var ctx = new TestFunctionContext();
         ctx.Items[JwtMiddleware.PrincipalContextKey] = new System.Security.Claims.ClaimsPrincipal(identity);
 
-        var body = new { type = "article", title = "Updated", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", tags = new[] { "x" }, readingMinutes = 3 };
+        var body = new { type = "article", title = "Updated", slug = "s", summary = "Sum", body = "<p>hi</p>", category = "Community", readingMinutes = 3 };
         var resp = (TestHttpResponseData)await fn.Upsert(TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", body), ctx, "d1", Ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }

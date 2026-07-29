@@ -13,7 +13,6 @@ interface PendingArticle {
   authorId?: string
   publishedAt: string
   category: string
-  tags: string[]
   status: string
   readingMinutes: number
   type?: 'article' | 'blog'
