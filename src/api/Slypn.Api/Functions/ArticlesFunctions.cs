@@ -89,7 +89,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
 
     [Function("DeleteArticle")]
     [RequireRole("Admin")]
-    [OpenApiOperation(operationId: "articles.delete", tags: new[] { "articles" }, Summary = "Delete article", Description = "Deletes an article using its id and partition key status.")]
+    [OpenApiOperation(operationId: "articles.delete", tags: new[] { "articles" }, Summary = "Delete article", Description = "Deletes an article or blog post using its id and partition key status.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
     [OpenApiParameter(name: "status", In = ParameterLocation.Query, Required = true, Type = typeof(string), Description = "Article partition key status.")]
@@ -116,7 +116,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     /// </summary>
     [Function("PublishArticle")]
     [RequireRole("Admin")]
-    [OpenApiOperation(operationId: "articles.publish", tags: new[] { "articles" }, Summary = "Publish article", Description = "Moves an article to published status.")]
+    [OpenApiOperation(operationId: "articles.publish", tags: new[] { "articles" }, Summary = "Publish article", Description = "Moves an article or blog post to published status.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Published article")]
@@ -143,7 +143,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     /// </summary>
     [Function("EditPublishedArticle")]
     [RequireRole("Admin", "Contributor")]
-    [OpenApiOperation(operationId: "articles.edit", tags: new[] { "articles" }, Summary = "Edit published", Description = "Creates a draft revision of a published article for approval.")]
+    [OpenApiOperation(operationId: "articles.edit", tags: new[] { "articles" }, Summary = "Edit published", Description = "Creates a draft revision of a published article or blog post for approval.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(Draft), Description = "Created draft revision")]
@@ -171,7 +171,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     /// </summary>
     [Function("RequestArticleDeletion")]
     [RequireRole("Admin", "Contributor")]
-    [OpenApiOperation(operationId: "articles.requestDeletion", tags: new[] { "articles" }, Summary = "Request deletion", Description = "Flags a published article for deletion, pending admin approval.")]
+    [OpenApiOperation(operationId: "articles.requestDeletion", tags: new[] { "articles" }, Summary = "Request deletion", Description = "Flags a published article or blog post for deletion, pending admin approval.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Updated article")]
@@ -195,7 +195,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     /// <summary>Admin clears a pending deletion request, keeping the article published.</summary>
     [Function("CancelArticleDeletion")]
     [RequireRole("Admin")]
-    [OpenApiOperation(operationId: "articles.cancelDeletion", tags: new[] { "articles" }, Summary = "Keep article", Description = "Clears a pending deletion request.")]
+    [OpenApiOperation(operationId: "articles.cancelDeletion", tags: new[] { "articles" }, Summary = "Keep article", Description = "Clears a pending deletion request on a published article or blog post.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Updated article")]
@@ -219,7 +219,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     /// </summary>
     [Function("ReviseArticle")]
     [RequireRole("Admin")]
-    [OpenApiOperation(operationId: "articles.revise", tags: new[] { "articles" }, Summary = "Request revision", Description = "Returns an in-review article to the author as a draft with feedback.")]
+    [OpenApiOperation(operationId: "articles.revise", tags: new[] { "articles" }, Summary = "Request revision", Description = "Returns an in-review article or blog post to the author as a draft with feedback.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(RejectionInput), Required = true, Description = "Revision feedback.")]
