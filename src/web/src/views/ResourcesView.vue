@@ -35,7 +35,7 @@ const visible = computed(() => {
     subtitle="A curated list of links our members come back to most often: the Parkinson's UK helpline and information pages, NHS overviews, local clinics, benefits, and research."
   >
     <template #brand>
-      <ResourcesIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+      <ResourcesIcon class="w-36 text-slypn-700 sm:w-64 md:w-72" />
     </template>
   </HeroBanner>
 

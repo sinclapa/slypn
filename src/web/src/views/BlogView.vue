@@ -48,7 +48,7 @@ const formatDate = (iso: string) =>
     subtitle="Meet-up recaps, thank-yous, member news. If you want to write something for the blog, mention it at the next meet-up."
   >
     <template #brand>
-      <BlogIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+      <BlogIcon class="w-36 text-slypn-700 sm:w-64 md:w-72" />
     </template>
   </HeroBanner>
 

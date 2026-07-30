@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import logoUrl from '@/assets/logo.svg'
 import { useAuthStore } from '@/stores/auth'
@@ -47,13 +47,24 @@ const swaggerUrl = APP_ENV === 'local'
   : '/swagger.html'
 
 // Mobile: the hamburger (primary nav) and the avatar (account) are separate
-// panels — opening one closes the other.
+// panels — opening one closes the other. Both float over the page as an
+// overlay (rather than pushing content down) so opening them never reflows
+// whatever the user was looking at.
 function toggleMobileNav() { mobileOpen.value = !mobileOpen.value; userMenuOpen.value = false }
 function toggleAccount()   { userMenuOpen.value = !userMenuOpen.value; mobileOpen.value = false }
+function closeMobilePanels() { mobileOpen.value = false; userMenuOpen.value = false }
 function toggleEnvMenu()   { envMenuOpen.value = !envMenuOpen.value }
 function closeEnvMenu()    { envMenuOpen.value = false }
 
-onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeMobilePanels()
+}
+
+onMounted(() => {
+  if (auth.isAdmin) approvalsStore.refresh()
+  window.addEventListener('keydown', onKeydown)
+})
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 watch(() => auth.isAdmin, (isAdmin) => { if (isAdmin) approvalsStore.refresh() })
 
 async function onSignIn() {
@@ -227,7 +238,7 @@ async function onSignOut() {
     <nav
       v-show="mobileOpen"
       id="mobile-nav"
-      class="border-t border-slypn-100 bg-white md:hidden"
+      class="absolute inset-x-0 top-full z-40 max-h-[75vh] overflow-y-auto border-t border-slypn-100 bg-white shadow-lg md:hidden"
       aria-label="Mobile primary"
     >
       <div class="page-container flex flex-col gap-1 py-3">
@@ -255,7 +266,7 @@ async function onSignOut() {
     <nav
       v-show="userMenuOpen && auth.isAuthenticated"
       id="mobile-account"
-      class="border-t border-slypn-100 bg-white md:hidden"
+      class="absolute inset-x-0 top-full z-40 max-h-[75vh] overflow-y-auto border-t border-slypn-100 bg-white shadow-lg md:hidden"
       aria-label="Account"
     >
       <div class="page-container flex flex-col gap-1 py-3">
@@ -286,4 +297,16 @@ async function onSignOut() {
       </div>
     </nav>
   </header>
+
+  <!-- Backdrop lives outside <header> deliberately: header has backdrop-blur,
+       and CSS filter/backdrop-filter makes an element the containing block for
+       position:fixed descendants — nesting this inside header would trap it to
+       the header's own (small) box instead of the full viewport, breaking both
+       click-to-close and the intended page-only dimming. -->
+  <div
+    v-show="mobileOpen || userMenuOpen"
+    class="fixed inset-0 z-30 bg-slypn-900/30 md:hidden"
+    aria-hidden="true"
+    @click="closeMobilePanels"
+  />
 </template>

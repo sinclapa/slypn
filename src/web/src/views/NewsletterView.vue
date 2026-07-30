@@ -43,7 +43,7 @@ async function subscribe() {
     subtitle="Meet-up dates, a featured article, fundraising progress, and the odd member story. About five minutes to read. Free, no tracking."
   >
     <template #brand>
-      <NewsletterIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+      <NewsletterIcon class="w-36 text-slypn-700 sm:w-64 md:w-72" />
     </template>
 
     <template #actions>

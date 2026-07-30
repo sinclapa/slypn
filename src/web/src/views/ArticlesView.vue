@@ -42,7 +42,7 @@ const visible = computed(() => {
     subtitle="Longer-form writing from the SLYPN community on living with Parkinson's, navigating treatment, and the small daily things that make a difference."
   >
     <template #brand>
-      <ArticlesIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+      <ArticlesIcon class="w-36 text-slypn-700 sm:w-64 md:w-72" />
     </template>
   </HeroBanner>
 
