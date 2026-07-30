@@ -16,7 +16,7 @@ const founders = [
     subtitle="Founded in 2011 because the daytime support that existed back then didn't fit around jobs, family, or school runs. Fifteen years on, SLYPN still meets in the evenings — and is now a couple of hundred members strong."
   >
     <template #brand>
-      <SkylineIcon class="w-64 text-slypn-700 sm:w-72 md:w-80" />
+      <SkylineIcon class="w-48 text-slypn-700 sm:w-72 md:w-80" />
     </template>
   </HeroBanner>
 

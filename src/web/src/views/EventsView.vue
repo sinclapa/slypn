@@ -101,7 +101,7 @@ onBeforeUnmount(() => observer?.disconnect())
     subtitle="Most of our events are weekend or evening meet-ups around South London. Drop-in, no booking — just turn up. Partners and carers welcome. Some are limited capacity so please check."
   >
     <template #brand>
-      <EventsIcon class="w-56 text-slypn-700 sm:w-64 md:w-72" />
+      <EventsIcon class="w-36 text-slypn-700 sm:w-64 md:w-72" />
     </template>
 
     <template #actions>

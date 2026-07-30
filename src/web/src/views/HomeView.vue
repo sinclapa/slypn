@@ -51,7 +51,7 @@ const upcomingEvents = computed(() =>
       <img
         :src="logoUrl"
         alt="SLYPN — South London Younger Parkinson's Network"
-        class="h-48 w-auto sm:h-60 md:h-72"
+        class="h-28 w-auto sm:h-60 md:h-72"
         width="684"
         height="488"
       />
