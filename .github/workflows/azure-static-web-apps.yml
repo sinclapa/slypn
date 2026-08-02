@@ -18,11 +18,15 @@ on:
     branches: [main]
 
 concurrency:
-  # Include the event name so that a push to main and a pull_request-closed
-  # event (which share github.ref = refs/heads/main) get separate slots and
-  # don't cancel each other. Multiple pushes to the same branch still cancel
-  # the earlier in-progress run as intended.
-  group: swa-${{ github.ref }}-${{ github.event_name }}
+  # Include the event name so that a push to main and a pull_request event
+  # (which share github.ref = refs/heads/main for push, or refs/pull/<N>/merge
+  # for every pull_request action) get separate slots and don't cancel each
+  # other. Also split "closed" into its own slot: opened/synchronize/reopened
+  # all share the same ref as closed, so without this a close_pr_environment
+  # run could be — and was — cancelled by a build_and_deploy run for the same
+  # PR, leaving the preview environment never torn down. Multiple pushes to
+  # the same branch/PR still cancel the earlier in-progress run as intended.
+  group: swa-${{ github.ref }}-${{ github.event_name }}-${{ github.event.action == 'closed' && 'close' || 'build' }}
   cancel-in-progress: true
 
 jobs:
@@ -46,6 +50,40 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Ahead of a planned move to the Free plan (which caps concurrent
+      # preview environments at 3; production's "default" environment doesn't
+      # count), guard the quota now while still on Standard so this is proven
+      # out before the cap can actually bite. Fail fast — in seconds, before
+      # the Node/dotnet/build steps — rather than letting a brand-new PR's
+      # deploy fail deep inside the SWA deploy action with a cryptic Azure
+      # error once the cap is hit.
+      - name: Guard preview-environment quota (Free tier cap = 3)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          FREE_TIER_CAP=3
+
+          PREVIEW_JSON=$(az staticwebapp environment list \
+            --name swa-slypn-prod --resource-group rg-slypn-prod \
+            --query "[?name!='default'].name" -o json)
+
+          EXISTING_COUNT=$(echo "$PREVIEW_JSON" | jq 'length')
+          ALREADY_OPEN=$(echo "$PREVIEW_JSON" | jq --arg pr "$PR_NUMBER" 'any(. == $pr)')
+
+          if [ "$ALREADY_OPEN" = "true" ]; then
+            echo "PR #$PR_NUMBER already has a preview environment ($EXISTING_COUNT/$FREE_TIER_CAP in use) — proceeding."
+            exit 0
+          fi
+
+          if [ "$EXISTING_COUNT" -ge "$FREE_TIER_CAP" ]; then
+            echo "::error::Cannot open a new preview environment for PR #$PR_NUMBER — $EXISTING_COUNT/$FREE_TIER_CAP preview environments already in use. Close or merge an open PR to free a slot, then push a new commit to re-trigger."
+            exit 1
+          fi
+
+          echo "$EXISTING_COUNT/$FREE_TIER_CAP preview environments in use — room for a new one."
+        shell: bash
 
       - name: Set up Node
         uses: actions/setup-node@v6
