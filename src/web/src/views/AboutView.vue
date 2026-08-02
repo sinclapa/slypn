@@ -13,7 +13,7 @@ const founders = [
   <HeroBanner
     eyebrow="About"
     title="A community for working-age South Londoners with Parkinson's"
-    subtitle="Founded in 2011 because the daytime support that existed back then didn't fit around jobs, family, or school runs. Fifteen years on, SLYPN still meets in the evenings — and is now a couple of hundred members strong."
+    subtitle="Founded in 2011 because the daytime support that existed back then didn't fit around jobs, family, or school runs. Over fifteen years on, SLYPN still meets in the evenings and weekends — and is now a couple of hundred members strong."
   >
     <template #brand>
       <SkylineIcon class="w-48 text-slypn-700 sm:w-72 md:w-80" />
@@ -32,11 +32,12 @@ const founders = [
 
     <h2 class="mt-12 font-display text-2xl font-bold text-slypn-700">What we do</h2>
     <ul class="mt-4 space-y-3 text-slypn-900/85">
-      <li>Regular coffee meet-ups across South London &mdash; Brixton, Clapham, Dulwich, Greenwich, Tooting.</li>
+      <li>Regular coffee meet-ups on the last Saturday of the month.</li>
       <li>Occasional drinks evenings and activities.</li>
+      <li>Social media groups for sharing information and support.</li>
+      <li>Weekly online quiz night.</li>
       <li>Q&amp;As with neurologists, specialist nurses, and physios.</li>
-      <li>A quieter carer-only session each quarter.</li>
-      <li>Fundraising for Parkinson&rsquo;s UK research.</li>
+      <li>Fundraising for Parkinson&rsquo;s UK.</li>
     </ul>
 
     <h2 class="mt-12 font-display text-2xl font-bold text-slypn-700">Founders</h2>
