@@ -79,8 +79,10 @@ async function loadFile() {
       if (docxContainer.value) {
         docxContainer.value.innerHTML = ''
         // useBase64URL avoids docx-preview's own un-revoked internal object
-        // URLs for embedded images.
-        await renderAsync(await resp.arrayBuffer(), docxContainer.value, docxContainer.value, { useBase64URL: true })
+        // URLs for embedded images. ignoreWidth stops it forcing the
+        // document's physical page width (e.g. A4, ~794px) regardless of
+        // viewport, which otherwise overflows on mobile.
+        await renderAsync(await resp.arrayBuffer(), docxContainer.value, docxContainer.value, { useBase64URL: true, ignoreWidth: true })
       }
     } else {
       // Legacy .doc (application/msword) or anything unexpected — no viable
@@ -177,8 +179,40 @@ const formatDate = (iso: string) =>
 
         <!-- Always mounted once a newsletter is resolved (visibility only via
              v-show) so the ref exists before renderAsync needs it. -->
-        <div v-show="fileKind === 'docx'" ref="docxContainer" class="docx-container rounded-xl border border-slypn-100 bg-white p-6" />
+        <div v-show="fileKind === 'docx'" ref="docxContainer" class="docx-container max-w-full overflow-x-auto rounded-xl border border-slypn-100 bg-white p-6" />
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* docx-preview centres its page section in a flex wrapper (align-items:
+   center), which — combined with ignoreWidth letting the page shrink below
+   its natural content width — overflows equally on both sides and clips the
+   left edge when the container is narrower than the page. Left-align by
+   default so any excess width only overflows right, where
+   .docx-container's overflow-x-auto can scroll to it without cutting
+   content off; restore centring once there's reliably enough room (roughly
+   a full A4/Letter page's width plus padding) for it to look intentional. */
+.docx-container :deep(.docx-wrapper) {
+  align-items: flex-start;
+}
+@media (min-width: 1024px) {
+  .docx-container :deep(.docx-wrapper) {
+    align-items: center;
+  }
+}
+
+/* Word's own "tab" columns (e.g. a label followed by a run of individual
+   space characters before a value) have no single unbreakable run, but as a
+   non-stretched flex item the page section still sizes itself to fit its
+   content's preferred width rather than shrinking with its container.
+   max-width caps that at the container's width, and overflow-wrap (which
+   inherits down to every paragraph/span) lets whatever specific text would
+   otherwise force it wider break instead, so the whole document wraps to
+   fit on narrow screens instead of needing horizontal scroll. */
+.docx-container :deep(section.docx) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+</style>
