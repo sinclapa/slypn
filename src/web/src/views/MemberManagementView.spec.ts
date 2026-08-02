@@ -69,6 +69,27 @@ describe('MemberManagementView', () => {
     expect(removeBtn.attributes('disabled')).toBeDefined()
   })
 
+  it('disables changing your own role', async () => {
+    // admin persona oid
+    apiJson.mockResolvedValue([member({ id: 'me', oid: '11111111-1111-1111-1111-111111111111' })])
+    const w = mountC()
+    await flushPromises()
+    for (const role of ['Admin', 'Contributor', 'Member']) {
+      const btn = w.findAll('button').find(b => b.text() === role)!
+      expect(btn.attributes('disabled')).toBeDefined()
+      expect(btn.attributes('title')).toBe('You cannot change your own role')
+    }
+  })
+
+  it('leaves another member’s role controls enabled', async () => {
+    apiJson.mockResolvedValue([member()]) // oid: 'oidA', not the signed-in admin
+    const w = mountC()
+    await flushPromises()
+    const adminBtn = w.findAll('button').find(b => b.text() === 'Admin')!
+    expect(adminBtn.attributes('disabled')).toBeUndefined()
+    expect(adminBtn.attributes('title')).toBeUndefined()
+  })
+
   it('sends an invite and shows the redeem link', async () => {
     apiJson.mockResolvedValue([])
     apiFetch.mockResolvedValue(ok({ member: { email: 'new@x.com' }, inviteSent: true, redeemUrl: 'https://redeem/abc', inviteReason: null }))

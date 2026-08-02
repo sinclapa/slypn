@@ -56,13 +56,30 @@ public class AdminFunctionsTests
     {
         var repo = new FakeContentRepository();
         var fn = MembersFn(repo);
+        var ctx = new TestFunctionContext();
         var notFound = (TestHttpResponseData)await fn.UpdateRoles(
-            TestHttp.Json(new TestFunctionContext(), "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } }), "m1", Ct);
+            TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } }), "m1", ctx, Ct);
         Assert.Equal(HttpStatusCode.NotFound, notFound.StatusCode);
 
         repo.MemberById = Member();
         var ok = (TestHttpResponseData)await fn.UpdateRoles(
-            TestHttp.Json(new TestFunctionContext(), "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Contributor" } }), "m1", Ct);
+            TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Contributor" } }), "m1", ctx, Ct);
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+    }
+
+    [Fact]
+    public async Task Members_update_roles_blocks_self_and_allows_other()
+    {
+        var repo = new FakeContentRepository { MemberById = Member(oid: "self-oid") };
+        var fn = MembersFn(repo);
+        var self = new TestFunctionContext().WithUser("self-oid", "Me", "Admin");
+        var blocked = (TestHttpResponseData)await fn.UpdateRoles(
+            TestHttp.Json(self, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Member" } }), "m1", self, Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+
+        var other = new TestFunctionContext().WithUser("admin-oid", "Admin", "Admin");
+        var ok = (TestHttpResponseData)await fn.UpdateRoles(
+            TestHttp.Json(other, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Contributor" } }), "m1", other, Ct);
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
     }
 
@@ -304,13 +321,13 @@ public class AdminFunctionsTests
         var fn = MembersFn(repo);
         var ctx = new TestFunctionContext();
         var badRole = (TestHttpResponseData)await fn.UpdateRoles(
-            TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Wizard" } }), "m1", Ct);
+            TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Wizard" } }), "m1", ctx, Ct);
         Assert.Equal(HttpStatusCode.BadRequest, badRole.StatusCode);
 
         // GetMemberByIdAsync throws → line 127
         var repo2 = new FakeContentRepository { ThrowOnRead = new RequestFailedException(500, "Storage error") };
         var readErr = (TestHttpResponseData)await MembersFn(repo2).UpdateRoles(
-            TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } }), "m1", Ct);
+            TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } }), "m1", ctx, Ct);
         Assert.Equal(HttpStatusCode.InternalServerError, readErr.StatusCode);
 
         // UpsertMemberAsync throws → line 136 (with If-Match header to cover FunctionHelpers.IfMatch line 41)
@@ -318,7 +335,7 @@ public class AdminFunctionsTests
         var writeErr = (TestHttpResponseData)await MembersFn(repo3).UpdateRoles(
             TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } },
                 new Dictionary<string, string> { ["If-Match"] = "\"etag-1\"" }),
-            "m1", Ct);
+            "m1", ctx, Ct);
         Assert.Equal(HttpStatusCode.PreconditionFailed, writeErr.StatusCode);
     }
 
@@ -476,8 +493,9 @@ public class AdminFunctionsTests
     public async Task Members_update_roles_503_when_writes_disabled()
     {
         var fn = MembersFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext();
         var resp = (TestHttpResponseData)await fn.UpdateRoles(
-            TestHttp.Json(new TestFunctionContext(), "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } }), "m1", Ct);
+            TestHttp.Json(ctx, "PATCH", "http://localhost/api/members/m1", new { roles = new[] { "Admin" } }), "m1", ctx, Ct);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
     }
 
