@@ -69,6 +69,11 @@ describe('router lazy routes', () => {
     expect(router.currentRoute.value.name).toBe('event-detail')
   })
 
+  it('resolves /newsletter/:id as newsletter-detail', async () => {
+    await router.push('/newsletter/n1')
+    expect(router.currentRoute.value.name).toBe('newsletter-detail')
+  })
+
   it('resolves /admin/content as admin-content', async () => {
     await router.push('/admin/content')
     expect(router.currentRoute.value.name).toBe('admin-content')
