@@ -164,4 +164,22 @@ describe('NewsletterDetailView', () => {
     expect(router.back).toHaveBeenCalled()
     expect(router.push).not.toHaveBeenCalled()
   })
+
+  it('uses router.back() and labels the button "Home" when the back state is /', async () => {
+    router.options.history.state.back = '/'
+    apiJson.mockResolvedValue([newsletter({ fileName: undefined })])
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('button').text()).toContain('Home')
+    await w.find('button').trigger('click')
+    expect(router.back).toHaveBeenCalled()
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('labels the button "Newsletters" by default', async () => {
+    apiJson.mockResolvedValue([newsletter({ fileName: undefined })])
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('button').text()).toContain('Newsletters')
+  })
 })

@@ -7,7 +7,7 @@ import ArticleCard from '@/components/common/ArticleCard.vue'
 import EventCard from '@/components/common/EventCard.vue'
 import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
-import type { Article, CommunityEvent } from '@/types/content'
+import type { Article, CommunityEvent, Newsletter } from '@/types/content'
 
 const { data: articles } = useAsyncData(
   () => apiJson<Article[]>('/articles?status=published'),
@@ -18,6 +18,11 @@ const { data: blogs } = useAsyncData(
 const { data: events } = useAsyncData(
   () => apiJson<CommunityEvent[]>('/events?upcoming=true'),
 )
+// API already returns newsletters newest-first (OrderByDescending IssueDate).
+const { data: newsletters } = useAsyncData(
+  () => apiJson<Newsletter[]>('/newsletters'),
+)
+const latestIssue = computed(() => newsletters.value?.[0] ?? null)
 
 const featuredArticles = computed(() =>
   [...(articles.value ?? [])]
@@ -133,12 +138,21 @@ const upcomingEvents = computed(() =>
       <p class="mt-3 text-slypn-900/80">
         Meet-up dates, a featured article, fundraising progress, and the odd member story. About five minutes to read.
       </p>
-      <RouterLink
-        to="/newsletter"
-        class="mt-6 inline-block rounded-md bg-slypn-600 px-6 py-3 text-sm font-semibold text-white hover:bg-slypn-700"
-      >
-        Subscribe
-      </RouterLink>
+      <div class="mt-6 flex flex-wrap justify-center gap-3">
+        <RouterLink
+          to="/newsletter"
+          class="rounded-md bg-slypn-600 px-6 py-3 text-sm font-semibold text-white hover:bg-slypn-700"
+        >
+          Subscribe
+        </RouterLink>
+        <RouterLink
+          v-if="latestIssue"
+          :to="{ name: 'newsletter-detail', params: { id: latestIssue.id } }"
+          class="rounded-md border border-slypn-200 bg-white px-6 py-3 text-sm font-semibold text-slypn-700 hover:bg-slypn-50"
+        >
+          Read the latest issue
+        </RouterLink>
+      </div>
     </div>
   </section>
 </template>

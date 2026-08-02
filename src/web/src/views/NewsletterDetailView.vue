@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { renderAsync } from 'docx-preview'
 import { apiFetch, apiJson } from '@/lib/api'
@@ -9,16 +9,26 @@ import type { Newsletter } from '@/types/content'
 const route = useRoute()
 const router = useRouter()
 
-// Reachable from both the public list and the admin list, so recognise both
-// as "came from a list" origins for the back button.
+// Reachable from the public list, the admin list, and Home's "latest issue"
+// link — recognise all three as "came from here" origins for the back
+// button, and label it to match wherever it'll actually land.
+const knownBackOrigins: Record<string, string> = {
+  '/newsletter': 'Newsletters',
+  '/admin/newsletters': 'Newsletters',
+  '/': 'Home',
+}
+
+const backLabel = computed(() => {
+  const back = router.options.history.state.back
+  const path = typeof back === 'string' ? back.split('?')[0] : undefined
+  return (path && knownBackOrigins[path]) || 'Newsletters'
+})
+
 function backToNewsletters() {
   const back = router.options.history.state.back
-  if (typeof back === 'string') {
-    const path = back.split('?')[0]
-    if (path === '/newsletter' || path === '/admin/newsletters') {
-      router.back()
-      return
-    }
+  if (typeof back === 'string' && back.split('?')[0] in knownBackOrigins) {
+    router.back()
+    return
   }
   router.push('/newsletter')
 }
@@ -100,7 +110,7 @@ const formatDate = (iso: string) =>
 <template>
   <div class="page-container py-12">
     <button type="button" class="mb-8 flex items-center gap-1.5 text-sm text-slypn-500 hover:text-slypn-700" @click="backToNewsletters">
-      &larr; Newsletters
+      &larr; {{ backLabel }}
     </button>
 
     <p v-if="loading" class="text-center text-slypn-900/60">Loading&hellip;</p>
