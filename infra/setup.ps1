@@ -243,11 +243,10 @@ if (-not $SkipBicep) {
     $s['storageAccountName']   = $deployResult.storageAccountName.value
     $s['mediaContainerName']   = $deployResult.mediaContainerName.value
     $s['contentContainerName'] = $deployResult.contentContainerName.value
-    $s['swaPrincipalId']       = $deployResult.swaPrincipalId.value
     Save-Secrets $s
     Ok "SWA deployed: $($s['prodUrl'])"
 
-    # Storage connection string (Table + Blob; used until managed-identity auth is wired up)
+    # Storage connection string (Table + Blob) — permanent auth path; Free-tier SWA has no managed identity to use instead.
     Info 'Fetching Storage connection string...'
     $storageConn = az storage account show-connection-string `
         --name $s['storageAccountName'] `

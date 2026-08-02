@@ -1,8 +1,9 @@
 // SLYPN infra — full resource-group deployment.
-// Phase 6.1 — adds managed identity on SWA + role assignments to Storage
-// (Blob + Table Data Contributor) so the API can drop the connection-string
-// fallback in prod. Content persists in Table Storage (metadata) + Blob
-// Storage (article/draft bodies + media) on a single storage account.
+// SWA is on the Free plan — no managed identity available, so the API
+// authenticates to Storage via connection string permanently (see
+// Storage__ConnectionString in setup.ps1). Content persists in Table
+// Storage (metadata) + Blob Storage (article/draft bodies + media) on a
+// single storage account.
 //
 // We run a single production environment; PR previews are handled by the
 // SWA action, not by a second resource group.
@@ -44,10 +45,6 @@ var prefixDash = 'slypn-${env}'
 var prefixFlat = 'slypn${env}'
 var nameSuffix = uniqueString(resourceGroup().id)
 
-// Built-in role ids
-var blobDataContributorRoleId  = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'                        // Storage Blob Data Contributor (Azure RBAC)
-var tableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'                         // Storage Table Data Contributor (Azure RBAC)
-
 // ---------------------------------------------------------------------------
 // Storage account + media container
 // ---------------------------------------------------------------------------
@@ -57,12 +54,12 @@ resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
   identity: {
-    type: 'None' // Access is via the SWA's managed identity (RBAC role assignments below), not the storage account's own identity.
+    type: 'None' // Free-tier SWA has no managed identity to grant — the storage account doesn't need its own either.
   }
   tags: tags
   properties: {
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true        // SWA / dev still uses connection strings; tightened to false post-rollout.
+    allowSharedKeyAccess: true        // SWA / dev use connection strings permanently — Free-tier SWA has no managed identity to grant Data Contributor roles to.
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     encryption: {
@@ -105,19 +102,16 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2024-01-0
 }
 
 // ---------------------------------------------------------------------------
-// Azure Static Web Apps (Standard SKU) — system-assigned managed identity
-// for outbound calls to Cosmos + Blob without storing secrets.
-// SWA is region-pinned to a small set; we use westeurope for UK proximity.
+// Azure Static Web Apps (Free SKU). SWA is region-pinned to a small set;
+// we use westeurope for UK proximity. Preview-environment quota (3
+// concurrent) is enforced in the deploy workflow, not here.
 // ---------------------------------------------------------------------------
 resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
   name: 'swa-${prefixDash}'
   location: swaLocation
   sku: {
-    name: 'Standard'
-    tier: 'Standard'
-  }
-  identity: {
-    type: 'SystemAssigned'
+    name: 'Free'
+    tier: 'Free'
   }
   tags: tags
   properties: {
@@ -133,32 +127,6 @@ resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Role assignments — let the SWA managed identity reach Blob + Table.
-// ---------------------------------------------------------------------------
-
-// Storage Blob Data Contributor at the storage account scope.
-resource blobDataAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: storage
-  name: guid(storage.id, swa.id, blobDataContributorRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobDataContributorRoleId)
-    principalId: swa.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// Storage Table Data Contributor at the storage account scope.
-resource tableDataAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: storage
-  name: guid(storage.id, swa.id, tableDataContributorRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', tableDataContributorRoleId)
-    principalId: swa.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Outputs — consumed by the deploy workflow in #41.
 // ---------------------------------------------------------------------------
 output swaUrl              string = 'https://${swa.properties.defaultHostname}'
@@ -166,4 +134,3 @@ output swaName             string = swa.name
 output storageAccountName  string = storage.name
 output mediaContainerName  string = mediaContainer.name
 output contentContainerName string = contentContainer.name
-output swaPrincipalId      string = swa.identity.principalId
