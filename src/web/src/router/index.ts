@@ -50,6 +50,7 @@ const router = createRouter({
     { path: '/events/:id',       name: 'event-detail',    component: () => import('@/views/EventDetailView.vue') },
     { path: '/resources',         name: 'resources',       component: ResourcesView },
     { path: '/newsletter',        name: 'newsletter',      component: NewsletterView },
+    { path: '/newsletter/:id',    name: 'newsletter-detail', component: () => import('@/views/NewsletterDetailView.vue') },
     { path: '/login',             name: 'login',           component: LoginView },
     { path: '/auth/callback',     name: 'auth-callback',   component: AuthCallbackView },
 

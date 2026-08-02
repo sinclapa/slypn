@@ -118,7 +118,7 @@ public sealed class MembersFunctions(
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Member), Description = "Updated member")]
     public async Task<HttpResponseData> UpdateRoles(
         [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "members/{id}")] HttpRequestData req,
-        string id, CancellationToken ct)
+        string id, FunctionContext context, CancellationToken ct)
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
 
@@ -133,6 +133,9 @@ public sealed class MembersFunctions(
         try { existing = await repo.GetMemberByIdAsync(id, ct); }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
         if (existing is null) return await NotFound(req, "Member not found.");
+
+        if (existing.Oid is not null && existing.Oid == context.GetUserOid())
+            return await BadRequest(req, "You cannot change your own role.");
 
         var updated = existing with { Roles = input.Roles.Distinct(StringComparer.OrdinalIgnoreCase).ToList() };
         try

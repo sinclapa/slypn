@@ -271,7 +271,8 @@ const fmtDate = (iso: string) =>
               v-for="r in allRoles"
               :key="r"
               type="button"
-              :disabled="savingId === m.id || deletingId === m.id"
+              :disabled="savingId === m.id || deletingId === m.id || m.oid === auth.oid"
+              :title="m.oid === auth.oid ? 'You cannot change your own role' : undefined"
               :class="[
                 'rounded-md px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50',
                 m.roles.includes(r)

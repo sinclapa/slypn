@@ -244,12 +244,13 @@ describe('LoginView', () => {
 })
 
 describe('NewsletterView', () => {
-  it('lists past issues and subscribes on submit', async () => {
+  it('shows the latest issue and subscribes on submit', async () => {
     apiJson.mockResolvedValue([{ id: 'n1', title: 'May 2026', issueDate: '2026-05-01', summary: 's', topics: ['x'] }])
     apiFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('') })
     const w = mountView(NewsletterView)
     await flushPromises()
-    expect(w.text()).toContain('Past issues')
+    expect(w.text()).toContain('Latest issue')
+    expect(w.text()).not.toContain('Past issues')
     expect(w.text()).toContain('May 2026')
 
     await w.find('input[type="email"]').setValue('me@example.com')
@@ -257,6 +258,24 @@ describe('NewsletterView', () => {
     await flushPromises()
     expect(apiFetch).toHaveBeenCalledWith('/newsletter/subscribe', expect.objectContaining({ method: 'POST' }))
     expect(w.text()).toContain('you’re on the list')
+  })
+
+  it('separates the latest issue (API-returned newest-first) from past issues', async () => {
+    apiJson.mockResolvedValue([
+      { id: 'n2', title: 'June 2026', issueDate: '2026-06-01', summary: 's2', topics: ['x'] },
+      { id: 'n1', title: 'May 2026', issueDate: '2026-05-01', summary: 's1', topics: ['x'] },
+    ])
+    const w = mountView(NewsletterView)
+    await flushPromises()
+    expect(w.text()).toContain('Latest issue')
+    expect(w.text()).toContain('Past issues')
+
+    const latestSection = w.text().split('Past issues')[0]
+    expect(latestSection).toContain('June 2026')
+    expect(latestSection).not.toContain('May 2026')
+
+    const pastSection = w.text().split('Past issues')[1]
+    expect(pastSection).toContain('May 2026')
   })
 
   it('surfaces a subscribe error', async () => {
@@ -316,6 +335,28 @@ describe('HomeView', () => {
     expect(w.text()).toContain('Article One')
     expect(w.text()).toContain('Blog One')
     expect(w.text()).toContain('Coffee')
+  })
+
+  it('links to the latest newsletter issue when one exists', async () => {
+    apiJson.mockImplementation((path: string) => {
+      if (path.startsWith('/newsletters')) return Promise.resolve([
+        { id: 'n2', title: 'June 2026', issueDate: '2026-06-01', summary: 's', topics: [] },
+        { id: 'n1', title: 'May 2026', issueDate: '2026-05-01', summary: 's', topics: [] },
+      ])
+      return Promise.resolve([])
+    })
+    const w = mountView(HomeView)
+    await flushPromises()
+    const link = w.findAllComponents(RouterLinkStub).find(l => l.text() === 'Read the latest issue')
+    expect(link).toBeTruthy()
+    expect(link!.props('to')).toEqual({ name: 'newsletter-detail', params: { id: 'n2' } })
+  })
+
+  it('omits the latest-issue link when there are no newsletters', async () => {
+    apiJson.mockResolvedValue([])
+    const w = mountView(HomeView)
+    await flushPromises()
+    expect(w.findAllComponents(RouterLinkStub).find(l => l.text() === 'Read the latest issue')).toBeUndefined()
   })
 })
 

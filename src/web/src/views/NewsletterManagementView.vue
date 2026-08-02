@@ -171,12 +171,17 @@ async function remove(n: Newsletter) {
           </p>
           <p class="mt-1 font-semibold text-slypn-800">{{ n.title }}</p>
           <p class="mt-0.5 text-sm text-slypn-900/75">{{ n.summary }}</p>
-          <a
-            v-if="n.fileName"
-            :href="`/api/newsletters/${n.id}/file`"
-            class="mt-1 inline-block text-xs text-slypn-500 underline underline-offset-2 hover:text-slypn-700"
-            download
-          >{{ n.fileName }}</a>
+          <div v-if="n.fileName" class="mt-1 flex items-center gap-3">
+            <RouterLink
+              :to="{ name: 'newsletter-detail', params: { id: n.id } }"
+              class="text-xs font-semibold text-slypn-600 underline underline-offset-2 hover:text-slypn-700"
+            >View</RouterLink>
+            <a
+              :href="`/api/newsletters/${n.id}/file`"
+              class="text-xs text-slypn-500 underline underline-offset-2 hover:text-slypn-700"
+              download
+            >{{ n.fileName }}</a>
+          </div>
           <p v-else class="mt-1 text-xs text-slypn-900/50">No file attached</p>
         </div>
         <div class="flex shrink-0 gap-2">

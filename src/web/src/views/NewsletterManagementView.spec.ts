@@ -54,6 +54,15 @@ describe('NewsletterManagementView', () => {
     expect(w.text()).toContain('No file attached')
   })
 
+  it('shows a View link to the newsletter detail route only when a file is attached', async () => {
+    apiJson.mockResolvedValue([newsletter({ fileName: 'issue.pdf' }), newsletter({ id: 'n2', title: 'June 2026' })])
+    const w = mountC()
+    await flushPromises()
+    const viewLinks = w.findAllComponents(RouterLinkStub).filter(l => (l.props('to') as { name?: string })?.name === 'newsletter-detail')
+    expect(viewLinks).toHaveLength(1)
+    expect(viewLinks[0].props('to')).toEqual({ name: 'newsletter-detail', params: { id: 'n1' } })
+  })
+
   it('shows the empty state', async () => {
     apiJson.mockResolvedValue([])
     const w = mountC()
