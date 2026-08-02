@@ -2,6 +2,11 @@
 import { RouterLink } from 'vue-router'
 import logoWhiteUrl from '@/assets/logo-white.svg'
 import { useCookieConsent } from '@/composables/useCookieConsent'
+import FacebookIcon from '@/components/common/FacebookIcon.vue'
+import XIcon from '@/components/common/XIcon.vue'
+import YouTubeIcon from '@/components/common/YouTubeIcon.vue'
+import InstagramIcon from '@/components/common/InstagramIcon.vue'
+import MailIcon from '@/components/common/MailIcon.vue'
 
 const year = new Date().getFullYear()
 const { reset: resetCookies } = useCookieConsent()
@@ -17,6 +22,41 @@ const appVersion = __APP_VERSION__
           South London Younger Parkinson&rsquo;s Network &mdash; a community for
           working-age people living with Parkinson&rsquo;s in South London.
         </p>
+        <div class="mt-4 flex items-center gap-4">
+          <a
+            href="https://www.facebook.com/SLYPN"
+            aria-label="SLYPN on Facebook"
+            class="text-slypn-100/85 hover:text-tulip"
+            rel="noopener"
+            target="_blank"
+          ><FacebookIcon class="h-5 w-5" /></a>
+          <a
+            href="https://x.com/slypn"
+            aria-label="SLYPN on X"
+            class="text-slypn-100/85 hover:text-tulip"
+            rel="noopener"
+            target="_blank"
+          ><XIcon class="h-5 w-5" /></a>
+          <a
+            href="https://www.youtube.com/@slypntube1803"
+            aria-label="SLYPN on YouTube"
+            class="text-slypn-100/85 hover:text-tulip"
+            rel="noopener"
+            target="_blank"
+          ><YouTubeIcon class="h-5 w-5" /></a>
+          <a
+            href="https://www.instagram.com/slypn_"
+            aria-label="SLYPN on Instagram"
+            class="text-slypn-100/85 hover:text-tulip"
+            rel="noopener"
+            target="_blank"
+          ><InstagramIcon class="h-5 w-5" /></a>
+          <a
+            href="mailto:sarah.webb@slypn.org.uk"
+            aria-label="Email Sarah Webb"
+            class="text-slypn-100/85 hover:text-tulip"
+          ><MailIcon class="h-5 w-5" /></a>
+        </div>
       </div>
 
       <div>
