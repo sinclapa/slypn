@@ -48,17 +48,15 @@ var nameSuffix = uniqueString(resourceGroup().id)
 // ---------------------------------------------------------------------------
 // Storage account + media container
 // ---------------------------------------------------------------------------
-// S6378 (disabling managed identities): intentional — see the Free-tier SWA
-// note in the file header. There's no identity to grant this account access
-// to; connection-string auth is the permanent path.
-//azureresourcemanager:S6378
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: take('${prefixFlat}st${nameSuffix}', 24)
   location: location
   sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
+  // Free-tier SWA has no managed identity to grant this account access to;
+  // connection-string auth is the permanent path.
   identity: {
-    type: 'None' // Free-tier SWA has no managed identity to grant — the storage account doesn't need its own either.
+    type: 'None' // NOSONAR (S6378) — see comment above
   }
   tags: tags
   properties: {
@@ -110,10 +108,9 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2024-01-0
 // we use westeurope for UK proximity. Preview-environment quota (3
 // concurrent) is enforced in the deploy workflow, not here.
 // ---------------------------------------------------------------------------
-// S6378 (disabling managed identities): intentional — the Free plan doesn't
-// support managed identity at all, so there's no identity block to add here.
-//azureresourcemanager:S6378
-resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
+// The Free plan doesn't support managed identity at all, so there's no
+// identity block to add here.
+resource swa 'Microsoft.Web/staticSites@2024-04-01' = { // NOSONAR (S6378) — see comment above
   name: 'swa-${prefixDash}'
   location: swaLocation
   sku: {
