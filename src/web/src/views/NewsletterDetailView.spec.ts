@@ -105,7 +105,7 @@ describe('NewsletterDetailView', () => {
     const [, bodyContainer, styleContainer, options] = renderAsync.mock.calls[0]
     expect(bodyContainer).toBe(styleContainer)
     expect(w.element.contains(bodyContainer)).toBe(true)
-    expect(options).toMatchObject({ useBase64URL: true })
+    expect(options).toMatchObject({ useBase64URL: true, ignoreWidth: true })
   })
 
   it('falls back to a download prompt for legacy .doc files', async () => {
