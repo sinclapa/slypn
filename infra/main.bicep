@@ -108,9 +108,14 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2024-01-0
 // we use westeurope for UK proximity. Preview-environment quota (3
 // concurrent) is enforced in the deploy workflow, not here.
 // ---------------------------------------------------------------------------
-// The Free plan doesn't support managed identity at all, so there's no
-// identity block to add here.
-resource swa 'Microsoft.Web/staticSites@2024-04-01' = { // NOSONAR (S6378) — see comment above
+// The Free plan doesn't support managed identity at all — omitted here
+// deliberately (not identity: { type: 'None' }). On the ORIGINAL resource,
+// removing an existing SystemAssigned identity via any path (CLI, ARM
+// template at two API versions, the Portal's own Identity blade) hit a
+// platform bug: "Parameter IdentityUrl is null or empty". Recreating the
+// resource clean, never attaching an identity in the first place, avoids
+// that code path entirely rather than fighting it.
+resource swa 'Microsoft.Web/staticSites@2025-05-01' = { // NOSONAR (S6378) — see comment above
   name: 'swa-${prefixDash}'
   location: swaLocation
   sku: {
