@@ -4,7 +4,7 @@ After the first Bicep deploy (#42) the SWA is reachable at the auto-generated `h
 
 > **Prerequisites**
 > - You own the domain. Registrar access to edit DNS records.
-> - SWA is on the **Standard** tier (already true via `infra/main.bicep`).
+> - No tier requirement — Free-tier SWA supports up to 2 custom domains (Standard/Premium raise that limit if you need more).
 > - You are signed in as Owner or Contributor on the SWA resource.
 
 ---

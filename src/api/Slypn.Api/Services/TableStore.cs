@@ -10,10 +10,8 @@ namespace Slypn.Api.Services;
 /// Backed by the same storage account as <see cref="BlobService"/> via
 /// <see cref="StorageOptions.ConnectionString"/>.
 ///
-/// Auth modes:
-///   - dev  : connection string (Azurite emulator).
-///   - prod : connection string for now; Managed Identity wiring lands in #38 (Phase 6)
-///            — swap to `new TableServiceClient(endpoint, new DefaultAzureCredential())`.
+/// Connection string in both dev (Azurite emulator) and prod, permanently —
+/// Free-tier SWA has no managed identity to grant table access to instead.
 ///
 /// If the connection string is empty the service exposes IsConfigured=false and
 /// every table handle throws. Callers must check the flag first.

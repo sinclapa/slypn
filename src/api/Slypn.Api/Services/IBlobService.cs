@@ -16,8 +16,8 @@ public interface IBlobService
 
     /// <summary>
     /// Returns a short-lived (default 15 min) read URL for the given blob name.
-    /// Currently shared-key SAS; user-delegation SAS via managed identity in
-    /// <c>#41</c> (Phase 6) once SWA managed identity has Blob Data Contributor.
+    /// Shared-key SAS, permanently — Free-tier SWA has no managed identity to
+    /// grant Blob Data Contributor to for a user-delegation SAS instead.
     /// </summary>
     Uri GetMediaReadUrl(string blobName, TimeSpan? validFor = null);
 }

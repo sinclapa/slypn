@@ -42,9 +42,8 @@ az deployment group create \
 
 Expected resources after ~5 min:
 
-- `swa-slypn-prod` (Static Web App)
+- `swa-slypn-prod` (Static Web App, Free tier)
 - `slypnprodst<suffix>` (Storage account, with `media` + `content` blob containers and the Table service; the six content tables are created at runtime by `TableBootstrapper`)
-- Two role assignments: SWA managed identity → Storage Blob Data Contributor + Storage Table Data Contributor.
 
 Capture the outputs:
 
