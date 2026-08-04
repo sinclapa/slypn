@@ -49,7 +49,7 @@ Set on the SWA resource via portal or CLI. These flow into the Functions process
 
 | Setting | Purpose | Notes |
 |---|---|---|
-| `Storage__ConnectionString` | Azurite or storage account connection string (Table + Blob) | Set everywhere until managed identity is wired (#38). Prod then relies on the Bicep-granted `Storage Blob Data Contributor` + `Storage Table Data Contributor` roles on the SWA managed identity. |
+| `Storage__ConnectionString` | Azurite or storage account connection string (Table + Blob) | Set everywhere, permanently — Free-tier SWA has no managed identity to grant Storage roles to instead. |
 | `Graph__ClientSecret` | Graph app secret for invitation flow | Required everywhere until Graph supports managed identity for `User.Invite.All` (it doesn't today). Rotate annually. |
 
 ### Set via Azure CLI
@@ -113,7 +113,7 @@ These bake into the JS bundle at SWA build time. Set them as SWA app settings **
 | `Graph__ClientSecret` | Annual | Or sooner if leaked. Generate in Entra → re-set in SWA app settings. |
 | `Otel__Headers` (Grafana access policy token) | Annual | Or sooner. Recreate access policy in Grafana → re-set. |
 | Entra app reg secrets | n/a — public client (SPA uses PKCE, no secret) | — |
-| Storage connection string | n/a — managed identity in prod (#38) | — |
+| Storage connection string | No policy defined yet | Now the permanent auth path (Free-tier SWA has no managed identity) — worth deciding a cadence. |
 
 A failed rotation never breaks running pods because SWA app settings are loaded on cold start; restart the Functions worker via portal after updating.
 

@@ -78,10 +78,9 @@ public sealed class BlobService : IBlobService
         var blob = _container.GetBlobClient(blobName);
         if (!blob.CanGenerateSasUri)
         {
-            // Will be the case once we switch to managed identity in Phase 6;
-            // a user-delegation SAS will be generated via the service client instead.
-            throw new InvalidOperationException(
-                "Cannot generate shared-key SAS. Switch to user-delegation SAS once managed identity is wired (see #41).");
+            // Connection-string clients always support shared-key SAS, so this
+            // shouldn't be reachable in practice — kept as a defensive guard.
+            throw new InvalidOperationException("Cannot generate shared-key SAS for this blob client.");
         }
 
         var lifetime = validFor ?? _opts.ReadSasLifetime;
