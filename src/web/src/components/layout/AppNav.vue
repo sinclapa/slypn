@@ -182,12 +182,15 @@ async function onSignOut() {
               <li>
                 <RouterLink
                   :to="link.to"
+                  data-testid="nav-account-link"
+                  :data-to="link.to"
                   class="flex items-center justify-between px-4 py-2 hover:bg-slypn-50"
                   @click="userMenuOpen = false"
                 >
                   {{ link.label }}
                   <span
                     v-if="link.badge && approvalsStore.pendingCount > 0"
+                    data-testid="approvals-badge"
                     class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
                   >{{ approvalsStore.pendingCount }}</span>
                 </RouterLink>
@@ -276,6 +279,8 @@ async function onSignOut() {
         <template v-for="link in accountLinks" :key="link.to">
           <RouterLink
             :to="link.to"
+            data-testid="nav-account-link-mobile"
+            :data-to="link.to"
             class="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-slypn-800 hover:bg-slypn-50"
             active-class="bg-slypn-50"
             @click="userMenuOpen = false"

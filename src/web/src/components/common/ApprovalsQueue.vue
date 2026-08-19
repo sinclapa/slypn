@@ -177,7 +177,7 @@ onMounted(load)
 </script>
 
 <template>
-  <article class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
+  <article data-testid="approvals-panel" class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
     <div class="flex items-center justify-between">
       <div>
         <h2 class="font-display text-xl font-bold text-slypn-700">Approvals</h2>
@@ -187,6 +187,7 @@ onMounted(load)
       </div>
       <button
         type="button"
+        data-testid="approvals-refresh"
         class="rounded-md border border-slypn-200 bg-white px-3 py-1.5 text-sm font-semibold text-slypn-700 hover:bg-slypn-50"
         :disabled="loading"
         @click="load"
@@ -197,7 +198,7 @@ onMounted(load)
       {{ loadError }}
     </p>
 
-    <p v-if="!loading && !loadError && articles.length === 0 && deletions.length === 0" class="mt-6 text-sm text-slypn-900/65">
+    <p v-if="!loading && !loadError && articles.length === 0 && deletions.length === 0" data-testid="approvals-empty" class="mt-6 text-sm text-slypn-900/65">
       No submissions waiting. Contributors&rsquo; new submissions and deletion requests will land here.
     </p>
 
@@ -214,6 +215,8 @@ onMounted(load)
           <li
             v-for="article in group.items"
             :key="article.id"
+            data-testid="approvals-item"
+            :data-id="article.id"
             class="rounded-md border border-slypn-100 bg-white p-4"
           >
             <div class="flex items-start justify-between gap-3">
@@ -231,6 +234,7 @@ onMounted(load)
                   >{{ article.replacesArticleId ? 'Revision' : 'New' }}</span>
                   <button
                     type="button"
+                    data-testid="approvals-item-title"
                     class="text-left font-display text-lg font-bold text-slypn-700 hover:text-slypn-600"
                     @click="toggle(article.id)"
                   >{{ article.title || '(untitled)' }}</button>
@@ -245,12 +249,14 @@ onMounted(load)
               <div class="flex shrink-0 gap-2">
                 <button
                   type="button"
+                  data-testid="approvals-approve"
                   class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                   :disabled="busy[article.id] !== null && busy[article.id] !== undefined"
                   @click="publish(article)"
                 >{{ busy[article.id] === 'publishing' ? '…' : 'Approve' }}</button>
                 <button
                   type="button"
+                  data-testid="approvals-revise"
                   class="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
                   :disabled="busy[article.id] !== null && busy[article.id] !== undefined"
                   @click="openRevise(article)"
@@ -264,7 +270,7 @@ onMounted(load)
               v-html="article.body"
             />
 
-            <p v-if="errors[article.id]" class="mt-3 rounded-md bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
+            <p v-if="errors[article.id]" data-testid="approvals-item-error" class="mt-3 rounded-md bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
               {{ errors[article.id] }}
             </p>
           </li>
@@ -281,6 +287,8 @@ onMounted(load)
         <li
           v-for="item in deletions"
           :key="item.id"
+          data-testid="deletion-item"
+          :data-id="item.id"
           class="rounded-md border border-rose-100 bg-rose-50/40 p-4"
         >
           <div class="flex items-start justify-between gap-3">
@@ -304,12 +312,14 @@ onMounted(load)
             <div class="flex shrink-0 gap-2">
               <button
                 type="button"
+                data-testid="deletion-approve"
                 class="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
                 :disabled="busy[item.id] !== null && busy[item.id] !== undefined"
                 @click="approveDeletion(item)"
               >{{ busy[item.id] === 'deleting' ? '…' : 'Approve deletion' }}</button>
               <button
                 type="button"
+                data-testid="deletion-keep"
                 class="rounded-md border border-slypn-200 bg-white px-3 py-1.5 text-sm font-semibold text-slypn-700 hover:bg-slypn-50 disabled:opacity-50"
                 :disabled="busy[item.id] !== null && busy[item.id] !== undefined"
                 @click="keepArticle(item)"
@@ -338,7 +348,7 @@ onMounted(load)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
       @mousedown.self="reviseDialog.show = false"
     >
-      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+      <div data-testid="revise-dialog" class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
         <h3 class="font-display font-semibold text-slypn-700">Request revision</h3>
         <p class="mt-1 text-sm text-slypn-900/70">
           <strong>{{ reviseDialog.article?.title }}</strong> will be sent back to the author as a draft with your feedback.
@@ -364,6 +374,7 @@ onMounted(load)
           >Cancel</button>
           <button
             type="button"
+            data-testid="revise-submit"
             :disabled="reviseDialog.feedback.trim().length < 5"
             class="rounded-md bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
             @click="confirmRevise"

@@ -9,7 +9,7 @@ const formatDate = (iso: string) =>
 </script>
 
 <template>
-  <article class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
+  <article data-testid="newsletter-card" :data-id="newsletter.id" class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
     <p class="font-display text-xs font-semibold uppercase tracking-widest text-slypn-500">
       {{ formatDate(newsletter.issueDate) }}
     </p>

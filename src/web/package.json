@@ -13,7 +13,10 @@
     "test:unit:watch": "vitest",
     "test:unit:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:app": "playwright test --project=app",
+    "test:e2e:anon": "playwright test --project=anon",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.27.0",
@@ -42,6 +45,7 @@
     "@vue/test-utils": "^2.4.11",
     "@vue/tsconfig": "^0.7.0",
     "autoprefixer": "^10.4.20",
+    "azurite": "^3.34.0",
     "eslint": "^9.17.0",
     "eslint-plugin-vue": "^9.32.0",
     "happy-dom": "^20.10.6",

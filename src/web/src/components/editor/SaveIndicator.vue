@@ -37,7 +37,11 @@ function formatTime(d: Date) {
 </script>
 
 <template>
-  <p class="inline-flex items-center gap-2 text-xs text-slypn-900/70">
+  <p
+    data-testid="save-indicator"
+    :data-status="status"
+    class="inline-flex items-center gap-2 text-xs text-slypn-900/70"
+  >
     <span :class="['inline-block h-2 w-2 rounded-full', dotClass]" />
     <span v-html="label" />
   </p>

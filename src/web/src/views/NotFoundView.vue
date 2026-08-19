@@ -4,7 +4,7 @@ const route = useRoute()
 </script>
 
 <template>
-  <main class="min-h-[60vh] px-6 py-20">
+  <main data-testid="not-found" class="min-h-[60vh] px-6 py-20">
     <div class="mx-auto max-w-3xl text-center">
       <p class="font-display text-sm font-semibold uppercase tracking-[0.2em] text-slypn-500">
         Coming soon

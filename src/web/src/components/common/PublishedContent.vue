@@ -184,7 +184,7 @@ onMounted(load)
 </script>
 
 <template>
-  <article class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
+  <article data-testid="published-panel" class="rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
     <div class="flex items-center justify-between">
       <div>
         <h2 class="font-display text-xl font-bold text-slypn-700">Published content</h2>
@@ -225,6 +225,7 @@ onMounted(load)
       <div class="relative sm:w-72">
         <input
           v-model="search"
+          data-testid="published-search"
           type="search"
           aria-label="Search title or summary"
           placeholder="Search title or summary…"
@@ -246,6 +247,8 @@ onMounted(load)
       <li
         v-for="item in pagedItems"
         :key="item.id"
+        data-testid="published-item"
+        :data-id="item.id"
         class="rounded-md border border-slypn-100 bg-white p-4"
       >
         <div class="flex items-start justify-between gap-3">
@@ -264,10 +267,12 @@ onMounted(load)
               <p class="font-display text-lg font-bold text-slypn-700">{{ item.title }}</p>
               <span
                 v-if="revisionPending.has(item.id)"
+                data-testid="published-badge-revision"
                 class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800"
               >Revision pending</span>
               <span
                 v-if="item.deletionRequestedBy"
+                data-testid="published-badge-deletion"
                 class="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-rose-700"
               >Deletion requested</span>
             </div>
@@ -280,6 +285,7 @@ onMounted(load)
           <div class="flex shrink-0 gap-2">
             <button
               type="button"
+              data-testid="published-edit"
               class="rounded-md border border-slypn-200 bg-white px-3 py-1.5 text-sm font-semibold text-slypn-700 hover:bg-slypn-50 disabled:opacity-50"
               :disabled="!!busy[item.id] || revisionPending.has(item.id)"
               :title="revisionPending.has(item.id) ? 'A revision is already awaiting approval' : undefined"
@@ -287,6 +293,7 @@ onMounted(load)
             >Edit</button>
             <button
               type="button"
+              data-testid="published-delete"
               class="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
               :disabled="!!busy[item.id] || !!item.deletionRequestedBy"
               @click="remove(item)"
@@ -295,7 +302,7 @@ onMounted(load)
             </button>
           </div>
         </div>
-        <p v-if="errors[item.id]" class="mt-2 rounded-md bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
+        <p v-if="errors[item.id]" data-testid="published-item-error" class="mt-2 rounded-md bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
           {{ errors[item.id] }}
         </p>
       </li>

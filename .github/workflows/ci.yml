@@ -90,6 +90,81 @@ jobs:
           path: src/api/Slypn.Api.Tests/TestResults
           retention-days: 1
 
+  e2e:
+    name: E2E (Playwright + live API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: src/web/package-lock.json
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      # Same key as the `api` job so the two share one cache entry.
+      - name: NuGet cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('src/api/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # Not --ignore-scripts: azurite (a devDependency) needs its install step.
+      - name: Install web dependencies
+        working-directory: src/web
+        run: npm ci --no-fund --no-audit
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('src/web/package-lock.json') }}
+
+      - name: Install Chromium
+        working-directory: src/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Azure Functions Core Tools
+        run: npm i -g azure-functions-core-tools@4 --unsafe-perm true
+
+      # e2e/global-setup.ts starts Azurite and `func start`, which builds the
+      # project itself. Restoring here just warms the NuGet cache so that build
+      # stays inside the health-check budget.
+      - name: Restore API + seed CLI
+        run: |
+          dotnet restore src/api/Slypn.Api/Slypn.Api.csproj
+          dotnet restore src/api/Slypn.Seed/Slypn.Seed.csproj
+
+      - name: Create local.settings.json
+        run: cp src/api/Slypn.Api/local.settings.sample.json src/api/Slypn.Api/local.settings.json
+
+      - name: Run e2e suite
+        working-directory: src/web
+        env:
+          E2E_LOG_DIR: ${{ github.workspace }}/.testresults/e2e-backend
+        run: npm run test:e2e
+
+      # Traces, videos and screenshots for the failing tests, plus the func and
+      # azurite logs — a CI-only failure is near-undiagnosable without them.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            src/web/playwright-report
+            src/web/test-results
+            .testresults/e2e-backend
+          retention-days: 7
+
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-latest

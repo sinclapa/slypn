@@ -9,6 +9,7 @@ const { choice, accept, decline } = useCookieConsent()
     <dialog
       v-if="choice === null"
       open
+      data-testid="cookie-banner"
       aria-labelledby="cookie-title"
       aria-describedby="cookie-desc"
       class="fixed inset-x-0 bottom-0 z-50 m-0 w-full max-w-none border-0 border-t border-slypn-100 bg-white/95 p-0 text-slypn-900 shadow-lg backdrop-blur"
@@ -26,6 +27,7 @@ const { choice, accept, decline } = useCookieConsent()
         <div class="flex shrink-0 gap-2">
           <button
             type="button"
+            data-testid="cookie-decline"
             class="rounded-md border border-slypn-200 bg-white px-4 py-2 text-sm font-semibold text-slypn-700 hover:bg-slypn-50"
             @click="decline"
           >
@@ -33,6 +35,7 @@ const { choice, accept, decline } = useCookieConsent()
           </button>
           <button
             type="button"
+            data-testid="cookie-accept"
             class="rounded-md bg-slypn-600 px-4 py-2 text-sm font-semibold text-white hover:bg-slypn-700"
             @click="accept"
           >

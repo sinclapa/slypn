@@ -159,18 +159,19 @@ const formatDate = (iso: string) =>
         <template v-else>
           <p v-if="fileLoading" class="text-slypn-900/60">Loading preview&hellip;</p>
 
-          <div v-else-if="fileError" class="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <div v-else-if="fileError" data-testid="newsletter-file-error" class="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
             Couldn&rsquo;t load the preview: {{ fileError }}. You can still
             <a :href="`/api/newsletters/${newsletter.id}/file`" class="underline underline-offset-2" download>download the file</a>.
           </div>
 
-          <div v-else-if="fileKind === 'unsupported'" class="rounded-md bg-slypn-50 px-4 py-3 text-sm text-slypn-700">
+          <div v-else-if="fileKind === 'unsupported'" data-testid="newsletter-unsupported" class="rounded-md bg-slypn-50 px-4 py-3 text-sm text-slypn-700">
             This issue can&rsquo;t be previewed &mdash;
             <a :href="`/api/newsletters/${newsletter.id}/file`" class="underline underline-offset-2" download>download it instead</a>.
           </div>
 
           <iframe
             v-if="fileKind === 'pdf' && objectUrl"
+            data-testid="newsletter-pdf"
             :src="objectUrl"
             :title="`${newsletter.title} — PDF preview`"
             class="h-[80vh] w-full rounded-xl border border-slypn-100"
@@ -179,7 +180,7 @@ const formatDate = (iso: string) =>
 
         <!-- Always mounted once a newsletter is resolved (visibility only via
              v-show) so the ref exists before renderAsync needs it. -->
-        <div v-show="fileKind === 'docx'" ref="docxContainer" class="docx-container max-w-full overflow-x-auto rounded-xl border border-slypn-100 bg-white p-6" />
+        <div v-show="fileKind === 'docx'" ref="docxContainer" data-testid="newsletter-docx" class="docx-container max-w-full overflow-x-auto rounded-xl border border-slypn-100 bg-white p-6" />
       </div>
     </div>
   </div>

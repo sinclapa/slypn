@@ -242,6 +242,9 @@ const fmtDate = (iso: string) =>
           <div
             v-for="e in entries"
             :key="e.id"
+            data-testid="draft-row"
+            :data-id="e.id"
+            :data-state="e.state"
             role="button"
             tabindex="0"
             :aria-current="editorOpen && e.id === draftId"
@@ -268,16 +271,19 @@ const fmtDate = (iso: string) =>
             >Revision</span>
             <span
               v-if="e.state === 'in-review'"
+              data-testid="draft-row-state"
               class="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white"
             >In review</span>
             <span
               v-else-if="editorOpen && e.id === draftId"
+              data-testid="draft-row-state"
               class="shrink-0 rounded-full bg-slypn-600 px-2 py-0.5 text-xs font-semibold text-white"
             >Editing</span>
             <span class="shrink-0 text-xs text-slypn-400">{{ fmtDate(e.date) }}</span>
             <button
               v-if="e.state === 'draft'"
               type="button"
+              data-testid="draft-row-delete"
               class="shrink-0 rounded px-2 py-1 text-xs font-semibold text-rose-500 hover:bg-rose-50"
               title="Delete draft"
               @click.stop="deleteDraft(e.id, e.etag)"
@@ -291,6 +297,7 @@ const fmtDate = (iso: string) =>
         <div class="flex items-center gap-4 border-t border-slypn-100 px-6 py-3">
           <button
             type="button"
+            data-testid="new-draft-open"
             class="rounded-md border border-slypn-200 px-3 py-1.5 text-sm font-medium text-slypn-700 hover:bg-slypn-50"
             @click="openNewDraftDialog"
           >+ New draft</button>
@@ -311,7 +318,7 @@ const fmtDate = (iso: string) =>
       @submitted="onSubmitted"
     />
 
-    <p v-if="submitMessage" class="rounded-md bg-emerald-50 px-4 py-2 text-sm text-emerald-900">
+    <p v-if="submitMessage" data-testid="draft-submit-message" class="rounded-md bg-emerald-50 px-4 py-2 text-sm text-emerald-900">
       {{ submitMessage }}
     </p>
 
@@ -323,7 +330,7 @@ const fmtDate = (iso: string) =>
         @click.self="showNewDraft = false"
         @keydown.esc="showNewDraft = false"
       >
-        <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div data-testid="new-draft-dialog" class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
           <h3 class="font-display text-lg font-bold text-slypn-700">New draft</h3>
           <form class="mt-4 space-y-4" @submit.prevent="createDraft">
             <div>
@@ -348,6 +355,7 @@ const fmtDate = (iso: string) =>
                   v-for="t in (['article', 'blog'] as const)"
                   :key="t"
                   type="button"
+                  :data-testid="`new-draft-type-${t}`"
                   :class="['rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
                     newType === t ? 'bg-slypn-600 text-white' : 'text-slypn-700 hover:bg-slypn-50']"
                   @click="newType = t"
@@ -362,6 +370,7 @@ const fmtDate = (iso: string) =>
               >Cancel</button>
               <button
                 type="submit"
+                data-testid="new-draft-submit"
                 class="rounded-md bg-slypn-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700 disabled:opacity-50"
                 :disabled="!newTitle.trim()"
               >Create draft</button>

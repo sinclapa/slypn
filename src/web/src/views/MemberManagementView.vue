@@ -147,6 +147,7 @@ const fmtDate = (iso: string) =>
       <button
         type="button"
         class="flex w-full items-center justify-between text-left"
+        data-testid="invite-toggle"
         @click="showInvite = !showInvite; invSuccess = null; invError = null"
       >
         <h2 class="font-display text-xl font-bold text-slypn-700">Invite a member</h2>
@@ -190,6 +191,8 @@ const fmtDate = (iso: string) =>
                 v-for="r in allRoles"
                 :key="r"
                 type="button"
+                data-testid="invite-role"
+                :data-role="r"
                 :class="[
                   'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
                   invRole === r ? 'bg-slypn-600 text-white' : 'text-slypn-700 hover:bg-slypn-50',
@@ -201,13 +204,14 @@ const fmtDate = (iso: string) =>
 
           <button
             type="submit"
+            data-testid="invite-submit"
             class="rounded-md bg-slypn-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700 disabled:opacity-50"
             :disabled="invSubmitting || !invEmail || !invName"
           >{{ invSubmitting ? 'Inviting…' : 'Send invitation' }}</button>
 
-          <p v-if="invError" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ invError }}</p>
+          <p v-if="invError" data-testid="invite-error" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ invError }}</p>
 
-          <div v-if="invSuccess" class="rounded-md bg-emerald-50 p-4 text-sm text-emerald-900">
+          <div v-if="invSuccess" data-testid="invite-result" class="rounded-md bg-emerald-50 p-4 text-sm text-emerald-900">
             <p class="font-semibold">Member {{ invSuccess.member.email }} has been saved.</p>
             <template v-if="invSuccess.redeemUrl">
               <p class="mt-2">Share this sign-up link with them:</p>
@@ -239,7 +243,7 @@ const fmtDate = (iso: string) =>
         <button class="ml-2 underline" @click="refresh">Retry</button>
       </div>
 
-      <p v-else-if="saveError" class="px-6 py-3 text-sm text-rose-700 bg-rose-50">
+      <p v-else-if="saveError" data-testid="member-save-error" class="px-6 py-3 text-sm text-rose-700 bg-rose-50">
         {{ saveError }}
         <button class="ml-2 underline" @click="saveError = null">Dismiss</button>
       </p>
@@ -248,6 +252,8 @@ const fmtDate = (iso: string) =>
         <div
           v-for="m in sortedMembers"
           :key="m.id"
+          data-testid="member-row"
+          :data-id="m.id"
           class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:gap-6"
         >
           <!-- Identity -->
@@ -259,6 +265,7 @@ const fmtDate = (iso: string) =>
 
           <!-- Status badge -->
           <span
+            data-testid="member-status"
             :class="[
               'shrink-0 self-start rounded-full px-2.5 py-0.5 text-xs font-semibold sm:self-auto',
               m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
@@ -271,6 +278,9 @@ const fmtDate = (iso: string) =>
               v-for="r in allRoles"
               :key="r"
               type="button"
+              data-testid="member-role"
+              :data-role="r"
+              :data-selected="m.roles.includes(r)"
               :disabled="savingId === m.id || deletingId === m.id || m.oid === auth.oid"
               :title="m.oid === auth.oid ? 'You cannot change your own role' : undefined"
               :class="[
@@ -289,6 +299,7 @@ const fmtDate = (iso: string) =>
           <!-- Delete -->
           <button
             type="button"
+            data-testid="member-remove"
             :disabled="savingId === m.id || deletingId === m.id || m.oid === auth.oid"
             :title="m.oid === auth.oid ? 'You cannot remove yourself' : undefined"
             class="shrink-0 rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
