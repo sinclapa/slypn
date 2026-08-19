@@ -144,8 +144,11 @@ jobs:
           FUNC_VERSION: '4.13.0'
         run: |
           base="https://github.com/Azure/azure-functions-core-tools/releases/download/${FUNC_VERSION}"
-          curl -sSLf -o func.zip      "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip"
-          curl -sSLf -o func.zip.sha2 "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip.sha2"
+          # --proto/--proto-redir pin the whole chain to HTTPS: -L follows
+          # redirects, and curl would otherwise happily follow one to http://.
+          curl_opts=(-sSLf --proto '=https' --proto-redir '=https')
+          curl "${curl_opts[@]}" -o func.zip      "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip"
+          curl "${curl_opts[@]}" -o func.zip.sha2 "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip.sha2"
           echo "$(cat func.zip.sha2)  func.zip" | sha256sum -c -
           unzip -q func.zip -d "$HOME/.func"
           chmod +x "$HOME/.func/func"

@@ -118,7 +118,7 @@ test.describe('newsletter management', () => {
     const file = await page.request.get(`http://localhost:7071/api/newsletters/${newsletter.id}/file`)
     expect(file.ok()).toBeTruthy()
     expect(file.headers()['content-type']).toContain('wordprocessingml')
-    expect((await file.body()).length).toBe(docx.length)
+    expect(await file.body()).toHaveLength(docx.length)
   })
 
   test('deleting an issue removes it from the public page', async ({ page, api, cleanup, uid }) => {
