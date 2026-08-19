@@ -54,7 +54,8 @@ test.describe('rich text editor', () => {
     await openDraft(page, uid)
 
     await typeInRichText(page, 'Read more here')
-    await page.keyboard.press('Control+A')
+    // ControlOrMeta, not Control: select-all is Cmd+A on macOS.
+    await page.keyboard.press('ControlOrMeta+A')
     await page.getByTestId('rte-btn').and(page.locator('[data-cmd="link"]')).click()
 
     await expect(page.getByTestId('rte-link-dialog')).toBeVisible()

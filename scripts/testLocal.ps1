@@ -179,21 +179,31 @@ if (-not $SkipE2e) {
     # the run if the API cannot serve writes. The old Start-E2eBackend helper
     # warned and carried on instead, so a green run could mean the browser had
     # rendered mock data with no API at all.
+    # Snapshot the variables we are about to set so the caller's session is left
+    # exactly as we found it — a developer who exports E2E_START_BACKEND or
+    # PLAYWRIGHT_JSON_OUTPUT_NAME should not find it wiped after a test run.
+    # Restoring in `finally` also covers the run throwing part-way.
+    $e2eVars  = 'E2E_LOG_DIR', 'E2E_START_BACKEND', 'PLAYWRIGHT_JSON_OUTPUT_NAME'
+    $savedEnv = @{}
+    foreach ($name in $e2eVars) { $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name) }
+
     Push-Location $WebDir
     try {
         & npx playwright install chromium   # idempotent
         if ($LASTEXITCODE -ne 0) { throw "playwright install failed (exit $LASTEXITCODE)" }
 
         $env:E2E_LOG_DIR = Join-Path $resultsDir 'e2e-backend'
+        # Only force reuse when asked; an existing E2E_START_BACKEND is honoured.
         if ($ReuseBackend) { $env:E2E_START_BACKEND = '0' }
         $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $pwJsonPath
         & npx playwright test "--reporter=line,json"
         $e2eExit = $LASTEXITCODE
-        Remove-Item Env:PLAYWRIGHT_JSON_OUTPUT_NAME -ErrorAction SilentlyContinue
-        Remove-Item Env:E2E_START_BACKEND -ErrorAction SilentlyContinue
-        Remove-Item Env:E2E_LOG_DIR -ErrorAction SilentlyContinue
     } finally {
         Pop-Location
+        foreach ($name in $e2eVars) {
+            if ($null -eq $savedEnv[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
+            else { Set-Item "Env:$name" $savedEnv[$name] }
+        }
     }
 
     $passed = 0; $failed = 0; $skipped = 0; $flaky = 0
