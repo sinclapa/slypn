@@ -156,9 +156,10 @@ jobs:
           echo "$HOME/.func" >> "$GITHUB_PATH"
           "$HOME/.func/func" --version
 
-      # e2e/global-setup.ts starts Azurite and `func start`, which builds the
-      # project itself. Restoring here just warms the NuGet cache so that build
-      # stays inside the health-check budget.
+      # e2e/global-setup.ts starts Azurite and `dotnet run -c Release`, which
+      # builds the project itself and launches the host via Core Tools.
+      # Restoring here just warms the NuGet cache so that build stays inside
+      # the health-check budget.
       - name: Restore API + seed CLI
         run: |
           dotnet restore src/api/Slypn.Api/Slypn.Api.csproj

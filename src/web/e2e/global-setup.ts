@@ -44,14 +44,15 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     startFunc()
     started = true
 
-    // func builds the project on first start, and the worker JIT is cold, so
-    // the first successful response can take a while on a clean checkout.
+    // `dotnet run -c Release` compiles the project before the host starts, and
+    // the worker JIT is cold on top of that, so the first successful response
+    // can take a while on a clean checkout.
     const budget = process.env.CI ? 240_000 : 120_000
     if (!await waitForApiHealthy(budget)) {
       killAll()
       throw new Error(
         `The Functions host did not answer http://localhost:7071/api/events within ${budget / 1000}s.\n` +
-        'Check that Azure Functions Core Tools v4 is installed (`func --version`).\n\n' +
+        'The Worker SDK shells out to Core Tools, so `func` must be on PATH — check `func --version`.\n\n' +
         `--- api.log (tail) ---\n${tailLog('api')}`,
       )
     }

@@ -37,16 +37,6 @@ export function isWindows(): boolean {
   return process.platform === 'win32'
 }
 
-/** Resolve a `func` executable, mirroring the lookup in scripts/_lib.ps1. */
-export function resolveFunc(): string {
-  const localAppData = process.env.LOCALAPPDATA
-  if (isWindows() && localAppData) {
-    const bundled = path.join(localAppData, 'AzureFunctionsCoreTools', 'func.exe')
-    if (existsSync(bundled)) return bundled
-  }
-  // Fall back to PATH; if it isn't there the spawn errors and we surface it.
-  return isWindows() ? 'func.cmd' : 'func'
-}
 
 export function tcpPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
   return new Promise((resolve) => {
@@ -77,8 +67,10 @@ function registerForCleanup(child: ChildProcess) {
 }
 
 /**
- * Kill everything we started. On Windows `func` forks a `dotnet` child that
- * survives a plain kill and keeps port 7071 bound, so use taskkill /T.
+ * Kill everything we started. The API is a process tree — on Windows
+ * `dotnet` -> `cmd` -> `func` -> worker — and killing only the root leaves the
+ * listener holding port 7071, so tear down the whole tree (`taskkill /T`, or a
+ * process-group signal on posix).
  */
 export function killAll(): void {
   while (spawned.length > 0) {
@@ -223,8 +215,27 @@ export function storageConnectionString(): string {
   return readSettings().Storage__ConnectionString ?? ''
 }
 
+/**
+ * Start the Functions host in RELEASE, via `dotnet run`.
+ *
+ * Not `func start`, which Core Tools itself warns against for .NET isolated
+ * projects ("may not correctly load function extensions"). Worker SDK 2.x maps
+ * `dotnet run` onto `func start` with RunWorkingDirectory=$(OutDir), so the
+ * host is launched from bin/Release/net8.0 where the built artefacts already
+ * sit — no rebuild, and no dependence on the bin/output folder that made the
+ * older `func start --no-build` route silently serve a stale Debug binary.
+ *
+ * Release rather than Debug so the suite exercises the configuration that
+ * actually ships. `func` must still be on PATH: the SDK shells out to it, and
+ * fails the build with an explicit message when it is missing.
+ */
 export function startFunc(): ChildProcess {
-  return spawnLogged('api', resolveFunc(), ['start', '--port', '7071'], API_DIR)
+  return spawnLogged(
+    'api',
+    isWindows() ? 'dotnet.exe' : 'dotnet',
+    ['run', '-c', 'Release', '--no-launch-profile', '--', '--port', '7071'],
+    API_DIR,
+  )
 }
 
 /**
