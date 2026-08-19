@@ -7,6 +7,8 @@ defineProps<{ resource: Resource }>()
 <template>
   <a
     :href="resource.url"
+    data-testid="resource-card"
+    :data-id="resource.id"
     target="_blank"
     rel="noopener"
     class="block rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"

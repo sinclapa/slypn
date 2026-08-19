@@ -9,7 +9,7 @@ const formatDate = (iso: string) =>
 </script>
 
 <template>
-  <article class="flex flex-col rounded-xl border border-slypn-100 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+  <article data-testid="article-card" :data-id="article.id" class="flex flex-col rounded-xl border border-slypn-100 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
     <p class="font-display text-xs font-semibold uppercase tracking-widest text-slypn-500">
       {{ article.category }}
     </p>

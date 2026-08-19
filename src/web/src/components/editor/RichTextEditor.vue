@@ -153,12 +153,15 @@ const buttons: ToolbarButton[] = [
 </script>
 
 <template>
-  <div class="rounded-xl border border-slypn-100 bg-white shadow-sm">
-    <div v-if="!readonly" class="flex flex-wrap items-center gap-1 border-b border-slypn-100 px-2 py-2">
+  <div data-testid="rte" class="rounded-xl border border-slypn-100 bg-white shadow-sm">
+    <div v-if="!readonly" data-testid="rte-toolbar" class="flex flex-wrap items-center gap-1 border-b border-slypn-100 px-2 py-2">
       <button
         v-for="b in buttons"
         :key="b.key"
         type="button"
+        data-testid="rte-btn"
+        :data-cmd="b.key"
+        :data-active="b.isActive()"
         :title="b.title"
         :class="[
           'min-w-[2.25rem] rounded px-2 py-1 text-sm font-semibold transition-colors',
@@ -172,6 +175,7 @@ const buttons: ToolbarButton[] = [
       </button>
       <button
         type="button"
+        data-testid="rte-image-btn"
         title="Insert image"
         class="min-w-[2.25rem] rounded px-2 py-1 text-sm font-semibold text-slypn-700 hover:bg-slypn-50 disabled:opacity-50"
         :disabled="uploading"
@@ -182,6 +186,7 @@ const buttons: ToolbarButton[] = [
       <input
         id="rich-text-image-upload"
         ref="fileInput"
+        data-testid="rte-image-input"
         type="file"
         aria-label="Insert image"
         accept="image/png,image/jpeg,image/webp"
@@ -190,7 +195,7 @@ const buttons: ToolbarButton[] = [
       />
     </div>
 
-    <EditorContent :editor="editor" />
+    <EditorContent data-testid="rte-content" :editor="editor" />
   </div>
 
   <Teleport to="body">
@@ -199,7 +204,7 @@ const buttons: ToolbarButton[] = [
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
       @mousedown.self="linkDialog.show = false"
     >
-      <div class="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+      <div data-testid="rte-link-dialog" class="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
         <h3 class="font-display font-semibold text-slypn-700">
           {{ linkDialog.hasExisting ? 'Edit link' : 'Insert link' }}
         </h3>
@@ -242,6 +247,7 @@ const buttons: ToolbarButton[] = [
             >Cancel</button>
             <button
               type="button"
+              data-testid="rte-link-apply"
               :disabled="!linkDialog.url"
               class="rounded-md bg-slypn-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-slypn-700 disabled:opacity-50"
               @click="confirmLink"

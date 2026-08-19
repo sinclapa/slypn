@@ -27,6 +27,8 @@ const isSameDay = (() => {
 <template>
   <RouterLink
     :to="{ name: 'event-detail', params: { id: event.id } }"
+    data-testid="event-card"
+    :data-id="event.id"
     :class="[
       'relative flex gap-5 rounded-xl border p-5 shadow-sm transition-shadow hover:shadow-md',
       past ? 'border-slypn-100 bg-slypn-50 opacity-70' : 'border-slypn-100 bg-white',

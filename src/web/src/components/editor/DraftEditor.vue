@@ -210,11 +210,12 @@ watch(() => draft.value.body, (html) => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div data-testid="draft-editor" class="space-y-6">
     <!-- Save indicator (or read-only status) + close -->
     <div class="flex items-center justify-between">
       <span
         v-if="readonly"
+        data-testid="draft-readonly-badge"
         class="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800"
       >
         <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
@@ -223,6 +224,7 @@ watch(() => draft.value.body, (html) => {
       <SaveIndicator v-else :status="status" :last-saved-at="lastSavedAt" :error="errorMessage" />
       <button
         type="button"
+        data-testid="draft-close"
         class="rounded-md border border-slypn-200 px-3 py-1.5 text-sm font-medium text-slypn-700 hover:bg-slypn-50"
         @click="emit('close')"
       >Close</button>
@@ -231,6 +233,7 @@ watch(() => draft.value.body, (html) => {
     <!-- Conflict banner -->
     <div
       v-if="conflict"
+      data-testid="draft-conflict"
       class="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900"
     >
       <p class="font-display font-bold">This draft was updated elsewhere</p>
@@ -243,9 +246,11 @@ watch(() => draft.value.body, (html) => {
       </details>
       <div class="mt-4 flex flex-wrap gap-2">
         <button type="button"
+          data-testid="draft-conflict-discard"
           class="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-100"
           @click="resolveByDiscardingLocal">Discard mine, use server version</button>
         <button type="button"
+          data-testid="draft-conflict-overwrite"
           class="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
           @click="resolveByForcingLocal">Overwrite server with my version</button>
       </div>
@@ -254,6 +259,7 @@ watch(() => draft.value.body, (html) => {
     <!-- Revision feedback banner -->
     <div
       v-if="draft.revisionFeedback"
+      data-testid="draft-revision-feedback"
       class="rounded-xl border border-amber-300 bg-amber-50 p-5"
     >
       <p class="font-display font-bold text-amber-900">Admin requested revisions</p>
@@ -269,6 +275,7 @@ watch(() => draft.value.body, (html) => {
             v-for="t in (['article', 'blog'] as const)"
             :key="t"
             type="button"
+            :data-testid="`draft-type-${t}`"
             :disabled="readonly"
             :class="['rounded-md px-3 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed',
               draft.type === t ? 'bg-slypn-600 text-white' : 'text-slypn-700 hover:bg-slypn-50 disabled:hover:bg-transparent']"
@@ -337,25 +344,26 @@ watch(() => draft.value.body, (html) => {
       @upload-error="(msg) => uploadError = msg"
     />
 
-    <p v-if="!readonly && uploadError" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
+    <p v-if="!readonly && uploadError" data-testid="draft-upload-error" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
       Image upload failed: {{ uploadError }}
     </p>
 
     <div v-if="!readonly" class="flex items-center justify-between rounded-xl border border-slypn-100 bg-white px-6 py-4 shadow-sm">
       <div>
-        <p v-if="!canSubmit" class="text-xs text-slypn-400">
+        <p v-if="!canSubmit" data-testid="draft-submit-missing" class="text-xs text-slypn-400">
           Still required to submit: {{ missingToSubmit.join(', ') }}.
         </p>
       </div>
       <button
         type="button"
+        data-testid="draft-submit"
         class="rounded-md bg-slypn-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700 disabled:opacity-50"
         :disabled="submitting || !canSubmit"
         @click="submitForReview"
       >{{ submitting ? 'Submitting…' : 'Submit for review' }}</button>
     </div>
 
-    <p v-if="!readonly && submitError" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
+    <p v-if="!readonly && submitError" data-testid="draft-submit-error" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
       Submit failed: {{ submitError }}
     </p>
   </div>

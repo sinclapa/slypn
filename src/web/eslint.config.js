@@ -8,7 +8,13 @@ export default [
   },
   {
     name: 'slypn/files-to-ignore',
-    ignores: ['**/dist/**', '**/node_modules/**', '**/.vite/**', '**/*.cjs', '**/*.mjs'],
+    // Playwright's report/trace output lands in the working tree after a run and
+    // is gitignored; it must not be linted (it contains generated bundles).
+    ignores: [
+      '**/dist/**', '**/node_modules/**', '**/.vite/**',
+      '**/playwright-report/**', '**/test-results/**', '**/blob-report/**',
+      '**/*.cjs', '**/*.mjs',
+    ],
   },
   ...pluginVue.configs['flat/essential'],
   ...vueTsEslintConfig(),

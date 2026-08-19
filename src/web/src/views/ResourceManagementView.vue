@@ -130,6 +130,7 @@ async function remove(r: Resource) {
       <h2 class="font-display text-xl font-bold text-slypn-700">All resources</h2>
       <button
         type="button"
+        data-testid="resource-add"
         class="rounded-md bg-slypn-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700"
         @click="openAdd"
       >+ Add resource</button>
@@ -155,6 +156,8 @@ async function remove(r: Resource) {
         <div
           v-for="r in group.items"
           :key="r.id"
+          data-testid="resource-row"
+          :data-id="r.id"
           class="flex items-start gap-4 px-5 py-4"
         >
           <div class="min-w-0 flex-1">
@@ -168,11 +171,13 @@ async function remove(r: Resource) {
           <div class="flex shrink-0 gap-2">
             <button
               type="button"
+              data-testid="resource-edit"
               class="rounded-md border border-slypn-200 bg-white px-3 py-1.5 text-xs font-semibold text-slypn-700 hover:bg-slypn-50"
               @click="openEdit(r)"
             >Edit</button>
             <button
               type="button"
+              data-testid="resource-delete"
               class="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
               :disabled="deletingId === r.id"
               @click="remove(r)"
@@ -198,7 +203,7 @@ async function remove(r: Resource) {
         <h3 class="font-display text-lg font-bold text-slypn-700">
           {{ editing ? 'Edit resource' : 'Add resource' }}
         </h3>
-        <form class="mt-4 space-y-4" @submit.prevent="save">
+        <form data-testid="resource-dialog" class="mt-4 space-y-4" @submit.prevent="save">
           <div>
             <label for="resource-title" class="block text-sm font-medium text-slypn-800">Title</label>
             <input
@@ -251,7 +256,7 @@ async function remove(r: Resource) {
             </datalist>
           </div>
 
-          <p v-if="formError" class="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">{{ formError }}</p>
+          <p v-if="formError" data-testid="resource-error" class="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">{{ formError }}</p>
 
           <div class="flex justify-end gap-2 pt-2">
             <button
@@ -261,6 +266,7 @@ async function remove(r: Resource) {
             >Cancel</button>
             <button
               type="submit"
+              data-testid="resource-save"
               class="rounded-md bg-slypn-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700 disabled:opacity-50"
               :disabled="!canSave || saving"
             >{{ saving ? 'Saving…' : (editing ? 'Save changes' : 'Add resource') }}</button>

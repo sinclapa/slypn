@@ -90,6 +90,103 @@ jobs:
           path: src/api/Slypn.Api.Tests/TestResults
           retention-days: 1
 
+  e2e:
+    name: E2E (Playwright + live API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: src/web/package-lock.json
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      # Same key as the `api` job so the two share one cache entry.
+      - name: NuGet cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('src/api/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # --ignore-scripts as everywhere else: azurite declares no install/postinstall
+      # hook (only `prepare`, which does not run for consumers), so nothing here
+      # needs package lifecycle scripts.
+      - name: Install web dependencies
+        working-directory: src/web
+        run: npm ci --no-fund --no-audit --ignore-scripts
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('src/web/package-lock.json') }}
+
+      # The locally installed binary, not npx: npx is allowed to resolve and run
+      # a package on demand, so it is not a deterministic install step.
+      - name: Install Chromium
+        working-directory: src/web
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+
+      # Pinned release + published SHA-256 rather than `npm i -g ...@4`, which
+      # floats within the major version and relies on a postinstall script to
+      # fetch the actual binaries.
+      - name: Install Azure Functions Core Tools
+        env:
+          FUNC_VERSION: '4.13.0'
+        run: |
+          base="https://github.com/Azure/azure-functions-core-tools/releases/download/${FUNC_VERSION}"
+          # --proto/--proto-redir pin the whole chain to HTTPS: -L follows
+          # redirects, and curl would otherwise happily follow one to http://.
+          curl_opts=(-sSLf --proto '=https' --proto-redir '=https')
+          curl "${curl_opts[@]}" -o func.zip      "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip"
+          curl "${curl_opts[@]}" -o func.zip.sha2 "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip.sha2"
+          echo "$(cat func.zip.sha2)  func.zip" | sha256sum -c -
+          unzip -q func.zip -d "$HOME/.func"
+          chmod +x "$HOME/.func/func"
+          rm -f func.zip func.zip.sha2
+          echo "$HOME/.func" >> "$GITHUB_PATH"
+          "$HOME/.func/func" --version
+
+      # e2e/global-setup.ts starts Azurite and `dotnet run -c Release`, which
+      # builds the project itself and launches the host via Core Tools.
+      # Restoring here just warms the NuGet cache so that build stays inside
+      # the health-check budget.
+      - name: Restore API + seed CLI
+        run: |
+          dotnet restore src/api/Slypn.Api/Slypn.Api.csproj
+          dotnet restore src/api/Slypn.Seed/Slypn.Seed.csproj
+
+      - name: Create local.settings.json
+        run: cp src/api/Slypn.Api/local.settings.sample.json src/api/Slypn.Api/local.settings.json
+
+      - name: Run e2e suite
+        working-directory: src/web
+        env:
+          E2E_LOG_DIR: ${{ github.workspace }}/.testresults/e2e-backend
+        run: npm run test:e2e
+
+      # Traces, videos and screenshots for the failing tests, plus the func and
+      # azurite logs — a CI-only failure is near-undiagnosable without them.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            src/web/playwright-report
+            src/web/test-results
+            .testresults/e2e-backend
+          retention-days: 7
+
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-latest

@@ -168,6 +168,7 @@ async function deleteEvent(event: CommunityEvent) {
         <h2 class="font-display text-xl font-bold text-slypn-700">Manage events</h2>
         <button
           type="button"
+          data-testid="event-add"
           class="rounded-md bg-slypn-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700"
           @click="openAdd"
         >+ Add event</button>
@@ -180,6 +181,7 @@ async function deleteEvent(event: CommunityEvent) {
       <div class="mt-5 space-y-3">
         <input
           v-model="searchQuery"
+          data-testid="event-search"
           type="search"
           aria-label="Search events"
           placeholder="Search by title, location, type, or date…"
@@ -192,7 +194,7 @@ async function deleteEvent(event: CommunityEvent) {
           <span class="shrink-0 text-xs text-slypn-400">{{ filtered.length }} event{{ filtered.length === 1 ? '' : 's' }}</span>
         </div>
         <label class="flex items-center gap-2 text-xs font-medium text-slypn-600">
-          <input v-model="allDates" type="checkbox" class="rounded border-slypn-300 text-slypn-600 focus:ring-slypn-600" />
+          <input v-model="allDates" data-testid="event-all-dates" type="checkbox" class="rounded border-slypn-300 text-slypn-600 focus:ring-slypn-600" />
           All dates (ignore range)
         </label>
       </div>
@@ -209,6 +211,8 @@ async function deleteEvent(event: CommunityEvent) {
         <li
           v-for="event in filtered"
           :key="event.id"
+          data-testid="event-row"
+          :data-id="event.id"
           class="flex flex-col gap-3 py-3 md:flex-row md:items-start md:justify-between md:gap-4"
         >
           <div class="min-w-0 flex-1">
@@ -235,11 +239,13 @@ async function deleteEvent(event: CommunityEvent) {
           <div v-if="canEdit(event)" class="flex shrink-0 gap-2">
             <button
               type="button"
+              data-testid="event-edit"
               class="rounded-md border border-slypn-200 px-3 py-1.5 text-xs font-medium text-slypn-600 hover:bg-slypn-50"
               @click="openEdit(event)"
             >Edit</button>
             <button
               type="button"
+              data-testid="event-delete"
               class="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
               :disabled="deleting === event.id"
               @click="deleteEvent(event)"
@@ -248,7 +254,7 @@ async function deleteEvent(event: CommunityEvent) {
         </li>
       </ul>
 
-      <p v-if="deleteError" class="mt-3 rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ deleteError }}</p>
+      <p v-if="deleteError" data-testid="event-delete-error" class="mt-3 rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ deleteError }}</p>
     </article>
 
   </section>

@@ -52,6 +52,7 @@ async function subscribe() {
 
     <template #actions>
       <form
+        data-testid="subscribe-form"
         class="flex w-full max-w-md flex-col gap-2 sm:flex-row"
         @submit.prevent="subscribe"
       >
@@ -65,16 +66,17 @@ async function subscribe() {
         />
         <button
           type="submit"
+          data-testid="subscribe-submit"
           class="rounded-md bg-slypn-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slypn-700 disabled:opacity-50"
           :disabled="submitting || !email"
         >
           {{ submitting ? 'Subscribing…' : 'Subscribe' }}
         </button>
       </form>
-      <p v-if="submitted" class="mt-3 text-sm text-emerald-700">
+      <p v-if="submitted" data-testid="subscribe-result" class="mt-3 text-sm text-emerald-700">
         Thank you &mdash; you&rsquo;re on the list. The next issue will land in your inbox.
       </p>
-      <p v-else-if="submitError" class="mt-3 text-sm text-rose-700">
+      <p v-else-if="submitError" data-testid="subscribe-error" class="mt-3 text-sm text-rose-700">
         Couldn&rsquo;t subscribe: {{ submitError }}
       </p>
     </template>

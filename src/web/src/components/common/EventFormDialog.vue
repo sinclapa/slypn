@@ -128,7 +128,7 @@ async function submit() {
           </div>
 
           <!-- form -->
-          <form class="space-y-4 px-6 py-5" @submit.prevent="submit">
+          <form data-testid="event-dialog" class="space-y-4 px-6 py-5" @submit.prevent="submit">
             <div>
               <label for="event-title" class="block text-sm font-medium text-slypn-800">Title</label>
               <input
@@ -212,7 +212,7 @@ async function submit() {
               />
             </div>
 
-            <p v-if="error" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ error }}</p>
+            <p v-if="error" data-testid="event-error" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">{{ error }}</p>
 
             <!-- actions -->
             <div class="flex justify-end gap-3 border-t border-slypn-100 pt-4">
@@ -223,6 +223,7 @@ async function submit() {
               >Cancel</button>
               <button
                 type="submit"
+                data-testid="event-save"
                 class="rounded-md bg-slypn-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slypn-700 disabled:opacity-50"
                 :disabled="submitting || !title || !startsAt || !endsAt || !location || !description"
               >

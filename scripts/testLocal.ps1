@@ -12,8 +12,9 @@
   Suites:
     - API (.NET)       : `dotnet test` with coverlet ("XPlat Code Coverage").
     - UI unit (Vitest) : src/web component/logic tests with v8 coverage.
-    - UI e2e (Playwright): src/web browser tests (pass/fail only — not
-                           instrumented for coverage).
+    - UI e2e (Playwright): src/web browser tests against a live Functions host
+                           on Azurite, started by Playwright's globalSetup
+                           (pass/fail only — not instrumented for coverage).
 
   Coverage is read from each suite's Cobertura report (branch-rate / line-rate)
   and combined into an overall total. The combined total (line) coverage drives
@@ -30,6 +31,11 @@
 
 .PARAMETER SkipE2e
   Skip the Playwright UI e2e tests.
+
+.PARAMETER ReuseBackend
+  Run the e2e suite against a backend you started yourself (scripts/startLocal.ps1)
+  instead of letting Playwright start Azurite + the Functions host. The suite
+  still fails loudly if that backend is not actually reachable.
 
 .PARAMETER FailUnder
   Coverage percent below which the run fails (default 80).
@@ -52,6 +58,7 @@ param(
     [switch] $SkipApi,
     [switch] $SkipUnit,
     [switch] $SkipE2e,
+    [switch] $ReuseBackend,
     [int]    $FailUnder   = 80,
     [int]    $GoodAtLeast = 90
 )
@@ -167,19 +174,36 @@ if (-not $SkipUnit) {
 if (-not $SkipE2e) {
     Show-Step 'UI e2e tests (Playwright)'
 
-    Show-Step 'Starting Azurite + Functions host for e2e'
-    $e2eBackend = Start-E2eBackend (Join-Path $resultsDir 'e2e-backend')
+    # Playwright owns the backend now: e2e/global-setup.ts starts Azurite and the
+    # Functions host, reuses whatever is already listening on :7071, and ABORTS
+    # the run if the API cannot serve writes. The old Start-E2eBackend helper
+    # warned and carried on instead, so a green run could mean the browser had
+    # rendered mock data with no API at all.
+    # Snapshot the variables we are about to set so the caller's session is left
+    # exactly as we found it — a developer who exports E2E_START_BACKEND or
+    # PLAYWRIGHT_JSON_OUTPUT_NAME should not find it wiped after a test run.
+    # Restoring in `finally` also covers the run throwing part-way.
+    $e2eVars  = 'E2E_LOG_DIR', 'E2E_START_BACKEND', 'PLAYWRIGHT_JSON_OUTPUT_NAME'
+    $savedEnv = @{}
+    foreach ($name in $e2eVars) { $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name) }
 
     Push-Location $WebDir
     try {
-        & npx playwright install chromium 2>&1 | Out-Null   # idempotent
+        & npx playwright install chromium   # idempotent
+        if ($LASTEXITCODE -ne 0) { throw "playwright install failed (exit $LASTEXITCODE)" }
+
+        $env:E2E_LOG_DIR = Join-Path $resultsDir 'e2e-backend'
+        # Only force reuse when asked; an existing E2E_START_BACKEND is honoured.
+        if ($ReuseBackend) { $env:E2E_START_BACKEND = '0' }
         $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $pwJsonPath
         & npx playwright test "--reporter=line,json"
         $e2eExit = $LASTEXITCODE
-        Remove-Item Env:PLAYWRIGHT_JSON_OUTPUT_NAME -ErrorAction SilentlyContinue
     } finally {
         Pop-Location
-        Stop-E2eBackend $e2eBackend
+        foreach ($name in $e2eVars) {
+            if ($null -eq $savedEnv[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
+            else { Set-Item "Env:$name" $savedEnv[$name] }
+        }
     }
 
     $passed = 0; $failed = 0; $skipped = 0; $flaky = 0
