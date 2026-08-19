@@ -117,10 +117,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      # Not --ignore-scripts: azurite (a devDependency) needs its install step.
+      # --ignore-scripts as everywhere else: azurite declares no install/postinstall
+      # hook (only `prepare`, which does not run for consumers), so nothing here
+      # needs package lifecycle scripts.
       - name: Install web dependencies
         working-directory: src/web
-        run: npm ci --no-fund --no-audit
+        run: npm ci --no-fund --no-audit --ignore-scripts
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
@@ -128,12 +130,28 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('src/web/package-lock.json') }}
 
+      # The locally installed binary, not npx: npx is allowed to resolve and run
+      # a package on demand, so it is not a deterministic install step.
       - name: Install Chromium
         working-directory: src/web
-        run: npx playwright install --with-deps chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
 
+      # Pinned release + published SHA-256 rather than `npm i -g ...@4`, which
+      # floats within the major version and relies on a postinstall script to
+      # fetch the actual binaries.
       - name: Install Azure Functions Core Tools
-        run: npm i -g azure-functions-core-tools@4 --unsafe-perm true
+        env:
+          FUNC_VERSION: '4.13.0'
+        run: |
+          base="https://github.com/Azure/azure-functions-core-tools/releases/download/${FUNC_VERSION}"
+          curl -sSLf -o func.zip      "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip"
+          curl -sSLf -o func.zip.sha2 "${base}/Azure.Functions.Cli.linux-x64.${FUNC_VERSION}.zip.sha2"
+          echo "$(cat func.zip.sha2)  func.zip" | sha256sum -c -
+          unzip -q func.zip -d "$HOME/.func"
+          chmod +x "$HOME/.func/func"
+          rm -f func.zip func.zip.sha2
+          echo "$HOME/.func" >> "$GITHUB_PATH"
+          "$HOME/.func/func" --version
 
       # e2e/global-setup.ts starts Azurite and `func start`, which builds the
       # project itself. Restoring here just warms the NuGet cache so that build
