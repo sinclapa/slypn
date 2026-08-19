@@ -106,3 +106,30 @@ export async function waitForDraftLoaded(page: Page, uid: string): Promise<void>
   await expect(page.getByTestId('draft-editor')).toBeVisible()
   await expect(page.locator('#draft-title')).toHaveValue(new RegExp(uid))
 }
+
+/**
+ * Click a TipTap toolbar button and wait until the editor has actually applied
+ * it, then confirm focus is back on the text surface.
+ *
+ * The waits are essential, not defensive. Each toolbar action runs
+ * `editor.chain().focus()...`, which completes asynchronously: the transaction
+ * is applied, Vue re-renders the toolbar, and focus returns to the
+ * contenteditable. Typing before all that lands loses the first keystroke — CI
+ * stored "old text" for `type('Bold text')` on every attempt, with the bold
+ * mark correctly applied, while a fast local machine never reproduced it.
+ *
+ * `data-active` is the barrier that matters: it only flips once the editor
+ * state has changed AND the render has flushed, which the focus check alone
+ * does not prove. It doubles as a real assertion that the toolbar reflects
+ * editor state.
+ */
+export async function clickToolbar(
+  page: Page,
+  cmd: string,
+  expectedActive = true,
+): Promise<void> {
+  const button = page.getByTestId('rte-btn').and(page.locator(`[data-cmd="${cmd}"]`))
+  await button.click()
+  await expect(button).toHaveAttribute('data-active', String(expectedActive))
+  await expect(page.getByTestId('rte-content').locator('.ProseMirror')).toBeFocused()
+}

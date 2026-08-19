@@ -161,6 +161,7 @@ const buttons: ToolbarButton[] = [
         type="button"
         data-testid="rte-btn"
         :data-cmd="b.key"
+        :data-active="b.isActive()"
         :title="b.title"
         :class="[
           'min-w-[2.25rem] rounded px-2 py-1 text-sm font-semibold transition-colors',

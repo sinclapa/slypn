@@ -1,6 +1,6 @@
 import { expect, test } from '../support/fixtures'
 import { PIXEL_PNG, createDraft, expectDraftBodyToContain } from '../support/data'
-import { openDraftRow, typeInRichText } from '../helpers'
+import { clickToolbar, openDraftRow, typeInRichText } from '../helpers'
 import { titleFor } from '../support/ids'
 
 /**
@@ -23,10 +23,10 @@ test.describe('rich text editor', () => {
     await openDraft(page, uid)
 
     await page.getByTestId('rte-content').locator('.ProseMirror').click()
-    await page.getByTestId('rte-btn').and(page.locator('[data-cmd="bold"]')).click()
+    await clickToolbar(page, 'bold')
     await page.keyboard.type('Bold text')
-    await page.getByTestId('rte-btn').and(page.locator('[data-cmd="bold"]')).click()
-    await page.getByTestId('rte-btn').and(page.locator('[data-cmd="italic"]')).click()
+    await clickToolbar(page, 'bold', false) // toggle off
+    await clickToolbar(page, 'italic')
     await page.keyboard.type(' and italic text')
 
     await expectDraftBodyToContain(api, draft.id, '<strong>Bold text</strong>')
@@ -38,10 +38,10 @@ test.describe('rich text editor', () => {
     await openDraft(page, uid)
 
     await page.getByTestId('rte-content').locator('.ProseMirror').click()
-    await page.getByTestId('rte-btn').and(page.locator('[data-cmd="h2"]')).click()
+    await clickToolbar(page, 'h2')
     await page.keyboard.type('A heading')
     await page.keyboard.press('Enter')
-    await page.getByTestId('rte-btn').and(page.locator('[data-cmd="ul"]')).click()
+    await clickToolbar(page, 'ul')
     await page.keyboard.type('First bullet')
 
     await expectDraftBodyToContain(api, draft.id, '<h2>A heading</h2>')
