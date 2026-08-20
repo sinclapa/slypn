@@ -427,7 +427,7 @@ describe('DashboardView', () => {
 
   it('shows the pending-count badge on the Approvals tile when there are pending items', async () => {
     apiFetch.mockImplementation((url: string) => {
-      if (url === '/articles?status=in-review') return Promise.resolve(jsonResponse([{ id: 'p1' }]))
+      if (url === '/review/articles') return Promise.resolve(jsonResponse([{ id: 'p1' }]))
       return Promise.resolve(jsonResponse([]))
     })
     const auth = useAuthStore()

@@ -8,8 +8,8 @@ export const useApprovalsStore = defineStore('approvals', () => {
   async function refresh() {
     try {
       const [ar, br, pa, pb] = await Promise.all([
-        apiFetch('/articles?status=in-review'),
-        apiFetch('/blog?status=in-review'),
+        apiFetch('/review/articles'),
+        apiFetch('/review/blog'),
         apiFetch('/articles?status=published'),
         apiFetch('/blog?status=published'),
       ])

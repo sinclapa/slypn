@@ -46,8 +46,8 @@ function mockLoad(published: unknown[], inReview: unknown[] = []) {
     const method = init?.method ?? 'GET'
     if (method === 'GET' && url === '/articles?status=published') return Promise.resolve(ok(published))
     if (method === 'GET' && url === '/blog?status=published') return Promise.resolve(ok([]))
-    if (method === 'GET' && url === '/articles?status=in-review') return Promise.resolve(ok(inReview))
-    if (method === 'GET' && url === '/blog?status=in-review') return Promise.resolve(ok([]))
+    if (method === 'GET' && url === '/review/articles') return Promise.resolve(ok(inReview))
+    if (method === 'GET' && url === '/review/blog') return Promise.resolve(ok([]))
     return Promise.resolve(ok({}))
   })
 }

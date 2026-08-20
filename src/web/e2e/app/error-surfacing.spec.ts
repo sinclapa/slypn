@@ -67,7 +67,7 @@ test.describe('API failures reach the user', () => {
 
   test('the approvals queue reports a load failure', async ({ page }) => {
     await page.route(
-      (url) => url.pathname === '/api/articles' && url.searchParams.get('status') === 'in-review',
+      (url) => url.pathname === '/api/review/articles',
       (route) => route.fulfill({ status: 500, body: 'boom' }),
     )
 
@@ -104,7 +104,7 @@ test.describe('API failures reach the user', () => {
 
       // Give the queue something to act on without depending on other specs.
       await page.route(
-        (url) => url.pathname === '/api/articles' && url.searchParams.get('status') === 'in-review',
+        (url) => url.pathname === '/api/review/articles',
         (route) => route.fulfill({
         status: 200,
         contentType: 'application/json',

@@ -37,6 +37,44 @@ public class ContentFunctionsTests
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 
+    // Same regression guard as the articles list: ?status= used to let an
+    // anonymous caller pull unpublished posts out of the public endpoint.
+    [Theory]
+    [InlineData("http://localhost/api/blog")]
+    [InlineData("http://localhost/api/blog?status=in-review")]
+    public async Task Blog_public_list_always_asks_for_published(string url)
+    {
+        var repo = new FakeContentRepository();
+        var fn = new BlogFunctions(repo);
+
+        var resp = (TestHttpResponseData)await fn.GetBlogPosts(TestHttp.Get(new TestFunctionContext(), url), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("published", repo.LastBlogStatus);
+    }
+
+    [Fact]
+    public async Task Blog_pending_asks_for_in_review_and_requires_a_role()
+    {
+        var repo = new FakeContentRepository();
+        repo.Blogs.Add(new Article("b1", "s", "T", "Sum", "B", "A", DateTime.UtcNow, 3, "News") { Type = "blog" });
+        var fn = new BlogFunctions(repo);
+
+        var resp = (TestHttpResponseData)await fn.GetPendingBlogPosts(
+            TestHttp.Get(new TestFunctionContext(), "http://localhost/api/review/blog"), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("in-review", repo.LastBlogStatus);
+
+        var attr = typeof(BlogFunctions)
+            .GetMethod(nameof(BlogFunctions.GetPendingBlogPosts))!
+            .GetCustomAttributes(typeof(Slypn.Api.Infrastructure.RequireRoleAttribute), inherit: false)
+            .Cast<Slypn.Api.Infrastructure.RequireRoleAttribute>()
+            .SingleOrDefault();
+        Assert.NotNull(attr);
+        Assert.Equal(new[] { "Admin", "Contributor" }, attr!.Roles);
+    }
+
     // ── Events ──────────────────────────────────────────────────────────────────
     private static EventsFunctions EventsFn(FakeContentRepository repo) =>
         new(repo, NullLogger<EventsFunctions>.Instance);

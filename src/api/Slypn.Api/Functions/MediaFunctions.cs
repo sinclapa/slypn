@@ -5,6 +5,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.OpenApi.Models;
 using Slypn.Api.Services;
+using Slypn.Api.Infrastructure;
 
 namespace Slypn.Api.Functions;
 
@@ -15,6 +16,10 @@ public sealed class MediaFunctions(IBlobService blob)
     /// Returns { name, url } where `url` is a 15-minute read SAS.
     /// </summary>
     [Function("UploadMedia")]
+    // Uploads land in blob storage and are only ever initiated from the
+    // editor, which is already restricted to these roles in the router.
+    // Without this the endpoint accepted anonymous uploads.
+    [RequireRole("Admin", "Contributor")]
     [OpenApiOperation(operationId: "media.upload", tags: new[] { "media" }, Summary = "Upload media", Description = "Uploads a media file and returns its blob name and read URL.")]
     [OpenApiRequestBody(contentType: "multipart/form-data", bodyType: typeof(object), Required = true, Description = "Multipart form body with a single file part named file.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(object), Description = "Upload result with blob name and read URL")]

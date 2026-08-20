@@ -16,15 +16,49 @@ namespace Slypn.Api.Functions;
 
 public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sanitizer, ILogger<ArticlesFunctions> log)
 {
+    /// <summary>
+    /// Public article list. Always published — the caller cannot widen this.
+    ///
+    /// The status filter used to come from the query string, which meant an
+    /// anonymous caller could read in-review submissions with ?status=, and a
+    /// bare GET (no parameter at all) returned EVERY partition because a null
+    /// status means "no filter" in the repository. Unpublished work is now only
+    /// reachable through GetPendingArticles below, which carries a role gate.
+    /// </summary>
     [Function("GetArticles")]
-    [OpenApiOperation(operationId: "articles.list", tags: new[] { "articles" }, Summary = "List articles", Description = "Returns articles filtered by the optional status query parameter.")]
-    [OpenApiParameter(name: "status", In = ParameterLocation.Query, Required = false, Type = typeof(string), Description = "Optional article status filter.")]
-    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of articles")]
+    [OpenApiOperation(operationId: "articles.list", tags: new[] { "articles" }, Summary = "List articles", Description = "Returns published articles.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of published articles")]
     public async Task<HttpResponseData> GetArticles(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "articles")] HttpRequestData req,
         CancellationToken ct)
     {
-        var articles = await repo.ListArticlesAsync(QueryParam(req, "status"), ct);
+        var articles = await repo.ListArticlesAsync(PublishedStatus, ct);
+        return await Ok(req, articles);
+    }
+
+    /// <summary>
+    /// Articles awaiting review. Separate route rather than a query parameter on
+    /// the public list, because [RequireRole] is a static per-function attribute:
+    /// JwtMiddleware never populates a principal for an unattributed function, so
+    /// a handler cannot decide "authenticate only when status != published".
+    /// A distinct route keeps the security boundary visible in the route table.
+    ///
+    /// Under /review rather than /articles/pending: `articles/{slug}` also matches
+    /// `articles/pending`, and the parameterised route wins, so the gated endpoint
+    /// silently resolved to a slug lookup and 404'd.
+    /// </summary>
+    [Function("GetPendingArticles")]
+    [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "articles.pending", tags: new[] { "articles" }, Summary = "List articles awaiting review", Description = "Returns articles with status in-review. Requires Admin or Contributor.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of in-review articles")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Unauthorized, Description = "Missing or invalid token")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Forbidden, Description = "Caller lacks the required role")]
+    public async Task<HttpResponseData> GetPendingArticles(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "review/articles")] HttpRequestData req,
+        CancellationToken ct)
+    {
+        var articles = await repo.ListArticlesAsync(InReviewStatus, ct);
         return await Ok(req, articles);
     }
 
