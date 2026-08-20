@@ -36,10 +36,10 @@ if (Test-Path $pidFile) {
             $name = (Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName
             if ($name) {
                 Write-Host "    killing PID $procId ($name) [$key]" -ForegroundColor DarkGray
-                Get-CimInstance Win32_Process |
-                    Where-Object { $_.ParentProcessId -eq $procId } |
-                    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-                Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+                # Whole tree, not just direct children: the API is now
+                # dotnet -> cmd -> func -> worker, so a one-level sweep would
+                # leave func holding the port and rely on Stop-Port to catch it.
+                Stop-ProcessTree $procId
             }
         }
     }

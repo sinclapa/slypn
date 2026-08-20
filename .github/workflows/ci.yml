@@ -176,6 +176,19 @@ jobs:
 
       # Traces, videos and screenshots for the failing tests, plus the func and
       # azurite logs — a CI-only failure is near-undiagnosable without them.
+      # Backend logs go up even on success. They are small, and they are the
+      # only evidence of HOW the API ran — which configuration it built, which
+      # functions it indexed. Without them a green run cannot be distinguished
+      # from a green run that quietly did the wrong thing.
+      - name: Upload backend logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-backend-logs
+          path: .testresults/e2e-backend
+          retention-days: 7
+
+      # Traces, videos and screenshots are large, so only when something failed.
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -184,7 +197,6 @@ jobs:
           path: |
             src/web/playwright-report
             src/web/test-results
-            .testresults/e2e-backend
           retention-days: 7
 
   sonarcloud:
