@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Slypn.Api.Infrastructure;
+using Slypn.Api.Models;
 using Slypn.Api.Services;
 using Xunit;
 
@@ -201,7 +202,10 @@ public class JwtMiddlewareTests
     [Fact]
     public async Task Allows_when_the_token_is_valid_and_the_role_matches()
     {
-        var result = await Make(principal: PrincipalWith("Admin"))
+        // The member row is what carries the role — the table is authoritative, so a
+        // valid token on its own no longer grants anything (see the SEC-3 tests below).
+        var repo = new FakeContentRepository { MemberByOid = MemberWith("Admin") };
+        var result = await Make(principal: PrincipalWith("Admin"), repo: repo)
             .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AdminOnly, default);
 
         Assert.True(result.IsAllowed);
@@ -238,7 +242,7 @@ public class JwtMiddlewareTests
         var middleware = new JwtMiddleware(
             validator,
             Options.Create(new EntraOptions { SkipAuth = false }),
-            new FakeContentRepository(),
+            new FakeContentRepository { MemberByOid = MemberWith("Admin") },
             NullLogger<JwtMiddleware>.Instance);
 
         var result = await middleware.AuthenticateAsync(
@@ -306,5 +310,110 @@ public class JwtMiddlewareTests
 
         return $"{Chunk("{\"alg\":\"RS256\",\"kid\":\"test-key\"}")}." +
                $"{Chunk($"{{\"oid\":\"{marker}\"}}")}.sig";
+    }
+
+    // ── SEC-3: the members table is authoritative for roles ──────────────────
+
+    private static Member MemberWith(params string[] roles) => new(
+        Id:          "m1",
+        Email:       "test.user@example.com",
+        DisplayName: "Test User",
+        Roles:       roles,
+        Status:      "active",
+        InvitedAt:   DateTime.UtcNow.AddDays(-30),
+        AcceptedAt:  DateTime.UtcNow.AddDays(-29),
+        InvitedBy:   "oid-admin",
+        Oid:         "11111111-1111-1111-1111-111111111111");
+
+    [Fact]
+    public async Task Demoting_a_member_in_the_table_revokes_the_role_from_a_stale_JWT()
+    {
+        // Roles can arrive from two places: Entra app-role assignments baked into
+        // the JWT, and the members table. Enrichment unioned them, so demoting
+        // someone in the table left their old JWT role effective until the token
+        // expired — the table was documented as the source of truth but could only
+        // ever grant, never revoke.
+        var repo = new FakeContentRepository { MemberByOid = MemberWith("Member") };
+
+        var result = await Make(principal: PrincipalWith("Admin"), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AdminOnly, default);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(HttpStatusCode.Forbidden, result.RefusalCode);
+    }
+
+    [Fact]
+    public async Task Table_roles_replace_JWT_roles_rather_than_adding_to_them()
+    {
+        // The claim set itself, not just the access decision: a stale role left on
+        // the principal would still reach anything reading claims directly, such as
+        // FunctionContextExtensions.IsAdmin().
+        var repo = new FakeContentRepository { MemberByOid = MemberWith("Contributor") };
+
+        var result = await Make(principal: PrincipalWith("Admin"), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AnyAuthenticated, default);
+
+        Assert.True(result.IsAllowed);
+        var roles = result.Principal!.FindAll("roles").Select(c => c.Value).ToArray();
+        Assert.Equal(new[] { "Contributor" }, roles);
+    }
+
+    [Fact]
+    public async Task Table_roles_are_granted_when_the_JWT_carries_none()
+    {
+        // The original purpose of enrichment: roles live in the table, not in Entra.
+        var repo = new FakeContentRepository { MemberByOid = MemberWith("Admin") };
+
+        var result = await Make(principal: PrincipalWith(), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AdminOnly, default);
+
+        Assert.True(result.IsAllowed);
+        Assert.Contains(result.Principal!.Claims, c => c.Type == "roles" && c.Value == "Admin");
+    }
+
+    [Fact]
+    public async Task A_caller_with_no_member_record_holds_no_roles()
+    {
+        // Fail-closed: a valid CIAM token proves identity, not membership. Someone
+        // holding an Entra app-role assignment but no member row gets nothing.
+        var repo = new FakeContentRepository { MemberByOid = null };
+
+        var result = await Make(principal: PrincipalWith("Admin"), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AdminOnly, default);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(HttpStatusCode.Forbidden, result.RefusalCode);
+    }
+
+    [Fact]
+    public async Task A_caller_with_no_member_record_can_still_reach_the_relink_endpoints()
+    {
+        // The escape hatch that makes fail-closed survivable. /me and /whoami carry
+        // [RequireRole] with no roles listed, so they stay reachable with none — and
+        // GET /me is what re-links a stale OID by email and restores the roles.
+        var repo = new FakeContentRepository { MemberByOid = null };
+
+        var result = await Make(principal: PrincipalWith("Admin"), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AnyAuthenticated, default);
+
+        Assert.True(result.IsAllowed);
+        Assert.Empty(result.Principal!.FindAll("roles"));
+    }
+
+    [Fact]
+    public async Task A_storage_failure_falls_back_to_the_tokens_roles()
+    {
+        // Availability over strictness on the error path only: stripping roles when
+        // the table is unreachable would turn a transient storage fault into a
+        // site-wide lockout for every member at once.
+        var repo = new FakeContentRepository
+        {
+            ThrowOnMemberLookup = new InvalidOperationException("table storage unreachable"),
+        };
+
+        var result = await Make(principal: PrincipalWith("Admin"), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AdminOnly, default);
+
+        Assert.True(result.IsAllowed);
     }
 }

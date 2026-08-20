@@ -139,7 +139,15 @@ internal sealed class FakeContentRepository : IContentRepository
         if (ThrowOnRead is not null) throw ThrowOnRead;
         return Task.FromResult(MemberById);
     }
-    public Task<Member?> GetMemberByOidAsync(string oid, CancellationToken ct) => Task.FromResult(MemberByOid);
+    /// <summary>Set to fail the OID member lookup specifically, without disturbing the
+    /// other reads. Exercises JwtMiddleware's "storage is down" fallback.</summary>
+    public Exception? ThrowOnMemberLookup { get; set; }
+
+    public Task<Member?> GetMemberByOidAsync(string oid, CancellationToken ct)
+    {
+        if (ThrowOnMemberLookup is not null) throw ThrowOnMemberLookup;
+        return Task.FromResult(MemberByOid);
+    }
     public Task<IReadOnlyList<Member>> ListMembersAsync(CancellationToken ct)
     {
         if (ThrowOnRead is not null) throw ThrowOnRead;

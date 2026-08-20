@@ -23,6 +23,7 @@ public sealed class JwtMiddleware(
 
     public const string PrincipalContextKey = "Slypn.Principal";
     private const string RolesClaimType = "roles";
+    private const string NameClaimType = "name";
 
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
     {
@@ -94,7 +95,7 @@ public sealed class JwtMiddleware(
         if (principal is null)
             return tokenRefusal;
 
-        await EnrichRolesFromCosmosAsync(principal, ct);
+        principal = await ApplyTableRolesAsync(principal, ct);
 
         return EnforceRole(attr, principal);
     }
@@ -130,26 +131,55 @@ public sealed class JwtMiddleware(
         }
     }
 
-    private async Task EnrichRolesFromCosmosAsync(ClaimsPrincipal principal, CancellationToken ct)
+    /// <summary>
+    /// Return the caller as the members table says they are. The table is the source of
+    /// truth for roles: an admin grants them through PATCH /api/members/{id}, not through
+    /// an Entra app-role assignment.
+    ///
+    /// Replacing the roles rather than adding to them is the whole point. This used to
+    /// only ever add, so demoting someone in the table left their old JWT role effective
+    /// until the token expired — the table could grant a role but never take one back.
+    ///
+    /// A caller with no member row ends up with no roles. A valid CIAM token proves who
+    /// someone is, not that they belong to SLYPN. Note that the stored OID can go stale:
+    /// personal Microsoft accounts are issued a different oid than az-cli reports, so a
+    /// seeded record can miss here. GET /me re-links such a record by email, which
+    /// restores the roles from the next request onward.
+    /// </summary>
+    private async Task<ClaimsPrincipal> ApplyTableRolesAsync(ClaimsPrincipal principal, CancellationToken ct)
     {
-        // Enrich principal with Cosmos roles (source of truth — overrides any JWT roles).
         if (!repo.SupportsWrites || principal.FindFirst("oid")?.Value is not { Length: > 0 } callerOid)
-            return;
+            return principal;
 
+        IReadOnlyList<string> roles;
         try
         {
             var member = await repo.GetMemberByOidAsync(callerOid, ct);
-            if (member?.Roles is { Count: > 0 } cosmosRoles
-                && principal.Identity is ClaimsIdentity identity)
-            {
-                foreach (var role in cosmosRoles.Where(role => !identity.HasClaim(RolesClaimType, role)))
-                    identity.AddClaim(new Claim(RolesClaimType, role));
-            }
+            if (member is null)
+                logger.LogWarning("No member record for OID {Oid} — treating the caller as having no roles.", callerOid);
+            roles = member?.Roles ?? [];
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Cosmos role enrichment failed for OID {Oid}", callerOid);
+            // Storage is unreachable. Fall back to the token's own roles rather than
+            // signing every member out of the site over a transient storage fault —
+            // stripping roles here would turn a blip into a site-wide outage.
+            logger.LogWarning(ex, "Role lookup failed for OID {Oid}; falling back to the token's roles", callerOid);
+            return principal;
         }
+
+        // Rebuilt rather than mutated: ClaimsIdentity.RemoveClaim only accepts claims the
+        // identity itself owns, and claims arriving from the token handler need not be, so
+        // removal in place can throw and leave a stale role attached.
+        var identity = new ClaimsIdentity(
+            principal.Claims.Where(c => c.Type != RolesClaimType),
+            principal.Identity?.AuthenticationType ?? "jwt",
+            NameClaimType,
+            RolesClaimType);
+        foreach (var role in roles)
+            identity.AddClaim(new Claim(RolesClaimType, role));
+
+        return new ClaimsPrincipal(identity);
     }
 
     private static AuthResult EnforceRole(RequireRoleAttribute attr, ClaimsPrincipal principal) =>
