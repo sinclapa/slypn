@@ -21,8 +21,12 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // One Functions host serves every worker, so more workers mostly queue.
-  workers: process.env.CI ? 2 : 4,
+  // Every worker shares one Functions host and one Azurite, so this scales with
+  // contention rather than cores. 3 on CI (4-vCPU runners) was measured against
+  // 2: the test phase is the largest single slice of the job, but the ceiling is
+  // low — beyond roughly 20s faster the SonarCloud job becomes the critical path
+  // instead, so there is nothing to win by pushing it higher.
+  workers: process.env.CI ? 3 : 4,
   timeout: 60_000,
   expect: { timeout: 10_000 },
 
