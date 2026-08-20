@@ -44,46 +44,63 @@ public sealed class JwtMiddleware(
             throw new InvalidOperationException("[RequireRole] is only supported on HTTP-triggered functions.");
         }
 
+        var result = await AuthenticateAsync(httpReq, attr, context.CancellationToken);
+
+        if (!result.IsAllowed)
+        {
+            await ShortCircuit(context, httpReq, result.RefusalCode!.Value, result.RefusalMessage!);
+            return;
+        }
+
+        context.Items[PrincipalContextKey] = result.Principal!;
+        await next(context);
+    }
+
+    /// <summary>
+    /// Decide whether this caller may run the function, without touching the
+    /// FunctionContext or writing anything. Returns the principal to run as, or
+    /// the refusal for <see cref="Invoke"/> to render.
+    ///
+    /// Deliberately free of FunctionContext. Writing a response needs
+    /// GetInvocationResult() and reading the request needs
+    /// GetHttpRequestDataAsync(); both go through IFunctionBindingsFeature,
+    /// which is internal to the Worker SDK and cannot be implemented from a test
+    /// assembly. Every refusal path was therefore unreachable in a unit test.
+    /// Separating the decision from rendering it makes them all testable.
+    /// </summary>
+    internal async Task<AuthResult> AuthenticateAsync(
+        HttpRequestData httpReq, RequireRoleAttribute attr, CancellationToken ct)
+    {
         // Local-dev escape hatch — synthesise a principal for the requested test
         // persona when SkipAuth=true. The role gate is still enforced below so the
         // member persona correctly gets 403 on Admin-only endpoints.
         if (options.Value.SkipAuth)
         {
-            await InvokeDevPersonaAsync(context, httpReq, attr, next);
-            return;
+            logger.LogWarning("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
+            return EnforceRole(attr, DevPrincipal(httpReq));
         }
 
         if (!validator.IsConfigured)
         {
-            await ShortCircuit(context, httpReq, HttpStatusCode.ServiceUnavailable,
+            return AuthResult.Refuse(HttpStatusCode.ServiceUnavailable,
                 "Auth is not configured. Set AzureAd__Authority / AzureAd__Audience or AzureAd__SkipAuth=true.");
-            return;
         }
 
         var token = ExtractBearer(httpReq);
         if (token is null)
-        {
-            await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, "Missing Bearer token.");
-            return;
-        }
+            return AuthResult.Refuse(HttpStatusCode.Unauthorized, "Missing Bearer token.");
 
-        var principal = await ValidateTokenAsync(token, context, httpReq);
+        var (principal, tokenRefusal) = await ValidateTokenAsync(token, ct);
         if (principal is null)
-            return;
+            return tokenRefusal;
 
-        await EnrichRolesFromCosmosAsync(principal, context.CancellationToken);
+        await EnrichRolesFromCosmosAsync(principal, ct);
 
-        if (!await EnforceRoleAsync(context, httpReq, attr, principal))
-            return;
-
-        context.Items[PrincipalContextKey] = principal;
-        await next(context);
+        return EnforceRole(attr, principal);
     }
 
-    private async Task InvokeDevPersonaAsync(
-        FunctionContext context, HttpRequestData httpReq, RequireRoleAttribute attr, FunctionExecutionDelegate next)
+    private static ClaimsPrincipal DevPrincipal(HttpRequestData httpReq)
     {
-        logger.LogWarning("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
         var persona = DevPersonas.Resolve(GetHeader(httpReq, DevPersonas.HeaderName));
         var identity = new ClaimsIdentity("dev", "name", RolesClaimType);
         identity.AddClaim(new Claim("name",  persona.Name));
@@ -91,32 +108,25 @@ public sealed class JwtMiddleware(
         identity.AddClaim(new Claim("email", persona.Email));
         foreach (var role in persona.Roles)
             identity.AddClaim(new Claim(RolesClaimType, role));
-        var devPrincipal = new ClaimsPrincipal(identity);
-
-        if (!await EnforceRoleAsync(context, httpReq, attr, devPrincipal))
-            return;
-
-        context.Items[PrincipalContextKey] = devPrincipal;
-        await next(context);
+        return new ClaimsPrincipal(identity);
     }
 
-    private async Task<ClaimsPrincipal?> ValidateTokenAsync(string token, FunctionContext context, HttpRequestData httpReq)
+    private async Task<(ClaimsPrincipal? Principal, AuthResult Refusal)> ValidateTokenAsync(
+        string token, CancellationToken ct)
     {
         try
         {
-            return await validator.ValidateAsync(token, context.CancellationToken);
+            return (await validator.ValidateAsync(token, ct), default);
         }
         catch (SecurityTokenException ex)
         {
             logger.LogInformation(ex, "JWT validation failed: {Message}", ex.Message);
-            await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, $"Invalid token: {ex.Message}");
-            return null;
+            return (null, AuthResult.Refuse(HttpStatusCode.Unauthorized, $"Invalid token: {ex.Message}"));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected error validating JWT");
-            await ShortCircuit(context, httpReq, HttpStatusCode.Unauthorized, "Token validation error.");
-            return null;
+            return (null, AuthResult.Refuse(HttpStatusCode.Unauthorized, "Token validation error."));
         }
     }
 
@@ -142,16 +152,11 @@ public sealed class JwtMiddleware(
         }
     }
 
-    private static async Task<bool> EnforceRoleAsync(
-        FunctionContext context, HttpRequestData httpReq, RequireRoleAttribute attr, ClaimsPrincipal principal)
-    {
-        if (attr.Roles.Length == 0 || attr.Roles.Any(r => principal.IsInRole(r)))
-            return true;
-
-        await ShortCircuit(context, httpReq, HttpStatusCode.Forbidden,
-            $"Required role: {string.Join(" or ", attr.Roles)}.");
-        return false;
-    }
+    private static AuthResult EnforceRole(RequireRoleAttribute attr, ClaimsPrincipal principal) =>
+        attr.Roles.Length == 0 || attr.Roles.Any(r => principal.IsInRole(r))
+            ? AuthResult.Allow(principal)
+            : AuthResult.Refuse(HttpStatusCode.Forbidden,
+                $"Required role: {string.Join(" or ", attr.Roles)}.");
 
     private static RequireRoleAttribute? GetRoleAttribute(FunctionContext context)
     {
@@ -216,6 +221,22 @@ public sealed class JwtMiddleware(
         await resp.WriteStringAsync(message);
         context.GetInvocationResult().Value = resp;
     }
+}
+
+/// <summary>
+/// Outcome of an authentication + authorisation decision: either the principal
+/// to run as, or the status and message to refuse with. Exactly one is set.
+/// </summary>
+internal readonly record struct AuthResult(
+    ClaimsPrincipal? Principal,
+    HttpStatusCode? RefusalCode,
+    string? RefusalMessage)
+{
+    public static AuthResult Allow(ClaimsPrincipal principal) => new(principal, null, null);
+
+    public static AuthResult Refuse(HttpStatusCode code, string message) => new(null, code, message);
+
+    public bool IsAllowed => Principal is not null;
 }
 
 public static class FunctionContextExtensions
