@@ -17,6 +17,32 @@ namespace Slypn.Api.Functions;
 public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sanitizer, ILogger<ArticlesFunctions> log)
 {
     /// <summary>
+    /// Statuses a non-Admin caller may set on an article. Publishing is deliberately
+    /// Admin-only — it goes through POST /articles/{id}/publish — and "rejected" is the
+    /// other half of that same review decision. Without this, Contributors could set
+    /// status=published straight from the create/replace body and skip review entirely.
+    /// </summary>
+    private static readonly HashSet<string> AuthorSettableStatuses =
+        new(StringComparer.OrdinalIgnoreCase) { "draft", InReviewStatus };
+
+    private const string PublishedReplaceRefusal =
+        "This article is published — only an Admin can replace it. "
+        + "Use POST /api/articles/{id}/edit to propose a revision, which keeps the live version up until an Admin approves.";
+
+    /// <summary>
+    /// Returns the refusal message when <paramref name="status"/> is out of bounds for this
+    /// caller, or null when the write may proceed.
+    ///
+    /// Refusing beats silently downgrading the status: an author who asked to publish should
+    /// be told the request was denied, not left to discover a different status later.
+    /// </summary>
+    private static string? StatusRefusal(FunctionContext context, string status) =>
+        context.IsAdmin() || AuthorSettableStatuses.Contains(status)
+            ? null
+            : $"Only an Admin can set status '{status}'. Submit the article for review instead, "
+              + "then ask an Admin to publish it via POST /api/articles/{id}/publish.";
+
+    /// <summary>
     /// Public article list. Always published — the caller cannot widen this.
     ///
     /// The status filter used to come from the query string, which meant an
@@ -82,14 +108,20 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ArticleInput), Required = true, Description = "Article payload.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(Article), Description = "Created article")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Forbidden, Description = "Non-Admin caller asked for a status only an Admin may set")]
     public async Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles")] HttpRequestData req,
+        FunctionContext context,
         CancellationToken ct)
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var (input, err) = await ReadValidatedAsync<ArticleInput>(req, ct);
         if (err is not null) return err;
-        input!.Body = sanitizer.Sanitize(input.Body);
+
+        if (StatusRefusal(context, input!.Status) is { } refusal)
+            return await Forbidden(req, refusal);
+
+        input.Body = sanitizer.Sanitize(input.Body);
         try
         {
             var article = await repo.CreateArticleAsync(input, ct);
@@ -105,16 +137,27 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article id.")]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ArticleInput), Required = true, Description = "Article payload.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Updated article")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Forbidden, Description = "Non-Admin caller asked for an Admin-only status, or targeted a published article")]
     public async Task<HttpResponseData> Replace(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "articles/{id}")] HttpRequestData req,
+        FunctionContext context,
         string id, CancellationToken ct)
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var (input, err) = await ReadValidatedAsync<ArticleInput>(req, ct);
         if (err is not null) return err;
-        input!.Body = sanitizer.Sanitize(input.Body);
+
+        if (StatusRefusal(context, input!.Status) is { } refusal)
+            return await Forbidden(req, refusal);
+
+        input.Body = sanitizer.Sanitize(input.Body);
         try
         {
+            // Live content is Admin-only. Contributors revise a published article through
+            // POST /articles/{id}/edit, which drafts the change instead of overwriting it.
+            if (!context.IsAdmin() && await repo.GetArticleAsync(id, PublishedStatus, ct) is not null)
+                return await Forbidden(req, PublishedReplaceRefusal);
+
             var article = await repo.ReplaceArticleAsync(id, input, IfMatch(req), ct);
             return await Ok(req, article, article.Etag);
         }
