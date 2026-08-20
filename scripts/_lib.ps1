@@ -34,6 +34,17 @@ function Test-Port($port) {
     return [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
 }
 
+# Kill a process and everything beneath it, depth-first.
+# The API host is a tree (dotnet -> cmd -> func -> worker), so killing only the
+# recorded PID, or only its direct children, leaves the listener alive and the
+# port bound.
+function Stop-ProcessTree($procId) {
+    if (-not $procId) { return }
+    $children = Get-CimInstance Win32_Process -Filter "ParentProcessId=$procId" -ErrorAction SilentlyContinue
+    foreach ($child in $children) { Stop-ProcessTree $child.ProcessId }
+    Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+}
+
 function Stop-Port($port) {
     $procIds = (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue).OwningProcess
     foreach ($procId in ($procIds | Sort-Object -Unique)) {

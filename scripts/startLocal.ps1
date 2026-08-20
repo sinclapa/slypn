@@ -7,7 +7,7 @@
   Starts:
     - slypn-azurite (Docker)    blob/queue/table emulator on :10000-10002
     - vite (npm)                Vue dev server on http://localhost:5173/
-    - func (Functions Core)     .NET API host on http://localhost:7071/
+    - dotnet run (Functions)    .NET API host on http://localhost:7071/
 
   Emulator containers persist between start/stop cycles so seeded data
   survives. Use scripts/cleanLocal.ps1 to wipe them. Vite + func PIDs are
@@ -121,6 +121,11 @@ Show-Ok "vite PID $($webProc.Id), logging to $webLog"
 
 # --- API --------------------------------------------------------------------
 Show-Step 'Starting Functions host (API)'
+# Started via `dotnet run`, not `func start`: Core Tools warns that running it
+# directly against a .NET isolated project "may not correctly load function
+# extensions". The Worker SDK maps `dotnet run` onto `func start` with
+# RunWorkingDirectory set to the build output, which is the supported path.
+# `func` must still be on PATH — the SDK shells out to it.
 $funcExe = Resolve-WinExe 'func'
 if (-not $funcExe) {
     $funcHome = Join-Path $env:LOCALAPPDATA 'AzureFunctionsCoreTools'
@@ -128,16 +133,20 @@ if (-not $funcExe) {
     if (Test-Path $candidate) { $funcExe = $candidate }
 }
 if (-not $funcExe) {
-    Show-Err 'func not on PATH. Run setupLocal.ps1 first.'
+    Show-Err 'func not on PATH. The Functions SDK shells out to Core Tools, so it is still required. Run setupLocal.ps1 first.'
     Stop-Process -Id $webProc.Id -Force -ErrorAction SilentlyContinue
     exit 1
 }
-$apiProc = Start-Process -FilePath $funcExe -ArgumentList 'start' `
+# Debug (the dotnet run default) rather than Release: this is the interactive
+# dev stack, so fast incremental builds and debugger attach matter more than
+# matching the deployed configuration. The e2e suite uses Release for that.
+$apiProc = Start-Process -FilePath 'dotnet' `
+    -ArgumentList 'run', '--no-launch-profile', '--', '--port', "$ApiPort" `
     -WorkingDirectory $ApiDir `
     -RedirectStandardOutput $apiLog `
     -RedirectStandardError  "$apiLog.err" `
     -WindowStyle Hidden -PassThru
-Show-Ok "func PID $($apiProc.Id), logging to $apiLog"
+Show-Ok "dotnet run PID $($apiProc.Id), logging to $apiLog"
 
 @{ web = $webProc.Id; api = $apiProc.Id } | ConvertTo-Json | Out-File -FilePath $pidFile -Encoding UTF8
 
