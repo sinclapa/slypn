@@ -140,32 +140,50 @@ public sealed class JwtMiddleware(
     /// only ever add, so demoting someone in the table left their old JWT role effective
     /// until the token expired — the table could grant a role but never take one back.
     ///
-    /// A caller with no member row ends up with no roles. A valid CIAM token proves who
-    /// someone is, not that they belong to SLYPN. Note that the stored OID can go stale:
-    /// personal Microsoft accounts are issued a different oid than az-cli reports, so a
-    /// seeded record can miss here. GET /me re-links such a record by email, which
-    /// restores the roles from the next request onward.
+    /// A caller the table cannot vouch for ends up with no roles at all — whether the row
+    /// is missing, the token carries no oid to look one up by, or storage is unconfigured
+    /// so there is no table to consult. A valid CIAM token proves who someone is, not that
+    /// they belong to SLYPN, and any of these falling back to the token's roles would hand
+    /// authority quietly back to Entra app-role assignments.
+    ///
+    /// Note that the stored OID can go stale: personal Microsoft accounts are issued a
+    /// different oid than az-cli reports, so a seeded record can miss here. GET /me
+    /// re-links such a record by email, which restores the roles from the next request on.
+    ///
+    /// The one exception is a lookup that throws — see below.
     /// </summary>
     private async Task<ClaimsPrincipal> ApplyTableRolesAsync(ClaimsPrincipal principal, CancellationToken ct)
     {
-        if (!repo.SupportsWrites || principal.FindFirst("oid")?.Value is not { Length: > 0 } callerOid)
-            return principal;
+        IReadOnlyList<string> roles = [];
 
-        IReadOnlyList<string> roles;
-        try
+        if (!repo.SupportsWrites)
         {
-            var member = await repo.GetMemberByOidAsync(callerOid, ct);
-            if (member is null)
-                logger.LogWarning("No member record for OID {Oid} — treating the caller as having no roles.", callerOid);
-            roles = member?.Roles ?? [];
+            // Storage is configured in every deployed environment, so this means the
+            // connection string is missing rather than that roles are irrelevant.
+            logger.LogWarning("Members table unavailable (storage not configured) — no caller can hold a role.");
         }
-        catch (Exception ex)
+        else if (principal.FindFirst("oid")?.Value is not { Length: > 0 } callerOid)
         {
-            // Storage is unreachable. Fall back to the token's own roles rather than
-            // signing every member out of the site over a transient storage fault —
-            // stripping roles here would turn a blip into a site-wide outage.
-            logger.LogWarning(ex, "Role lookup failed for OID {Oid}; falling back to the token's roles", callerOid);
-            return principal;
+            logger.LogInformation("Token carries no oid claim — no member record to resolve roles from.");
+        }
+        else
+        {
+            try
+            {
+                var member = await repo.GetMemberByOidAsync(callerOid, ct);
+                if (member is null)
+                    logger.LogInformation("No member record for OID {Oid} — caller holds no roles.", callerOid);
+                roles = member?.Roles ?? [];
+            }
+            catch (Exception ex)
+            {
+                // Storage is reachable in principle but failed. Fall back to the token's
+                // own roles rather than signing every member out at once over a transient
+                // fault — that would turn a blip into a site-wide outage. This is the only
+                // path that keeps token roles, and it is deliberately the transient one.
+                logger.LogWarning(ex, "Role lookup failed for OID {Oid}; falling back to the token's roles", callerOid);
+                return principal;
+            }
         }
 
         // Rebuilt rather than mutated: ClaimsIdentity.RemoveClaim only accepts claims the

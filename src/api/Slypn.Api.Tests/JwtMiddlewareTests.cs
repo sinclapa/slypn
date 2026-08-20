@@ -416,4 +416,35 @@ public class JwtMiddlewareTests
 
         Assert.True(result.IsAllowed);
     }
+
+    [Fact]
+    public async Task No_caller_holds_a_role_when_storage_is_unconfigured()
+    {
+        // Raised in review of #163: returning early here left the token's roles intact,
+        // so a deployment missing its storage connection string would silently fall back
+        // to Entra app-role assignments — the exact authority this change moves away from.
+        var repo = new FakeContentRepository { Writes = false, MemberByOid = MemberWith("Admin") };
+
+        var result = await Make(principal: PrincipalWith("Admin"), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AdminOnly, default);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(HttpStatusCode.Forbidden, result.RefusalCode);
+    }
+
+    [Fact]
+    public async Task A_token_without_an_oid_claim_holds_no_roles()
+    {
+        // Nothing to look a member up by, so membership cannot be confirmed.
+        var identity = new ClaimsIdentity("test", "name", "roles");
+        identity.AddClaim(new Claim("name", "No Oid"));
+        identity.AddClaim(new Claim("roles", "Admin"));
+        var repo = new FakeContentRepository { MemberByOid = MemberWith("Admin") };
+
+        var result = await Make(principal: new ClaimsPrincipal(identity), repo: repo)
+            .AuthenticateAsync(Request(("Authorization", $"Bearer {TokenWithKid()}")), AdminOnly, default);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(HttpStatusCode.Forbidden, result.RefusalCode);
+    }
 }

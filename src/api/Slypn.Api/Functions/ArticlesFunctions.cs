@@ -154,7 +154,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         try
         {
             // Live content is Admin-only. Contributors revise a published article through
-            // POST /articles/{id}/edit, which drafts the change instead of overwriting it.
+            // POST /api/articles/{id}/edit, which drafts the change instead of overwriting it.
             if (!context.IsAdmin() && await repo.GetArticleAsync(id, PublishedStatus, ct) is not null)
                 return await Forbidden(req, PublishedReplaceRefusal);
 
