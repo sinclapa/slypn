@@ -102,7 +102,7 @@ test.describe('content lifecycle', () => {
     await expect(row.getByTestId('draft-row-state')).toHaveText('In review')
 
     expect((await api.json<{ id: string }[]>('/drafts')).map((d) => d.id)).not.toContain(draftId)
-    const inReview = await api.json<{ id: string; authorId: string }[]>('/articles?status=in-review')
+    const inReview = await api.json<{ id: string; authorId: string }[]>('/review/articles')
     expect(inReview.map((a) => a.id)).toContain(draftId)
   })
 

@@ -4,6 +4,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.OpenApi.Models;
+using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
 using Slypn.Api.Services;
 using static Slypn.Api.Functions.FunctionHelpers;
@@ -18,15 +19,31 @@ public sealed class BlogFunctions(IContentRepository repo)
     /// distinguishes by Type if it needs to.
     /// </summary>
     [Function("GetBlogPosts")]
-    [OpenApiOperation(operationId: "blog.list", tags: new[] { "blog" }, Summary = "List blog posts", Description = "Returns published blog posts, optionally filtered by status.")]
-    [OpenApiParameter(name: "status", In = ParameterLocation.Query, Required = false, Type = typeof(string), Description = "Optional status filter.")]
-    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of blog posts")]
+    [OpenApiOperation(operationId: "blog.list", tags: new[] { "blog" }, Summary = "List blog posts", Description = "Returns published blog posts.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of published blog posts")]
     public async Task<HttpResponseData> GetBlogPosts(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "blog")] HttpRequestData req,
         CancellationToken ct)
     {
-        var status = QueryParam(req, "status") ?? "published";
-        var posts = await repo.ListBlogPostsAsync(status, ct);
+        // Pinned to published: ?status= previously let an anonymous caller read
+        // in-review submissions. See GetPendingBlogPosts for the gated route.
+        var posts = await repo.ListBlogPostsAsync(PublishedStatus, ct);
+        return await Ok(req, posts);
+    }
+
+    /// <summary>Blog posts awaiting review. Role-gated counterpart to the public list.</summary>
+    [Function("GetPendingBlogPosts")]
+    [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "blog.pending", tags: new[] { "blog" }, Summary = "List blog posts awaiting review", Description = "Returns blog posts with status in-review. Requires Admin or Contributor.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of in-review blog posts")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Unauthorized, Description = "Missing or invalid token")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Forbidden, Description = "Caller lacks the required role")]
+    public async Task<HttpResponseData> GetPendingBlogPosts(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "review/blog")] HttpRequestData req,
+        CancellationToken ct)
+    {
+        var posts = await repo.ListBlogPostsAsync(InReviewStatus, ct);
         return await Ok(req, posts);
     }
 }

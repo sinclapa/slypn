@@ -43,8 +43,8 @@ describe('ApprovalsQueue', () => {
   function mockLoad(articles: unknown[], published: unknown[] = []) {
     apiFetch.mockImplementation((url: string, init?: { method?: string }) => {
       const method = init?.method ?? 'GET'
-      if (method === 'GET' && url === '/articles?status=in-review') return Promise.resolve(ok(articles))
-      if (method === 'GET' && url === '/blog?status=in-review') return Promise.resolve(ok([]))
+      if (method === 'GET' && url === '/review/articles') return Promise.resolve(ok(articles))
+      if (method === 'GET' && url === '/review/blog') return Promise.resolve(ok([]))
       if (method === 'GET' && url === '/articles?status=published') return Promise.resolve(ok(published))
       if (method === 'GET' && url === '/blog?status=published') return Promise.resolve(ok([]))
       return Promise.resolve(ok({}))
@@ -207,8 +207,8 @@ describe('ApprovalsQueue', () => {
 
   it('shows load error when blog returns non-ok', async () => {
     apiFetch.mockImplementation((url: string) => {
-      if (url === '/articles?status=in-review') return ok([])
-      if (url === '/blog?status=in-review') return Promise.resolve({ ok: false, status: 503, statusText: 'Unavailable', text: () => Promise.resolve(''), json: () => Promise.resolve([]) } as unknown as Response)
+      if (url === '/review/articles') return ok([])
+      if (url === '/review/blog') return Promise.resolve({ ok: false, status: 503, statusText: 'Unavailable', text: () => Promise.resolve(''), json: () => Promise.resolve([]) } as unknown as Response)
       return ok([])
     })
     const w = mountC(ApprovalsQueue)
@@ -219,8 +219,8 @@ describe('ApprovalsQueue', () => {
   it('skips loading deletions when published article list returns non-ok', async () => {
     apiFetch.mockImplementation((url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET')
-      if (method === 'GET' && url === '/articles?status=in-review') return ok([])
-      if (method === 'GET' && url === '/blog?status=in-review') return ok([])
+      if (method === 'GET' && url === '/review/articles') return ok([])
+      if (method === 'GET' && url === '/review/blog') return ok([])
       if (method === 'GET' && url === '/articles?status=published') return Promise.resolve({ ok: false, status: 503, statusText: 'Unavailable', json: () => Promise.resolve([]) } as unknown as Response)
       if (method === 'GET' && url === '/blog?status=published') return ok([])
       return ok({})

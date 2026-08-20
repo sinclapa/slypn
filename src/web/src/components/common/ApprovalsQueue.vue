@@ -53,8 +53,8 @@ async function load() {
   loadError.value = null
   try {
     const [articlesResp, blogResp, pubArtResp, pubBlogResp] = await Promise.all([
-      apiFetch('/articles?status=in-review'),
-      apiFetch('/blog?status=in-review'),
+      apiFetch('/review/articles'),
+      apiFetch('/review/blog'),
       apiFetch('/articles?status=published'),
       apiFetch('/blog?status=published'),
     ])

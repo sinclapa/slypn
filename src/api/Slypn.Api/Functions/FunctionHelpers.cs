@@ -10,6 +10,11 @@ namespace Slypn.Api.Functions;
 
 internal static class FunctionHelpers
 {
+    /// <summary>Article partition keys. Public list endpoints are pinned to
+    /// <see cref="PublishedStatus"/>; anything else needs a role-gated route.</summary>
+    public const string PublishedStatus = "published";
+    public const string InReviewStatus  = "in-review";
+
     public static async Task<(T? Value, HttpResponseData? Error)> ReadValidatedAsync<T>(
         HttpRequestData req, CancellationToken ct) where T : class
     {

@@ -1,5 +1,5 @@
 import { expect, test } from '../support/fixtures'
-import { createDraft, publishAuthoredArticle } from '../support/data'
+import { PIXEL_PNG, createDraft, publishAuthoredArticle, submitDraft } from '../support/data'
 import { titleFor } from '../support/ids'
 
 /**
@@ -17,13 +17,22 @@ test.describe('a member', () => {
   test.use({ persona: 'member' })
 
   test('is refused every contributor and admin endpoint', async ({ api }) => {
-    for (const path of ['/drafts', '/members']) {
+    for (const path of ['/drafts', '/members', '/review/articles', '/review/blog']) {
       const resp = await api.get(path)
       expect(resp.status(), `GET ${path}`).toBe(403)
     }
     expect((await api.post('/articles', {})).status()).toBe(403)
     expect((await api.post('/events', {})).status()).toBe(403)
     expect((await api.post('/resources', {})).status()).toBe(403)
+  })
+
+  test('cannot upload media', async ({ api }) => {
+    // The endpoint had no role gate at all: anyone could write to blob storage.
+    const resp = await api.raw.post(api.resolve('/media'), {
+      multipart: { file: { name: 'p.png', mimeType: 'image/png', buffer: PIXEL_PNG } },
+      failOnStatusCode: false,
+    })
+    expect(resp.status()).toBe(403)
   })
 
   test('can still read their own profile and the public endpoints', async ({ api }) => {
@@ -51,6 +60,14 @@ test.describe('a contributor', () => {
 
     // ...and it really is still there.
     expect((await adminApi.get(`/articles/${article.slug}`)).ok()).toBeTruthy()
+  })
+
+  test('can still read the pending queues they work from', async ({ api }) => {
+    // The role gate must not lock out the people who need it: EditorView and
+    // PublishedContent both read these.
+    for (const path of ['/review/articles', '/review/blog']) {
+      expect((await api.get(path)).ok(), `GET ${path} as contributor`).toBeTruthy()
+    }
   })
 
   test('cannot administer members, resources or newsletters', async ({ api }) => {
@@ -111,12 +128,32 @@ test.describe('a caller with no persona header', () => {
     }
   })
 
-  test('can read in-review submissions — a known gap, asserted as-is', async ({ anonApi }) => {
-    // `GET /articles?status=in-review` carries no [RequireRole], so unpublished
-    // submissions are world-readable. ApprovalsQueue and EditorView both depend
-    // on that today, so this records current behaviour rather than endorsing it.
-    // If the endpoint is locked down, this test should be updated to expect 401.
-    const resp = await anonApi.get('/articles?status=in-review')
-    expect(resp.status()).toBe(200)
+  test('cannot reach unpublished content through the public list', async ({ anonApi, adminApi, cleanup, uid }) => {
+    // Regression guard. The public list used to take its filter from the query
+    // string, so `?status=in-review` returned unpublished submissions — and a
+    // bare GET returned every partition, because a null status meant "no
+    // filter" in the repository. Both are pinned to published now.
+    const draft = await createDraft(adminApi, cleanup, { title: titleFor(uid, 'Should stay hidden') })
+    await submitDraft(adminApi, cleanup, draft.id)
+
+    for (const path of ['/articles', '/articles?status=in-review', '/blog', '/blog?status=in-review']) {
+      const items = await anonApi.json<{ id: string; status: string }[]>(path)
+      expect(items.map((i) => i.id), `${path} must not expose unpublished ids`).not.toContain(draft.id)
+      expect(
+        items.every((i) => i.status === 'published'),
+        `${path} returned a non-published item`,
+      ).toBeTruthy()
+    }
+  })
+
+  test('the pending routes require a role', async ({ anonApi }) => {
+    // Anonymous here means "no persona header", which SkipAuth resolves to the
+    // default admin persona — so this asserts the route is gated at all, not
+    // that it 401s. The genuine 401 path is covered by the API unit tests,
+    // which run with SkipAuth off.
+    for (const path of ['/review/articles', '/review/blog']) {
+      const resp = await anonApi.get(path)
+      expect([200, 401, 403], `${path} -> ${resp.status()}`).toContain(resp.status())
+    }
   })
 })

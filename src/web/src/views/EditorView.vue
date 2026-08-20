@@ -56,8 +56,8 @@ async function loadPending() {
   pendingError.value   = null
   try {
     const [arts, blogs] = await Promise.all([
-      apiJson<PendingItem[]>('/articles?status=in-review'),
-      apiJson<PendingItem[]>('/blog?status=in-review'),
+      apiJson<PendingItem[]>('/review/articles'),
+      apiJson<PendingItem[]>('/review/blog'),
     ])
     const mine = [...arts, ...blogs].filter(x => auth.oid && x.authorId === auth.oid)
     pendingItems.value = mine.sort(

@@ -69,13 +69,22 @@ export async function sweepLeftovers(admin: ApiClient, authors: ApiClient[]): Pr
   let removed = 0
   const isOurs = (title?: string) => Boolean(title?.startsWith(E2E_PREFIX))
 
-  for (const status of ['in-review', 'published', 'draft', 'rejected']) {
-    for (const path of [`/articles?status=${status}`, `/blog?status=${status}`]) {
-      const items = await safeJson<SeedableArticle>(admin, path)
-      for (const item of items.filter((i) => isOurs(i.title))) {
-        await admin.del(`/articles/${item.id}?status=${status}`)
-        removed += 1
-      }
+  // Only the two statuses the suite can actually create: publishAuthoredArticle
+  // leaves items published, submitDraft leaves them in-review. Nothing produces
+  // draft or rejected articles — those partitions exist in the model but no
+  // endpoint writes them. In-review is read through the role-gated route now;
+  // the public list is pinned to published and ignores ?status=.
+  const sweepSources: [string, string][] = [
+    ['published', '/articles'],
+    ['published', '/blog'],
+    ['in-review', '/review/articles'],
+    ['in-review', '/review/blog'],
+  ]
+  for (const [status, path] of sweepSources) {
+    const items = await safeJson<SeedableArticle>(admin, path)
+    for (const item of items.filter((i) => isOurs(i.title))) {
+      await admin.del(`/articles/${item.id}?status=${status}`)
+      removed += 1
     }
   }
 

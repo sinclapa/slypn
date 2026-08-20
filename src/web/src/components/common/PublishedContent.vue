@@ -72,8 +72,8 @@ async function load() {
     const [articlesResp, blogResp, reviewArtResp, reviewBlogResp] = await Promise.all([
       apiFetch('/articles?status=published'),
       apiFetch('/blog?status=published'),
-      apiFetch('/articles?status=in-review'),
-      apiFetch('/blog?status=in-review'),
+      apiFetch('/review/articles'),
+      apiFetch('/review/blog'),
     ])
     if (!articlesResp.ok) throw new Error(`/articles: ${articlesResp.status} ${articlesResp.statusText}`)
     if (!blogResp.ok)     throw new Error(`/blog: ${blogResp.status} ${blogResp.statusText}`)

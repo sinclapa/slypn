@@ -46,7 +46,7 @@ test.describe('revision workflow', () => {
     await adminContext.close()
 
     // Back with the author as an editable draft carrying the feedback.
-    const inReview = await adminApi.json<ArticleLike[]>('/articles?status=in-review')
+    const inReview = await adminApi.json<ArticleLike[]>('/review/articles')
     expect(inReview.map((a) => a.id)).not.toContain(draft.id)
 
     const drafts = await api.json<{ id: string; revisionFeedback?: string }[]>('/drafts')
