@@ -169,7 +169,19 @@ internal sealed class FakeContentRepository : IContentRepository
         => Task.FromResult(Guard(MakeArticle(id, null)));
     public Task<Article> CancelArticleDeletionAsync(string id, CancellationToken ct)
         => Task.FromResult(Guard(MakeArticle(id, null)));
-    public Task<Article?> GetArticleAsync(string id, string status, CancellationToken ct) => Task.FromResult<Article?>(MakeArticle(id, null));
+    /// <summary>Article returned by <see cref="GetArticleAsync"/>. Null by default so a
+    /// lookup means "no article in that partition" — set it to make one exist, e.g. to
+    /// stand up a published article that a non-Admin must not be allowed to replace.</summary>
+    public Article? ArticleByIdAndStatus;
+
+    /// <summary>Status the last <see cref="GetArticleAsync"/> call asked for.</summary>
+    public string? LastArticleLookupStatus { get; private set; }
+
+    public Task<Article?> GetArticleAsync(string id, string status, CancellationToken ct)
+    {
+        LastArticleLookupStatus = status;
+        return Task.FromResult(ArticleByIdAndStatus);
+    }
     public Task<Article> PublishArticleAsync(string id, CancellationToken ct) => Task.FromResult(Guard(MakeArticle(id, null)));
     public Task<Draft> ReviseArticleAsync(string id, string feedback, CancellationToken ct)
         => Task.FromResult(Guard(MakeDraft(id, "oid", "name") with { RevisionFeedback = feedback }));

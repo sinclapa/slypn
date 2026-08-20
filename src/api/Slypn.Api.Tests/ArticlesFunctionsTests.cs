@@ -110,7 +110,7 @@ public class ArticlesFunctionsTests
         repo.Writes = false;
         var ctx = new TestFunctionContext();
         var req = TestHttp.Json(ctx, "POST", "http://localhost/api/articles", new { });
-        var resp = (TestHttpResponseData)await fn.Create(req, Ct);
+        var resp = (TestHttpResponseData)await fn.Create(req, ctx, Ct);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
     }
 
@@ -120,7 +120,7 @@ public class ArticlesFunctionsTests
         var (fn, _) = Make();
         var ctx = new TestFunctionContext();
         var req = TestHttp.Json(ctx, "POST", "http://localhost/api/articles", new { title = "x" });
-        var resp = (TestHttpResponseData)await fn.Create(req, Ct);
+        var resp = (TestHttpResponseData)await fn.Create(req, ctx, Ct);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
@@ -136,7 +136,7 @@ public class ArticlesFunctionsTests
             category = "Community", status = "draft",
         };
         var req = TestHttp.Json(ctx, "POST", "http://localhost/api/articles", input);
-        var resp = (TestHttpResponseData)await fn.Create(req, Ct);
+        var resp = (TestHttpResponseData)await fn.Create(req, ctx, Ct);
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
         Assert.Equal("new-id", resp.ReadBodyAs<Article>()!.Id);
     }
@@ -188,11 +188,11 @@ public class ArticlesFunctionsTests
             category = "Community", status = "draft",
         };
 
-        var disabled = (TestHttpResponseData)await fn.Replace(TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", input), "a1", Ct);
+        var disabled = (TestHttpResponseData)await fn.Replace(TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", input), ctx, "a1", Ct);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, disabled.StatusCode);
 
         repo.Writes = true;
-        var ok = (TestHttpResponseData)await fn.Replace(TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", input), "a1", Ct);
+        var ok = (TestHttpResponseData)await fn.Replace(TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", input), ctx, "a1", Ct);
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
     }
 
@@ -201,7 +201,7 @@ public class ArticlesFunctionsTests
     {
         var (fn, _) = Make();
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.Replace(TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", new { }), "a1", Ct);
+        var resp = (TestHttpResponseData)await fn.Replace(TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", new { }), ctx, "a1", Ct);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
@@ -287,7 +287,7 @@ public class ArticlesFunctionsTests
         var (fn, repo) = Make();
         repo.ThrowOnWrite = new RequestFailedException(412, "Precondition failed");
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.Create(TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ValidArticleInput()), Ct);
+        var resp = (TestHttpResponseData)await fn.Create(TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ValidArticleInput()), ctx, Ct);
         Assert.Equal(HttpStatusCode.PreconditionFailed, resp.StatusCode);
     }
 
@@ -297,7 +297,7 @@ public class ArticlesFunctionsTests
         var (fn, repo) = Make();
         repo.ThrowOnWrite = new RequestFailedException(409, "Conflict");
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.Create(TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ValidArticleInput()), Ct);
+        var resp = (TestHttpResponseData)await fn.Create(TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ValidArticleInput()), ctx, Ct);
         Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
     }
 
@@ -307,7 +307,7 @@ public class ArticlesFunctionsTests
         var (fn, repo) = Make();
         repo.ThrowOnWrite = new RequestFailedException(500, "Internal storage error");
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.Create(TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ValidArticleInput()), Ct);
+        var resp = (TestHttpResponseData)await fn.Create(TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ValidArticleInput()), ctx, Ct);
         Assert.Equal(HttpStatusCode.InternalServerError, resp.StatusCode);
     }
 
@@ -339,7 +339,7 @@ public class ArticlesFunctionsTests
         var (fn, _) = Make();
         var ctx = new TestFunctionContext();
         var req = TestHttp.Raw(ctx, "POST", "http://localhost/api/articles", "not-json");
-        var resp = (TestHttpResponseData)await fn.Create(req, Ct);
+        var resp = (TestHttpResponseData)await fn.Create(req, ctx, Ct);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
@@ -352,7 +352,7 @@ public class ArticlesFunctionsTests
         var resp = (TestHttpResponseData)await fn.Replace(
             TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", ValidArticleInput(),
                 new Dictionary<string, string> { ["If-Match"] = "\"etag-1\"" }),
-            "a1", Ct);
+            ctx, "a1", Ct);
         Assert.Equal(HttpStatusCode.PreconditionFailed, resp.StatusCode);
     }
 
@@ -434,5 +434,126 @@ public class ArticlesFunctionsTests
         var err = (TestHttpResponseData)await fn.Revise(
             TestHttp.Json(ctx, "POST", "http://localhost/api/articles/a1/revise", validFeedback), "a1", Ct);
         Assert.Equal(HttpStatusCode.PreconditionFailed, err.StatusCode);
+    }
+
+    // ── SEC-2: publishing is Admin-only ─────────────────────────────────────
+    // Create/Replace took Status straight from the request body, validated only
+    // against the enum in ArticleInput. A Contributor could POST status=published
+    // and go live without review, or PUT over an existing published article —
+    // even though Publish and Delete are both [RequireRole("Admin")].
+
+    private static object ArticleInputWith(string status) => new
+    {
+        slug = "valid-slug", title = "A valid title", summary = "A long enough summary.",
+        body = "Body content long enough.", author = "Jane", readingMinutes = 5,
+        category = "Community", status,
+    };
+
+    private static TestFunctionContext Contributor() =>
+        new TestFunctionContext().WithUser("oid-contrib", "Carla", "Contributor");
+
+    private static TestFunctionContext Admin() =>
+        new TestFunctionContext().WithUser("oid-admin", "Ada", "Admin");
+
+    [Theory]
+    [InlineData("published")]
+    [InlineData("rejected")]
+    public async Task Create_forbids_non_admin_setting_admin_only_status(string status)
+    {
+        var (fn, repo) = Make();
+        // Throwing on write proves the refusal happens BEFORE the repository is
+        // touched — a 403 here cannot be the storage error path in disguise.
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ArticleInputWith(status)), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Contains("Only an Admin", resp.ReadBodyAsString());
+    }
+
+    [Theory]
+    [InlineData("draft")]
+    [InlineData("in-review")]
+    public async Task Create_allows_non_admin_to_file_for_review(string status)
+    {
+        var (fn, _) = Make();
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ArticleInputWith(status)), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_allows_admin_to_publish_directly()
+    {
+        var (fn, _) = Make();
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/articles", ArticleInputWith("published")), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Replace_forbids_non_admin_setting_published()
+    {
+        var (fn, _) = Make();
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", ArticleInputWith("published")),
+            ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Replace_forbids_non_admin_overwriting_a_published_article()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample("a1");           // a1 exists in the published partition
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", ArticleInputWith("draft")),
+            ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Equal("published", repo.LastArticleLookupStatus);
+        Assert.Contains("/edit", resp.ReadBodyAsString());
+    }
+
+    [Fact]
+    public async Task Replace_allows_admin_to_overwrite_a_published_article()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample("a1");
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", ArticleInputWith("published")),
+            ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Replace_allows_non_admin_when_the_article_is_not_published()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = null;                   // nothing in the published partition
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/articles/a1", ArticleInputWith("in-review")),
+            ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 }

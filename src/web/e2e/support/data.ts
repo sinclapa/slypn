@@ -47,6 +47,10 @@ export function draftId(): string {
  * A published article with no authorId — the shape `POST /api/articles`
  * produces. Fine for public browsing; NOT visible to a contributor in
  * /admin/content, which filters on `authorId === auth.oid`.
+ *
+ * Pass an ADMIN api client: setting status=published on create is Admin-only,
+ * so a contributor persona gets 403 here. Use publishAuthoredArticle below for
+ * content that has to belong to a contributor.
  */
 export async function createPublishedArticle(
   api: ApiClient,
