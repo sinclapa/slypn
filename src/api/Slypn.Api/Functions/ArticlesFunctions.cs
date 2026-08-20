@@ -18,7 +18,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
 {
     /// <summary>
     /// Statuses a non-Admin caller may set on an article. Publishing is deliberately
-    /// Admin-only — it goes through POST /articles/{id}/publish — and "rejected" is the
+    /// Admin-only — it goes through POST /api/articles/{id}/publish — and "rejected" is the
     /// other half of that same review decision. Without this, Contributors could set
     /// status=published straight from the create/replace body and skip review entirely.
     /// </summary>
