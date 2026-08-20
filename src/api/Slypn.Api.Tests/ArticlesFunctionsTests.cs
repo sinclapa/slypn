@@ -22,6 +22,56 @@ public class ArticlesFunctionsTests
     private static Article Sample(string id = "a1") =>
         new(id, "slug", "Title", "Summary", "Body", "Author", DateTime.UtcNow, 5, "Community") { Etag = "e1" };
 
+    // ── Public list is pinned to published ──────────────────────────────────
+    // Regression guards. The status filter used to come from the query string,
+    // so ?status=in-review exposed unpublished submissions, and a bare GET
+    // passed null — which the repository treats as "no filter", returning every
+    // partition. Asserting the status the handler ASKS for catches a regression
+    // that a 200-only assertion would sail straight past.
+
+    [Theory]
+    [InlineData("http://localhost/api/articles")]
+    [InlineData("http://localhost/api/articles?status=in-review")]
+    [InlineData("http://localhost/api/articles?status=draft")]
+    [InlineData("http://localhost/api/articles?status=rejected")]
+    public async Task GetArticles_always_asks_for_published(string url)
+    {
+        var (fn, repo) = Make();
+        var resp = (TestHttpResponseData)await fn.GetArticles(TestHttp.Get(new TestFunctionContext(), url), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("published", repo.LastArticlesStatus);
+    }
+
+    [Fact]
+    public async Task GetPendingArticles_asks_for_in_review()
+    {
+        var (fn, repo) = Make();
+        repo.Articles.Add(Sample());
+
+        var resp = (TestHttpResponseData)await fn.GetPendingArticles(
+            TestHttp.Get(new TestFunctionContext(), "http://localhost/api/review/articles"), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("in-review", repo.LastArticlesStatus);
+        Assert.Single(resp.ReadBodyAs<List<Article>>()!);
+    }
+
+    [Fact]
+    public void GetPendingArticles_requires_a_role()
+    {
+        // The gate is the whole point of the separate route: without the
+        // attribute JwtMiddleware lets the call through unauthenticated.
+        var attr = typeof(ArticlesFunctions)
+            .GetMethod(nameof(ArticlesFunctions.GetPendingArticles))!
+            .GetCustomAttributes(typeof(Slypn.Api.Infrastructure.RequireRoleAttribute), inherit: false)
+            .Cast<Slypn.Api.Infrastructure.RequireRoleAttribute>()
+            .SingleOrDefault();
+
+        Assert.NotNull(attr);
+        Assert.Equal(new[] { "Admin", "Contributor" }, attr!.Roles);
+    }
+
     [Fact]
     public async Task GetArticles_returns_200_with_list()
     {

@@ -41,10 +41,23 @@ internal sealed class FakeContentRepository : IContentRepository
         return value;
     }
 
+    /// <summary>Status the last list call asked for. The public list endpoints must
+    /// pin this to "published" regardless of the query string, so recording it is
+    /// how those tests assert the filter rather than just the status code.</summary>
+    public string? LastArticlesStatus { get; private set; }
+    public string? LastBlogStatus { get; private set; }
+
     public Task<IReadOnlyList<Article>> ListArticlesAsync(string? status, CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<Article>>(Articles);
+    {
+        LastArticlesStatus = status;
+        return Task.FromResult<IReadOnlyList<Article>>(Articles);
+    }
+
     public Task<IReadOnlyList<Article>> ListBlogPostsAsync(string? status, CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<Article>>(Blogs);
+    {
+        LastBlogStatus = status;
+        return Task.FromResult<IReadOnlyList<Article>>(Blogs);
+    }
     public Task<Article?> GetArticleBySlugAsync(string slug, CancellationToken ct)
         => Task.FromResult(ArticleBySlug);
     public Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)

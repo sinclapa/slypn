@@ -39,4 +39,21 @@ public class MediaFunctionsTests
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         Assert.Contains("Could not parse", resp.ReadBodyAsString());
     }
+
+    [Fact]
+    public void Upload_requires_a_role()
+    {
+        // The endpoint had no [RequireRole] at all, so anyone could write to
+        // blob storage. The attribute IS the fix — JwtMiddleware reads it and
+        // lets an unattributed function through unauthenticated — so assert it
+        // directly rather than trusting it stays put.
+        var attr = typeof(MediaFunctions)
+            .GetMethod(nameof(MediaFunctions.Upload))!
+            .GetCustomAttributes(typeof(Slypn.Api.Infrastructure.RequireRoleAttribute), inherit: false)
+            .Cast<Slypn.Api.Infrastructure.RequireRoleAttribute>()
+            .SingleOrDefault();
+
+        Assert.NotNull(attr);
+        Assert.Equal(new[] { "Admin", "Contributor" }, attr!.Roles);
+    }
 }
