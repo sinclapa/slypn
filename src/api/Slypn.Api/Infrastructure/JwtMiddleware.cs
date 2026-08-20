@@ -23,6 +23,7 @@ public sealed class JwtMiddleware(
 
     public const string PrincipalContextKey = "Slypn.Principal";
     private const string RolesClaimType = "roles";
+    private const string NameClaimType = "name";
 
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
     {
@@ -94,7 +95,7 @@ public sealed class JwtMiddleware(
         if (principal is null)
             return tokenRefusal;
 
-        await EnrichRolesFromCosmosAsync(principal, ct);
+        principal = await ApplyTableRolesAsync(principal, ct);
 
         return EnforceRole(attr, principal);
     }
@@ -130,26 +131,73 @@ public sealed class JwtMiddleware(
         }
     }
 
-    private async Task EnrichRolesFromCosmosAsync(ClaimsPrincipal principal, CancellationToken ct)
+    /// <summary>
+    /// Return the caller as the members table says they are. The table is the source of
+    /// truth for roles: an admin grants them through PATCH /api/members/{id}, not through
+    /// an Entra app-role assignment.
+    ///
+    /// Replacing the roles rather than adding to them is the whole point. This used to
+    /// only ever add, so demoting someone in the table left their old JWT role effective
+    /// until the token expired — the table could grant a role but never take one back.
+    ///
+    /// A caller the table cannot vouch for ends up with no roles at all — whether the row
+    /// is missing, the token carries no oid to look one up by, or storage is unconfigured
+    /// so there is no table to consult. A valid CIAM token proves who someone is, not that
+    /// they belong to SLYPN, and any of these falling back to the token's roles would hand
+    /// authority quietly back to Entra app-role assignments.
+    ///
+    /// Note that the stored OID can go stale: personal Microsoft accounts are issued a
+    /// different oid than az-cli reports, so a seeded record can miss here. GET /me
+    /// re-links such a record by email, which restores the roles from the next request on.
+    ///
+    /// The one exception is a lookup that throws — see below.
+    /// </summary>
+    private async Task<ClaimsPrincipal> ApplyTableRolesAsync(ClaimsPrincipal principal, CancellationToken ct)
     {
-        // Enrich principal with Cosmos roles (source of truth — overrides any JWT roles).
-        if (!repo.SupportsWrites || principal.FindFirst("oid")?.Value is not { Length: > 0 } callerOid)
-            return;
+        IReadOnlyList<string> roles = [];
 
-        try
+        if (!repo.SupportsWrites)
         {
-            var member = await repo.GetMemberByOidAsync(callerOid, ct);
-            if (member?.Roles is { Count: > 0 } cosmosRoles
-                && principal.Identity is ClaimsIdentity identity)
+            // Storage is configured in every deployed environment, so this means the
+            // connection string is missing rather than that roles are irrelevant.
+            logger.LogWarning("Members table unavailable (storage not configured) — no caller can hold a role.");
+        }
+        else if (principal.FindFirst("oid")?.Value is not { Length: > 0 } callerOid)
+        {
+            logger.LogInformation("Token carries no oid claim — no member record to resolve roles from.");
+        }
+        else
+        {
+            try
             {
-                foreach (var role in cosmosRoles.Where(role => !identity.HasClaim(RolesClaimType, role)))
-                    identity.AddClaim(new Claim(RolesClaimType, role));
+                var member = await repo.GetMemberByOidAsync(callerOid, ct);
+                if (member is null)
+                    logger.LogInformation("No member record for OID {Oid} — caller holds no roles.", callerOid);
+                roles = member?.Roles ?? [];
+            }
+            catch (Exception ex)
+            {
+                // Storage is reachable in principle but failed. Fall back to the token's
+                // own roles rather than signing every member out at once over a transient
+                // fault — that would turn a blip into a site-wide outage. This is the only
+                // path that keeps token roles, and it is deliberately the transient one.
+                logger.LogWarning(ex, "Role lookup failed for OID {Oid}; falling back to the token's roles", callerOid);
+                return principal;
             }
         }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Cosmos role enrichment failed for OID {Oid}", callerOid);
-        }
+
+        // Rebuilt rather than mutated: ClaimsIdentity.RemoveClaim only accepts claims the
+        // identity itself owns, and claims arriving from the token handler need not be, so
+        // removal in place can throw and leave a stale role attached.
+        var identity = new ClaimsIdentity(
+            principal.Claims.Where(c => c.Type != RolesClaimType),
+            principal.Identity?.AuthenticationType ?? "jwt",
+            NameClaimType,
+            RolesClaimType);
+        foreach (var role in roles)
+            identity.AddClaim(new Claim(RolesClaimType, role));
+
+        return new ClaimsPrincipal(identity);
     }
 
     private static AuthResult EnforceRole(RequireRoleAttribute attr, ClaimsPrincipal principal) =>
