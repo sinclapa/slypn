@@ -73,6 +73,36 @@ function Test-ContainerExists($name) {
     return [bool]($found -and $found.Trim() -eq $name)
 }
 
+# Docker fixes port publishing at create time, and a container can also come back
+# from `docker start` with its bindings silently unestablished (seen after Docker
+# Desktop upgrades): `docker inspect` then shows HostConfig.PortBindings set but
+# NetworkSettings.Ports empty, and `docker ps` lists the port with no host
+# mapping. Neither `docker start` nor `docker restart` can repair that — the
+# container has to be recreated — so check what is really published, not what was
+# requested.
+function Test-ContainerPublishesPort($name, $hostPort) {
+    $json = docker inspect $name --format '{{json .NetworkSettings.Ports}}' 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json) -or $json -eq 'null') { return $false }
+    try { $ports = $json | ConvertFrom-Json } catch { return $false }
+    foreach ($entry in $ports.PSObject.Properties) {
+        foreach ($binding in @($entry.Value)) {
+            if ($binding -and "$($binding.HostPort)" -eq "$hostPort") { return $true }
+        }
+    }
+    return $false
+}
+
+# Name of the volume a container has mounted at $destination, so a container can
+# be recreated without orphaning the data it was holding.
+function Get-ContainerVolumeName($name, $destination) {
+    $json = docker inspect $name --format '{{json .Mounts}}' 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json) -or $json -eq 'null') { return $null }
+    try { $mounts = $json | ConvertFrom-Json } catch { return $null }
+    return (@($mounts) |
+        Where-Object { $_.Type -eq 'volume' -and $_.Destination -eq $destination } |
+        Select-Object -First 1).Name
+}
+
 function Wait-Port($port, $timeoutSec) {
     $start = Get-Date
     while (((Get-Date) - $start).TotalSeconds -lt $timeoutSec) {

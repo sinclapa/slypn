@@ -1148,12 +1148,24 @@ if (-not $SkipLocal -and $authority -and $spaClientId -and $apiScopeStr) {
         $envLines += 'VITE_FARO_ENV=local'
     }
 
-    # Preserve any non-VITE_ vars already in the file (e.g. VITE_FARO_*).
+    # Carry over any other vars already in the file (e.g. VITE_FARO_APP_NAME),
+    # keyed by name so a key written above is never appended a second time —
+    # matching on prefixes alone let VITE_FARO_URL/VITE_FARO_ENV pile up one
+    # extra copy per run. Later occurrences win, as they do for Vite.
     if (Test-Path $envLocalPath) {
-        $existing = Get-Content $envLocalPath |
-            Where-Object { $_ -notmatch '^#' -and $_ -match '=' } |
-            Where-Object { $_ -notmatch '^VITE_MSAL_|^VITE_API_SCOPE|^VITE_DEV_SKIP_AUTH' }
-        if ($existing) { $envLines += $existing }
+        $writtenKeys = [System.Collections.Generic.HashSet[string]]::new(
+            [string[]] @($envLines |
+                Where-Object { $_ -notmatch '^\s*#' -and $_ -match '=' } |
+                ForEach-Object { ($_ -split '=', 2)[0].Trim() }),
+            [StringComparer]::OrdinalIgnoreCase)
+        $carried = [ordered]@{}
+        foreach ($line in @(Get-Content $envLocalPath)) {
+            if ($line -match '^\s*#' -or $line -notmatch '=') { continue }
+            $key = ($line -split '=', 2)[0].Trim()
+            if ($writtenKeys.Contains($key)) { continue }
+            $carried[$key] = $line.Trim()
+        }
+        if ($carried.Count -gt 0) { $envLines += @($carried.Values) }
     }
 
     $envLines | Set-Content $envLocalPath -Encoding UTF8

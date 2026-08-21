@@ -10,6 +10,10 @@
   (npm) and API (dotnet) dependencies, and copies local.settings.sample.json
   to local.settings.json if not already present.
 
+  Web dependencies are stamped with a hash of package.json + package-lock.json,
+  so a re-run skips `npm ci` entirely when neither has changed. Pass -Reinstall
+  to force the clean reinstall.
+
   Local auth mode: infra/setup.ps1 configures the *capability* to sign in with
   Entra locally (it writes the MSAL credentials); this script owns the on/off
   toggle. Pass -EntraLogin to flip it:
@@ -28,12 +32,18 @@
 
 .EXAMPLE
   .\scripts\setupLocal.ps1 -EntraLogin on  # switch to real Entra sign-in
+
+.EXAMPLE
+  .\scripts\setupLocal.ps1 -Reinstall     # force a clean `npm ci` reinstall
 #>
 
 [CmdletBinding()]
 param(
     [ValidateSet('on', 'off')]
-    [string] $EntraLogin
+    [string] $EntraLogin,
+
+    # Force `npm ci` even when the dependency stamp says node_modules is current.
+    [switch] $Reinstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -111,13 +121,43 @@ if ($EntraLogin) {
     return
 }
 
-# Refuse to run while the dev stack is up — `npm ci` wipes node_modules and would
-# fail (EPERM) trying to delete files the running Vite/func processes have open.
-foreach ($p in @($WebPort, $ApiPort)) {
-    if (Test-Port $p) {
-        Show-Err "Port $p is in use — the dev stack looks like it's running."
-        Show-Err 'Stop it first:  .\scripts\stopLocal.ps1   (then re-run setupLocal.ps1)'
-        exit 1
+# --- are the web dependencies already current? ------------------------------
+# `npm ci` always deletes node_modules and reinstalls from the lockfile, which
+# costs minutes for a tree this size. Stamp each successful install with a hash
+# of package.json + package-lock.json and skip the reinstall while both are
+# unchanged. The stamp lives inside node_modules, so wiping that folder (or an
+# interrupted install) correctly forces a fresh one.
+$webPkgPath   = Join-Path $WebDir 'package.json'
+$webLockPath  = Join-Path $WebDir 'package-lock.json'
+$webModules   = Join-Path $WebDir 'node_modules'
+$webStampPath = Join-Path $webModules '.slypn-deps-stamp'
+
+function Get-WebDepsHash {
+    $parts = foreach ($file in @($webPkgPath, $webLockPath)) {
+        if (Test-Path $file) { (Get-FileHash $file -Algorithm SHA256).Hash } else { 'missing' }
+    }
+    return ($parts -join '-')
+}
+
+$webDepsHash = Get-WebDepsHash
+$needsNpmInstall =
+    $Reinstall -or
+    -not (Test-Path $webModules) -or
+    -not (Test-Path $webStampPath) -or
+    ((Get-Content $webStampPath -Raw).Trim() -ne $webDepsHash)
+
+# Refuse to run while the dev stack is up ONLY when we are about to reinstall —
+# `npm ci` wipes node_modules and would fail (EPERM) trying to delete files the
+# running Vite/func processes have open. When the stamp says the tree is already
+# current there is nothing to wipe, so the script is safe against a live stack.
+if ($needsNpmInstall) {
+    foreach ($p in @($WebPort, $ApiPort)) {
+        if (Test-Port $p) {
+            Show-Err "Port $p is in use — the dev stack looks like it's running."
+            Show-Err 'Web dependencies changed, so this run needs a clean npm ci.'
+            Show-Err 'Stop it first:  .\scripts\stopLocal.ps1   (then re-run setupLocal.ps1)'
+            exit 1
+        }
     }
 }
 
@@ -135,6 +175,12 @@ if ($major -lt 20) {
     exit 1
 }
 Show-Ok "Node $nodeVersion"
+# Some dependencies (undici, eslint-visitor-keys) declare engines newer than
+# this; npm only warns (EBADENGINE) and installs anyway, but CI runs latest 22.x.
+$nodeParts = ($nodeVersion.TrimStart('v') -split '\.')
+if ($major -eq 22 -and [int]$nodeParts[1] -lt 19) {
+    Show-Warn "Node $nodeVersion triggers npm EBADENGINE warnings — 22.19+ (or 24) matches CI and silences them."
+}
 
 # --- .NET 8 SDK -------------------------------------------------------------
 Show-Step 'Checking .NET SDK'
@@ -204,20 +250,34 @@ Show-Step 'Checking Docker (for Azurite)'
 if (Test-DockerRunning) {
     $dockerVersion = docker version --format '{{.Server.Version}}' 2>$null
     Show-Ok "Docker $dockerVersion"
+    # Flag the failure mode startLocal.ps1 now repairs, so it is visible here too.
+    if ((Test-ContainerExists $AzuriteContainer) -and
+        -not (Test-ContainerPublishesPort $AzuriteContainer $AzuriteBlobPort)) {
+        Show-Warn "$AzuriteContainer exists but publishes no host port $AzuriteBlobPort."
+        Show-Warn 'startLocal.ps1 will recreate it (keeping its data volume) on the next run.'
+    }
 } else {
     Show-Warn 'Docker daemon is not reachable. Start Docker Desktop before running scripts/startLocal.ps1.'
     Show-Warn 'Without Docker, startLocal.ps1 must be invoked with -NoEmulators (API will skip Table/Blob storage).'
 }
 
 # --- web deps ---------------------------------------------------------------
-Show-Step "npm ci in $WebDir"
-Push-Location $WebDir
-try {
-    npm ci --no-fund --no-audit
-    if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
-    Show-Ok 'web dependencies installed'
+Show-Step "Web dependencies in $WebDir"
+if (-not $needsNpmInstall) {
+    Show-Ok 'Already current — package.json and package-lock.json are unchanged since the last install.'
+    Write-Host '    Force a clean reinstall with: .\scripts\setupLocal.ps1 -Reinstall' -ForegroundColor DarkGray
+} else {
+    Push-Location $WebDir
+    try {
+        npm ci --no-fund --no-audit
+        if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+        # Re-hash after the install so the stamp reflects what npm actually left
+        # on disk, then write it last — a failed install leaves no stamp.
+        Get-WebDepsHash | Set-Content $webStampPath -Encoding UTF8
+        Show-Ok 'web dependencies installed'
+    }
+    finally { Pop-Location }
 }
-finally { Pop-Location }
 
 # --- API deps ---------------------------------------------------------------
 Show-Step "dotnet restore in $ApiDir"
@@ -264,8 +324,26 @@ function Get-EnvLocalVar([string]$name) {
     return ''
 }
 
-$currentUrl     = Get-EnvLocalVar 'VITE_FARO_URL'
-$currentAppName = Get-EnvLocalVar 'VITE_FARO_APP_NAME'
+# infra/setup.ps1 collects the Faro settings into infra/secrets.json but only
+# mirrors VITE_FARO_URL/VITE_FARO_ENV into .env.local — the FARO_SOURCEMAP_*
+# set goes to GitHub secrets instead. Fall back to secrets.json so re-running
+# shows what is already configured rather than an empty prompt.
+$secretsPath = Join-Path $RepoRoot 'infra/secrets.json'
+$secrets = @{}
+if (Test-Path $secretsPath) {
+    try { $secrets = Get-Content $secretsPath -Raw | ConvertFrom-Json -AsHashtable }
+    catch { Show-Warn "Could not read $secretsPath — prompt defaults may be blank." }
+}
+
+function Get-FaroCurrent([string] $envName, [string] $secretName) {
+    $value = Get-EnvLocalVar $envName
+    if (-not [string]::IsNullOrWhiteSpace($value)) { return $value }
+    if ($secretName -and $secrets.Contains($secretName)) { return [string] $secrets[$secretName] }
+    return ''
+}
+
+$currentUrl     = Get-FaroCurrent 'VITE_FARO_URL'      'faroUrl'
+$currentAppName = Get-FaroCurrent 'VITE_FARO_APP_NAME' ''
 
 $hintUrl     = if ($currentUrl)     { " [$currentUrl]" }     else { '' }
 $hintAppName = if ($currentAppName) { " [$currentAppName]" } else { ' [slypn-web]' }
@@ -276,10 +354,10 @@ $inputAppName = Read-Host "  ? Faro app name$hintAppName"
 $faroUrl     = if (-not [string]::IsNullOrWhiteSpace($inputUrl))     { $inputUrl.Trim() }     else { $currentUrl }
 $faroAppName = if (-not [string]::IsNullOrWhiteSpace($inputAppName)) { $inputAppName.Trim() } else { if ($currentAppName) { $currentAppName } else { 'slypn-web' } }
 
-$currentSmEndpoint = Get-EnvLocalVar 'FARO_SOURCEMAP_ENDPOINT'
-$currentSmAppId    = Get-EnvLocalVar 'FARO_SOURCEMAP_APP_ID'
-$currentSmStackId  = Get-EnvLocalVar 'FARO_SOURCEMAP_STACK_ID'
-$currentSmApiKey   = Get-EnvLocalVar 'FARO_SOURCEMAP_API_KEY'
+$currentSmEndpoint = Get-FaroCurrent 'FARO_SOURCEMAP_ENDPOINT' 'faroSourcemapEndpoint'
+$currentSmAppId    = Get-FaroCurrent 'FARO_SOURCEMAP_APP_ID'   'faroSourcemapAppId'
+$currentSmStackId  = Get-FaroCurrent 'FARO_SOURCEMAP_STACK_ID' 'faroSourcemapStackId'
+$currentSmApiKey   = Get-FaroCurrent 'FARO_SOURCEMAP_API_KEY'  'faroSourcemapApiKey'
 
 $hintSmEndpoint = if ($currentSmEndpoint) { " [$currentSmEndpoint]" } else { '' }
 $hintSmAppId    = if ($currentSmAppId)    { " [$currentSmAppId]" }    else { '' }
@@ -311,8 +389,18 @@ if (-not [string]::IsNullOrWhiteSpace($faroSmApiKey))   { $faroKvPairs.Add([pscu
 if ($faroKvPairs.Count -gt 0) {
     $lines = if (Test-Path $envLocalPath) { @(Get-Content $envLocalPath) } else { @('# Created by scripts/setupLocal.ps1') }
     foreach ($kv in $faroKvPairs) {
-        if ($lines -match "^\s*$($kv.Key)\s*=") {
-            $lines = $lines -replace "^\s*$($kv.Key)\s*=.*", "$($kv.Key)=$($kv.Value)"
+        $pattern = "^\s*$([regex]::Escape($kv.Key))\s*="
+        if ($lines -match $pattern) {
+            # Rewrite the first occurrence and drop the rest, so a file that
+            # earlier runs left with duplicate keys is repaired rather than
+            # having every copy rewritten to the same value.
+            $written = $false
+            $lines = @(foreach ($line in $lines) {
+                if ($line -notmatch $pattern) { $line; continue }
+                if ($written) { continue }
+                $written = $true
+                "$($kv.Key)=$($kv.Value)"
+            })
         } else {
             $lines += "$($kv.Key)=$($kv.Value)"
         }
