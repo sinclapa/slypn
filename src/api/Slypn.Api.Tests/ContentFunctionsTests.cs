@@ -1,6 +1,7 @@
 using Azure;
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Slypn.Api.Functions;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
@@ -264,7 +265,7 @@ public class ContentFunctionsTests
 
     // ── Newsletters ──────────────────────────────────────────────────────────────
     private static NewslettersFunctions NewslettersFn(FakeContentRepository repo) =>
-        new(repo, NullLogger<NewslettersFunctions>.Instance);
+        new(repo, NullLogger<NewslettersFunctions>.Instance, Options.Create(new StorageOptions()));
 
     [Fact]
     public async Task Newsletters_create_412_when_storage_fails()
@@ -464,7 +465,13 @@ public class ContentFunctionsTests
         const string boundary = "testboundary";
         var body = $"--{boundary}\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--{boundary}--\r\n";
         var req = TestHttp.Raw(new TestFunctionContext(), "PUT", "http://localhost/api/newsletters/n1/file", body,
-            new Dictionary<string, string> { ["Content-Type"] = $"multipart/form-data; boundary={boundary}" });
+            new Dictionary<string, string>
+            {
+                ["Content-Type"] = $"multipart/form-data; boundary={boundary}",
+                // Real clients declare a length, and the upload endpoints now
+                // require one so an oversized body is refused before buffering.
+                ["Content-Length"] = System.Text.Encoding.UTF8.GetByteCount(body).ToString(),
+            });
         var resp = (TestHttpResponseData)await NewslettersFn(new FakeContentRepository()).UploadFile(req, "n1", Ct);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
@@ -516,7 +523,13 @@ public class ContentFunctionsTests
         var body = $"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{fileName}\"\r\nContent-Type: {mimeType}\r\n\r\n{content}\r\n--{boundary}--\r\n";
         return TestHttp.Raw(
             new TestFunctionContext(), "PUT", $"http://localhost/api/newsletters/{id}/file", body,
-            new Dictionary<string, string> { ["Content-Type"] = $"multipart/form-data; boundary={boundary}" });
+            new Dictionary<string, string>
+            {
+                ["Content-Type"] = $"multipart/form-data; boundary={boundary}",
+                // Real clients declare a length, and the upload endpoints now
+                // require one so an oversized body is refused before buffering.
+                ["Content-Length"] = System.Text.Encoding.UTF8.GetByteCount(body).ToString(),
+            });
     }
 
     [Fact]

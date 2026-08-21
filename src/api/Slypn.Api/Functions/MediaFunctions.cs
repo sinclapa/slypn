@@ -3,13 +3,14 @@ using HttpMultipartParser;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Slypn.Api.Services;
 using Slypn.Api.Infrastructure;
 
 namespace Slypn.Api.Functions;
 
-public sealed class MediaFunctions(IBlobService blob)
+public sealed class MediaFunctions(IBlobService blob, IOptions<StorageOptions> storage)
 {
     /// <summary>
     /// POST /api/media — multipart/form-data with a single "file" part.
@@ -40,6 +41,13 @@ public sealed class MediaFunctions(IBlobService blob)
         {
             return await Reject(req, HttpStatusCode.UnsupportedMediaType,
                 "Expected multipart/form-data with a 'file' part.");
+        }
+
+        // Before ParseAsync, which would otherwise buffer the whole body into
+        // memory and only then let the content-type allowlist reject it.
+        if (UploadLimits.Validate(req, storage.Value.MaxMediaUploadBytes) is { } refusal)
+        {
+            return await Reject(req, refusal.Code, refusal.Message);
         }
 
         MultipartFormDataParser parsed;
