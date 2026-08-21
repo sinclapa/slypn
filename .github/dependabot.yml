@@ -1,0 +1,17 @@
+version: 2
+
+updates:
+  # Actions are pinned to commit SHAs so a tag cannot be repointed under us.
+  # That trades a supply-chain risk for a staleness one — a pinned SHA never
+  # picks up a security fix on its own — so Dependabot keeps the pins moving
+  # and rewrites the trailing version comment along with them.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      # One PR a week rather than one per action.
+      actions:
+        patterns: ["*"]

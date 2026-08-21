@@ -42,7 +42,7 @@ jobs:
       # Either way this job never checks out the PR head, so fork code is never
       # what runs here; the literal just makes that obvious to a reader and a
       # scanner alike. Revisit if the trigger ever gains a second base branch.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           submodules: false

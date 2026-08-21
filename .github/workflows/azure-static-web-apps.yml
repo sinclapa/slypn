@@ -78,7 +78,7 @@ jobs:
       # workflow_run runs against the default branch, which may already have
       # moved on. Check out the commit CI actually tested so what ships is what
       # passed. For pull_request this is the usual refs/pull/N/merge.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           submodules: true
@@ -146,14 +146,14 @@ jobs:
         shell: bash
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: src/web/package-lock.json
 
       - name: Set up .NET 8
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: '8.0.x'
 
