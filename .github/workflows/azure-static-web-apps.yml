@@ -13,6 +13,10 @@ name: Azure Static Web Apps deploy
 on:
   push:
     branches: [main]
+  # Nightly safety net for the orphan reaper, so a quiet period on main cannot
+  # let dead preview environments sit on the Free-tier cap.
+  schedule:
+    - cron: '17 4 * * *'
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches: [main]
@@ -27,7 +31,10 @@ concurrency:
   # PR, leaving the preview environment never torn down. Multiple pushes to
   # the same branch/PR still cancel the earlier in-progress run as intended.
   group: swa-${{ github.ref }}-${{ github.event_name }}-${{ github.event.action == 'closed' && 'close' || 'build' }}
-  cancel-in-progress: true
+  # Builds still supersede each other, but a teardown must never be cancelled:
+  # PR #166's close run was cancelled mid-flight and its preview environment
+  # then sat there consuming a Free-tier slot until it was deleted by hand.
+  cancel-in-progress: ${{ github.event.action != 'closed' }}
 
 jobs:
   build_and_deploy:
@@ -247,3 +254,104 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: close
+
+      # The close action reports success without checking that anything was
+      # actually removed, and it loses a race it cannot see: for PR #162 it ran
+      # at 23:12:57, found no environment, exited green — and an in-flight
+      # preview deploy created environment 162 ten seconds later, where it sat
+      # in a Failed state consuming a slot. Deliberately splitting close into
+      # its own concurrency group (so it cannot cancel a build) is what allows
+      # a build to outlive it, so watch for a late arrival rather than assuming
+      # the close won. Deleting is idempotent, so a slow first appearance and a
+      # close that genuinely worked both end in the same state.
+      - name: Verify the preview environment is really gone
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          env_present() {
+            local count
+            count=$(az staticwebapp environment list               --name swa-slypn-prod --resource-group rg-slypn-prod               --query "[?name=='$PR_NUMBER'] | length(@)" -o tsv)
+            [ "$count" != "0" ]
+          }
+
+          absent_streak=0
+          for attempt in $(seq 1 10); do
+            if env_present; then
+              echo "attempt $attempt/10: environment $PR_NUMBER present — deleting."
+              az staticwebapp environment delete                 --name swa-slypn-prod --resource-group rg-slypn-prod                 --environment-name "$PR_NUMBER" --yes
+              absent_streak=0
+            else
+              absent_streak=$((absent_streak + 1))
+              echo "attempt $attempt/10: no environment for PR #$PR_NUMBER (absent x$absent_streak)."
+              # Gone for three consecutive checks (~30s). A deploy still in
+              # flight when the PR closed would have surfaced by now, so stop
+              # rather than burn the full window on every well-behaved close.
+              if [ "$absent_streak" -ge 3 ]; then break; fi
+            fi
+            sleep 15
+          done
+
+          if env_present; then
+            echo "::error::Environment $PR_NUMBER survived every delete attempt — free the slot by hand."
+            exit 1
+          fi
+          echo "PR #$PR_NUMBER has no preview environment."
+
+  # Backstop for anything the per-PR teardown misses: a cancelled close run, a
+  # deploy that outlived it, a PR closed while Actions was down. Reconciles the
+  # whole list against the open PRs rather than trusting any single event, so
+  # the Free-tier cap cannot silently fill up again the way it did with 162 and
+  # 166 — both orphaned by closed PRs and only noticed when a new PR was blocked.
+  reap_orphan_previews:
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    name: Reap orphaned preview environments
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete preview environments with no open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # "default" is production and is never a preview environment.
+          ENVS=$(az staticwebapp environment list             --name swa-slypn-prod --resource-group rg-slypn-prod             --query "[?name!='default'].name" -o tsv)
+
+          if [ -z "$ENVS" ]; then
+            echo "No preview environments exist."
+            exit 0
+          fi
+
+          OPEN_PRS=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open             --limit 200 --json number --jq '.[].number')
+          echo "Open PRs: ${OPEN_PRS:-none}"
+
+          REAPED=0
+          for env in $ENVS; do
+            # Only ever touch environments named after a PR number; anything
+            # else was created by hand and is not ours to delete.
+            if ! echo "$env" | grep -qE '^[0-9]+$'; then
+              echo "Skipping non-PR environment '$env'."
+              continue
+            fi
+            if echo "$OPEN_PRS" | grep -qx "$env"; then
+              echo "Keeping $env — PR #$env is still open."
+              continue
+            fi
+            echo "Reaping $env — PR #$env is not open."
+            az staticwebapp environment delete               --name swa-slypn-prod --resource-group rg-slypn-prod               --environment-name "$env" --yes
+            REAPED=$((REAPED + 1))
+          done
+
+          echo "Reaped $REAPED orphaned preview environment(s)."
