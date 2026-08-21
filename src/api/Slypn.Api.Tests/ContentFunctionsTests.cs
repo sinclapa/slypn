@@ -587,6 +587,54 @@ public class ContentFunctionsTests
         Assert.DoesNotContain("Admin", resp.ReadBodyAsString());
     }
 
+    // SEC-1: a newsletter subscriber has a row in the members table but is not a
+    // member. Claiming it would link their OID and flip the row to "active", so they
+    // would appear in Member Management as though an admin had invited them.
+    [Fact]
+    public async Task Me_does_not_claim_a_subscriber_row_for_the_caller()
+    {
+        var repo = new FakeContentRepository
+        {
+            MemberByOid   = null,
+            MemberByEmail = new Member("s1", "sub@x.com", "sub@x.com", Array.Empty<string>(), "subscribed", DateTime.UtcNow),
+        };
+        var fn = MeFn(repo);
+        var ctx = new TestFunctionContext().WithUser("oid-attacker", "Mallory").WithEmail("sub@x.com");
+
+        var resp = (TestHttpResponseData)await fn.Get(TestHttp.Get(ctx, "http://localhost/api/me"), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        // The re-link must not even be attempted. ThrowOnWrite would be swallowed by the
+        // catch inside TryRelinkByEmailAsync, so count the attempt instead.
+        Assert.Equal(0, repo.MemberUpserts);
+
+        // Status null, not "subscribed": the caller gets no profile at all rather than the
+        // subscriber's row echoed back, which is what distinguishes fixed from broken here.
+        var body = resp.ReadBodyAsString();
+        Assert.Contains("\"status\":null", body);
+        Assert.DoesNotContain("subscribed", body);
+    }
+
+    [Fact]
+    public async Task Me_still_relinks_an_invited_member_whose_stored_oid_is_stale()
+    {
+        // The case the re-link exists for: personal Microsoft accounts are issued a
+        // different oid than az-cli reports, so a seeded record misses the oid lookup.
+        var repo = new FakeContentRepository
+        {
+            MemberByOid   = null,
+            MemberByEmail = new Member("m1", "admin@x.com", "Placeholder", new[] { "Admin" }, "invited", DateTime.UtcNow, Oid: "stale-oid"),
+        };
+        var fn = MeFn(repo);
+        var ctx = new TestFunctionContext().WithUser("oid-real", "Ada").WithEmail("admin@x.com");
+
+        var resp = (TestHttpResponseData)await fn.Get(TestHttp.Get(ctx, "http://localhost/api/me"), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Contains("Admin", resp.ReadBodyAsString());
+    }
+
     [Fact]
     public async Task Me_returns_empty_when_member_not_found_by_oid_or_email()
     {

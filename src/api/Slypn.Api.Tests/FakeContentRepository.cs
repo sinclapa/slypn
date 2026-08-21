@@ -153,7 +153,16 @@ internal sealed class FakeContentRepository : IContentRepository
         if (ThrowOnRead is not null) throw ThrowOnRead;
         return Task.FromResult<IReadOnlyList<Member>>(Members);
     }
-    public Task<Member> UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct) => Task.FromResult(Guard(member));
+    /// <summary>Count of attempted member upserts. ThrowOnWrite is no use for asserting
+    /// "nothing was written" on paths that catch their own exceptions, such as the
+    /// re-link in MeSelfFunctions — this records the attempt itself.</summary>
+    public int MemberUpserts { get; private set; }
+
+    public Task<Member> UpsertMemberAsync(Member member, string? ifMatch, CancellationToken ct)
+    {
+        MemberUpserts++;
+        return Task.FromResult(Guard(member));
+    }
     public Task DeleteMemberAsync(string id, string? ifMatch, CancellationToken ct) => Guard(Task.CompletedTask);
 
     public Task<Draft?> GetDraftAsync(string id, string authorId, CancellationToken ct)
