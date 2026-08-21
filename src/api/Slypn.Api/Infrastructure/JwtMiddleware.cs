@@ -77,7 +77,10 @@ public sealed class JwtMiddleware(
         // member persona correctly gets 403 on Admin-only endpoints.
         if (options.Value.SkipAuth)
         {
-            logger.LogWarning("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
+            // Critical, not Warning: every request served this way is unauthenticated Admin.
+            // StartupGuards should have stopped the host booting in any environment where
+            // this could be reached, so seeing this outside local dev means that failed.
+            logger.LogCritical("AzureAd:SkipAuth=true — bypassing JWT validation. DO NOT use in production.");
             return EnforceRole(attr, DevPrincipal(httpReq));
         }
 

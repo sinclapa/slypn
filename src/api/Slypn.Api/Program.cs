@@ -53,6 +53,14 @@ var host = new HostBuilder()
     })
     .ConfigureServices((context, services) =>
     {
+        // Before anything is wired up: refuse to boot if the auth bypass is on somewhere
+        // it could be reached. Throwing here propagates out of Build(), so a misconfigured
+        // deployment fails to start instead of quietly serving Admin to anyone who asks.
+        StartupGuards.EnsureSkipAuthIsLocalOnly(
+            skipAuth: context.Configuration.GetValue<bool>($"{EntraOptions.SectionName}:SkipAuth"),
+            otelEnv:  context.Configuration[$"{OtelOptions.SectionName}:Env"],
+            readEnvironmentVariable: Environment.GetEnvironmentVariable);
+
         services.Configure<WorkerOptions>(options =>
         {
             options.Serializer = new JsonObjectSerializer(new JsonSerializerOptions(JsonSerializerDefaults.Web));
