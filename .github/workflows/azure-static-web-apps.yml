@@ -39,7 +39,13 @@ concurrency:
   # run could be — and was — cancelled by a build_and_deploy run for the same
   # PR, leaving the preview environment never torn down. Multiple pushes to
   # the same branch/PR still cancel the earlier in-progress run as intended.
-  group: swa-${{ github.ref }}-${{ github.event_name }}-${{ github.event.action == 'closed' && 'close' || 'build' }}
+  #
+  # The conclusion is part of the key because the gate that rejects a failed CI
+  # run lives on the job: the run itself still starts, joins this group, and
+  # would cancel an in-flight deployment before skipping its only real job —
+  # taking out a good production deploy and starting nothing in its place.
+  # Keying on the conclusion keeps non-success completions in their own group.
+  group: swa-${{ github.ref }}-${{ github.event_name }}-${{ github.event.action == 'closed' && 'close' || 'build' }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion || '' }}
   # Builds still supersede each other, but a teardown must never be cancelled:
   # PR #166's close run was cancelled mid-flight and its preview environment
   # then sat there consuming a Free-tier slot until it was deleted by hand.
@@ -416,20 +422,29 @@ jobs:
           # 170 was mid-delete when this check first ran, and the job failed over
           # work that had actually succeeded. Poll until the listing agrees
           # rather than reading it once.
+          # Narrow $STUCK to those still listed.
+          prune_stuck() {
+            local remaining pending env
+            remaining=$(az staticwebapp environment list               --name swa-slypn-prod --resource-group rg-slypn-prod               --query "[?name!='default'].name" -o tsv)
+            pending=""
+            for env in $STUCK; do
+              if echo "$remaining" | grep -qx "$env"; then pending="$pending $env"; fi
+            done
+            STUCK="$pending"
+          }
+
           STUCK="$REAPED"
           for attempt in $(seq 1 8); do
-            REMAINING=$(az staticwebapp environment list               --name swa-slypn-prod --resource-group rg-slypn-prod               --query "[?name!='default'].name" -o tsv)
-
-            PENDING=""
-            for env in $STUCK; do
-              if echo "$REMAINING" | grep -qx "$env"; then PENDING="$PENDING $env"; fi
-            done
-            STUCK="$PENDING"
-
+            prune_stuck
             if [ -z "$STUCK" ]; then break; fi
             echo "attempt $attempt/8: still being deleted:$STUCK"
             sleep 15
           done
+
+          # The loop decides on a listing taken *before* its last sleep, so a
+          # delete that lands during those final 15s would still be reported as
+          # surviving. Re-check once more before failing.
+          if [ -n "$STUCK" ]; then prune_stuck; fi
 
           if [ -n "$STUCK" ]; then
             echo "::error::Preview environment(s) survived deletion:$STUCK"
