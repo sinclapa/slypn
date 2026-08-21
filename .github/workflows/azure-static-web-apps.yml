@@ -1,7 +1,9 @@
 name: Azure Static Web Apps deploy
 
-# Production deploys on push to main; PR previews on every open / update.
-# SWA closes the preview environment when the PR is closed.
+# Production deploys after CI passes on main; PR previews on every open / update.
+# Teardown of a closed PR's environment lives in swa-close-preview.yml, kept out
+# of this file because this one is reachable via workflow_run and so runs with
+# the repository's secrets.
 #
 # Required repo secrets (set via .\infra\setup.ps1):
 #   AZURE_STATIC_WEB_APPS_API_TOKEN — SWA deployment token
@@ -26,30 +28,26 @@ on:
   # let dead preview environments sit on the Free-tier cap.
   schedule:
     - cron: '17 4 * * *'
+  # `closed` belongs to swa-close-preview.yml, not here.
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened]
     branches: [main]
 
 concurrency:
   # Include the event name so that a push to main and a pull_request event
   # (which share github.ref = refs/heads/main for push, or refs/pull/<N>/merge
   # for every pull_request action) get separate slots and don't cancel each
-  # other. Also split "closed" into its own slot: opened/synchronize/reopened
-  # all share the same ref as closed, so without this a close_pr_environment
-  # run could be — and was — cancelled by a build_and_deploy run for the same
-  # PR, leaving the preview environment never torn down. Multiple pushes to
-  # the same branch/PR still cancel the earlier in-progress run as intended.
+  # other. Superseding an earlier run for the same branch or PR is intended;
+  # with teardown now in its own workflow there is nothing here that must
+  # survive cancellation.
   #
   # The conclusion is part of the key because the gate that rejects a failed CI
   # run lives on the job: the run itself still starts, joins this group, and
   # would cancel an in-flight deployment before skipping its only real job —
   # taking out a good production deploy and starting nothing in its place.
   # Keying on the conclusion keeps non-success completions in their own group.
-  group: swa-${{ github.ref }}-${{ github.event_name }}-${{ github.event.action == 'closed' && 'close' || 'build' }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion || '' }}
-  # Builds still supersede each other, but a teardown must never be cancelled:
-  # PR #166's close run was cancelled mid-flight and its preview environment
-  # then sat there consuming a Free-tier slot until it was deleted by hand.
-  cancel-in-progress: ${{ github.event.action != 'closed' }}
+  group: swa-${{ github.ref }}-${{ github.event_name }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion || '' }}
+  cancel-in-progress: true
 
 jobs:
   build_and_deploy:
@@ -244,114 +242,6 @@ jobs:
         # the derivation if Azure's preview naming ever changes.
         run: .github/scripts/spa-redirect-uri.sh add "${{ steps.builddeploy.outputs.static_web_app_url }}"
         shell: bash
-
-  close_pr_environment:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    name: Close PR environment
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      # This job did not check out before — it does now because the redirect-URI
-      # cleanup below runs a script from the repo.
-      #
-      # The base branch, not the default refs/pull/N/merge: that ref can be gone by
-      # the time a closed PR is processed, and the cleanup script only ever needs the
-      # version already on main.
-      #
-      # Spelled as a literal rather than github.event.pull_request.base.ref: the
-      # trigger above only fires for pull requests based on main, so the two are
-      # always the same value, and the literal keeps event data out of the
-      # checkout ref entirely — which is what githubactions:S7631 objects to.
-      # Either way this job never checks out the PR head, so fork code is never
-      # what runs here; the literal just makes that obvious to a reader and a
-      # scanner alike. Revisit if the trigger ever gains a second base branch.
-      - uses: actions/checkout@v7
-        with:
-          ref: main
-          submodules: false
-          lfs: false
-
-      - name: Azure login (OIDC)
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Remove PR preview redirect URI
-        env:
-          CIAM_TENANT_ID:     ${{ secrets.CIAM_TENANT_ID }}
-          CIAM_CLIENT_ID:     ${{ secrets.CIAM_CLIENT_ID }}
-          CIAM_CLIENT_SECRET: ${{ secrets.CIAM_CLIENT_SECRET }}
-          SPA_OBJECT_ID:      ${{ secrets.SPA_OBJECT_ID }}
-        # By PR number, not by querying the environment's hostname: that query returned
-        # empty once the environment had already gone, which silently removed nothing
-        # and leaked the redirect URI permanently.
-        run: .github/scripts/spa-redirect-uri.sh remove "${{ github.event.pull_request.number }}"
-        shell: bash
-
-      - name: Close PR environment
-        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          action: close
-
-      # The close action reports success without checking that anything was
-      # actually removed, and it loses a race it cannot see: for PR #162 it ran
-      # at 23:12:57, found no environment, exited green — and an in-flight
-      # preview deploy created environment 162 ten seconds later, where it sat
-      # in a Failed state consuming a slot. Deliberately splitting close into
-      # its own concurrency group (so it cannot cancel a build) is what allows
-      # a build to outlive it, so watch for a late arrival rather than assuming
-      # the close won. Deleting is idempotent, so a slow first appearance and a
-      # close that genuinely worked both end in the same state.
-      - name: Verify the preview environment is really gone
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-
-          # `az staticwebapp environment delete` issues the delete and then polls
-          # Microsoft.Web/locations/staticSitesOperationStatuses, which the CI
-          # service principal cannot read — so it exits non-zero with
-          # AuthorizationFailed *after* the delete has already been accepted.
-          # The environment listing is the real source of truth, and this loop
-          # re-checks it anyway, so ignore the exit code rather than failing a
-          # teardown that actually worked.
-          delete_env() {
-            az staticwebapp environment delete               --name swa-slypn-prod --resource-group rg-slypn-prod               --environment-name "$1" --yes >/dev/null 2>&1 || true
-          }
-
-          env_present() {
-            local count
-            count=$(az staticwebapp environment list               --name swa-slypn-prod --resource-group rg-slypn-prod               --query "[?name=='$PR_NUMBER'] | length(@)" -o tsv)
-            [ "$count" != "0" ]
-          }
-
-          absent_streak=0
-          for attempt in $(seq 1 10); do
-            if env_present; then
-              echo "attempt $attempt/10: environment $PR_NUMBER present — deleting."
-              delete_env "$PR_NUMBER"
-              absent_streak=0
-            else
-              absent_streak=$((absent_streak + 1))
-              echo "attempt $attempt/10: no environment for PR #$PR_NUMBER (absent x$absent_streak)."
-              # Gone for three consecutive checks (~30s). A deploy still in
-              # flight when the PR closed would have surfaced by now, so stop
-              # rather than burn the full window on every well-behaved close.
-              if [ "$absent_streak" -ge 3 ]; then break; fi
-            fi
-            sleep 15
-          done
-
-          if env_present; then
-            echo "::error::Environment $PR_NUMBER survived every delete attempt — free the slot by hand."
-            exit 1
-          fi
-          echo "PR #$PR_NUMBER has no preview environment."
 
   # Backstop for anything the per-PR teardown misses: a cancelled close run, a
   # deploy that outlived it, a PR closed while Actions was down. Reconciles the
