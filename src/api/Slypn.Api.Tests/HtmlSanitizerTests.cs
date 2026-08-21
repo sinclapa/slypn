@@ -90,4 +90,58 @@ public class HtmlSanitizerTests
         Assert.Equal(string.Empty, _sut.Sanitize(""));
         Assert.Equal(string.Empty, _sut.Sanitize("   "));
     }
+
+    // A target="_blank" link hands the opened page a window.opener handle back to
+    // this tab unless rel says otherwise, so the sanitiser forces it rather than
+    // trusting the author to have written it.
+    [Theory]
+    [InlineData("<a href=\"https://x.example\" target=\"_blank\">x</a>")]
+    [InlineData("<a target=\"_blank\" href=\"https://x.example\">x</a>")]
+    [InlineData("<a href=\"https://x.example\" target=\"_BLANK\">x</a>")]
+    public void Sanitize_ForcesNoopenerOnBlankTargets(string html)
+    {
+        var output = _sut.Sanitize(html);
+
+        var rel = RelOf(output);
+        Assert.Contains("noopener", rel, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("noreferrer", rel, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    // Already correct — must not gain a second copy of either token.
+    [InlineData("<a href=\"https://x.example\" target=\"_blank\" rel=\"noopener noreferrer\">x</a>", new[] { "noopener", "noreferrer" })]
+    [InlineData("<a href=\"https://x.example\" target=\"_blank\" rel=\"noopener\">x</a>", new[] { "noopener", "noreferrer" })]
+    // An author's own rel is meaningful and must survive alongside ours.
+    [InlineData("<a href=\"https://x.example\" target=\"_blank\" rel=\"nofollow\">x</a>", new[] { "nofollow", "noopener", "noreferrer" })]
+    public void Sanitize_MergesExistingRelWithoutDuplicating(string html, string[] expected)
+    {
+        var output = _sut.Sanitize(html);
+
+        var tokens = RelOf(output).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(expected.Length, tokens.Length);
+        foreach (var token in expected)
+        {
+            Assert.Single(tokens, t => t.Equals(token, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Theory]
+    // No target, or a target we are not worried about: leave rel alone entirely.
+    [InlineData("<a href=\"https://x.example\">x</a>")]
+    [InlineData("<a href=\"https://x.example\" target=\"_self\">x</a>")]
+    [InlineData("<a href=\"mailto:hello@example.com\">mail</a>")]
+    public void Sanitize_LeavesNonBlankLinksAlone(string html)
+    {
+        var output = _sut.Sanitize(html);
+
+        Assert.DoesNotContain("rel=", output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Value of the first rel attribute, or empty if there isn't one.</summary>
+    private static string RelOf(string html)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            html, "rel=\"(?<rel>[^\"]*)\"", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups["rel"].Value : string.Empty;
+    }
 }
