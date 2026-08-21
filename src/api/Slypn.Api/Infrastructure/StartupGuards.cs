@@ -18,9 +18,15 @@ public static class StartupGuards
     /// <summary>
     /// Variables the Azure App Service / Functions host sets on every instance it runs,
     /// and which nothing sets on a developer machine or a CI runner using Core Tools.
+    ///
+    /// Deliberately NOT WEBSITE_HOSTNAME: Core Tools sets that locally to emulate App
+    /// Service, so treating it as a deployment marker refuses to start every `func start`
+    /// and took the e2e job down with it. The two below were absent in that same run —
+    /// the guard reports the first marker it finds, and it named WEBSITE_HOSTNAME — which
+    /// is what makes them usable discriminators.
     /// </summary>
     private static readonly string[] AzureHostMarkers =
-        ["WEBSITE_INSTANCE_ID", "WEBSITE_SITE_NAME", "WEBSITE_HOSTNAME"];
+        ["WEBSITE_INSTANCE_ID", "WEBSITE_SITE_NAME"];
 
     /// <summary>
     /// Refuse to start when the auth bypass is enabled anywhere it could be reached.

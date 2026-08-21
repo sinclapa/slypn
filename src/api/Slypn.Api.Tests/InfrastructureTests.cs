@@ -115,10 +115,20 @@ public class InfrastructureTests
         Assert.Contains(env, ex.Message);
     }
 
+    [Fact]
+    public void WEBSITE_HOSTNAME_is_not_an_azure_marker()
+    {
+        // Regression guard, and the reason this test exists at all: Core Tools sets
+        // WEBSITE_HOSTNAME locally to emulate App Service, so treating it as a deployment
+        // marker refused to start every `func start` and took the whole e2e job with it.
+        // Do not add it back.
+        StartupGuards.EnsureSkipAuthIsLocalOnly(
+            skipAuth: true, otelEnv: "dev", Env(("WEBSITE_HOSTNAME", "localhost:7071")));
+    }
+
     [Theory]
     [InlineData("WEBSITE_INSTANCE_ID")]
     [InlineData("WEBSITE_SITE_NAME")]
-    [InlineData("WEBSITE_HOSTNAME")]
     public void SkipAuth_refuses_to_start_on_an_azure_host_even_when_env_says_dev(string marker)
     {
         // The PR-preview case, and the reason an environment-name check is not enough on
