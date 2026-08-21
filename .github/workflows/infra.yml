@@ -19,12 +19,18 @@ concurrency:
   group: infra-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege for every job here: nothing in this workflow writes to the
+# repository, so a compromised action or dependency gets a token that can only
+# read. Widen per job if one ever genuinely needs more.
+permissions:
+  contents: read
+
 jobs:
   bicep:
     name: Bicep build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install Bicep CLI
         run: az bicep install
