@@ -270,6 +270,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          # `az staticwebapp environment delete` issues the delete and then polls
+          # Microsoft.Web/locations/staticSitesOperationStatuses, which the CI
+          # service principal cannot read — so it exits non-zero with
+          # AuthorizationFailed *after* the delete has already been accepted.
+          # The environment listing is the real source of truth, and this loop
+          # re-checks it anyway, so ignore the exit code rather than failing a
+          # teardown that actually worked.
+          delete_env() {
+            az staticwebapp environment delete               --name swa-slypn-prod --resource-group rg-slypn-prod               --environment-name "$1" --yes >/dev/null 2>&1 || true
+          }
+
           env_present() {
             local count
             count=$(az staticwebapp environment list               --name swa-slypn-prod --resource-group rg-slypn-prod               --query "[?name=='$PR_NUMBER'] | length(@)" -o tsv)
@@ -280,7 +291,7 @@ jobs:
           for attempt in $(seq 1 10); do
             if env_present; then
               echo "attempt $attempt/10: environment $PR_NUMBER present — deleting."
-              az staticwebapp environment delete                 --name swa-slypn-prod --resource-group rg-slypn-prod                 --environment-name "$PR_NUMBER" --yes
+              delete_env "$PR_NUMBER"
               absent_streak=0
             else
               absent_streak=$((absent_streak + 1))
@@ -337,7 +348,14 @@ jobs:
           OPEN_PRS=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open             --limit 200 --json number --jq '.[].number')
           echo "Open PRs: ${OPEN_PRS:-none}"
 
-          REAPED=0
+          # Same AuthorizationFailed caveat as the teardown step above: the
+          # delete lands, the status poll is refused. Verify by re-listing below
+          # rather than trusting the exit code.
+          delete_env() {
+            az staticwebapp environment delete               --name swa-slypn-prod --resource-group rg-slypn-prod               --environment-name "$1" --yes >/dev/null 2>&1 || true
+          }
+
+          REAPED=""
           for env in $ENVS; do
             # Only ever touch environments named after a PR number; anything
             # else was created by hand and is not ours to delete.
@@ -350,8 +368,26 @@ jobs:
               continue
             fi
             echo "Reaping $env — PR #$env is not open."
-            az staticwebapp environment delete               --name swa-slypn-prod --resource-group rg-slypn-prod               --environment-name "$env" --yes
-            REAPED=$((REAPED + 1))
+            delete_env "$env"
+            REAPED="$REAPED $env"
           done
 
-          echo "Reaped $REAPED orphaned preview environment(s)."
+          if [ -z "$REAPED" ]; then
+            echo "Nothing to reap."
+            exit 0
+          fi
+
+          # Confirm against a fresh listing, so a delete that was refused rather
+          # than merely unpollable still fails the job instead of passing quietly.
+          REMAINING=$(az staticwebapp environment list             --name swa-slypn-prod --resource-group rg-slypn-prod             --query "[?name!='default'].name" -o tsv)
+
+          STUCK=""
+          for env in $REAPED; do
+            if echo "$REMAINING" | grep -qx "$env"; then STUCK="$STUCK $env"; fi
+          done
+
+          if [ -n "$STUCK" ]; then
+            echo "::error::Preview environment(s) survived deletion:$STUCK"
+            exit 1
+          fi
+          echo "Reaped:$REAPED"
