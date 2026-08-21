@@ -48,6 +48,16 @@ internal sealed class TestFunctionContext : FunctionContext
         Items[JwtMiddleware.PrincipalContextKey] = new ClaimsPrincipal(identity);
         return this;
     }
+
+    /// <summary>Add an email claim to the principal from <see cref="WithUser"/>. Separate
+    /// because it cannot be an optional parameter after that method's params array, and only
+    /// the re-link path in MeSelfFunctions reads it.</summary>
+    public TestFunctionContext WithEmail(string email)
+    {
+        if (Items[JwtMiddleware.PrincipalContextKey] is ClaimsPrincipal { Identity: ClaimsIdentity id })
+            id.AddClaim(new Claim("email", email));
+        return this;
+    }
 }
 
 internal sealed class TestHttpCookies : HttpCookies
