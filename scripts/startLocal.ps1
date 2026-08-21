@@ -59,6 +59,25 @@ if (-not $NoEmulators) {
         exit 1
     }
 
+    # Creates the container with the port publishing baked in. $DataVolume lets a
+    # recreate reuse the previous container's /data volume so seeded blobs and
+    # tables survive; omit it and Docker allocates a fresh anonymous volume.
+    function New-AzuriteContainer([string] $DataVolume) {
+        $runArgs = @(
+            'run', '-d', '--name', $AzuriteContainer,
+            '-p', "${AzuriteBlobPort}:10000",
+            '-p', "${AzuriteQueuePort}:10001",
+            '-p', "${AzuriteTablePort}:10002"
+        )
+        if ($DataVolume) { $runArgs += @('-v', "${DataVolume}:/data") }
+        $runArgs += $AzuriteImage
+        docker @runArgs | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Show-Err "Failed to create $AzuriteContainer. See the docker output above."
+            exit 1
+        }
+    }
+
     Show-Step 'Ensuring Azurite container'
     if (Test-ContainerRunning $AzuriteContainer) {
         Show-Ok "$AzuriteContainer already running"
@@ -66,19 +85,30 @@ if (-not $NoEmulators) {
         docker start $AzuriteContainer | Out-Null
         Show-Ok "$AzuriteContainer started"
     } else {
-        docker run -d --name $AzuriteContainer `
-            -p "${AzuriteBlobPort}:10000" `
-            -p "${AzuriteQueuePort}:10001" `
-            -p "${AzuriteTablePort}:10002" `
-            $AzuriteImage | Out-Null
+        New-AzuriteContainer
         Show-Ok "$AzuriteContainer created"
     }
-    if (-not (Wait-Port $AzuriteBlobPort 30)) {
-        Show-Err "Azurite blob port $AzuriteBlobPort did not come up in 30s. See: docker logs $AzuriteContainer"
-        exit 1
+
+    # A running container is not the same as a reachable one: an existing
+    # container can come back from `docker start` publishing nothing, which no
+    # amount of restarting fixes. Detect that and rebuild it around the same data
+    # volume, rather than waiting 30s to fail with a misleading message.
+    if (-not (Test-ContainerPublishesPort $AzuriteContainer $AzuriteBlobPort)) {
+        Show-Warn "$AzuriteContainer is not publishing host port $AzuriteBlobPort — Docker never established its bindings."
+        Show-Warn 'Port publishing is fixed at create time, so recreating the container is the only fix.'
+        $dataVolume = Get-ContainerVolumeName $AzuriteContainer '/data'
+        if ($dataVolume) { Show-Warn "Reusing data volume $dataVolume so seeded data survives." }
+        docker rm -f $AzuriteContainer | Out-Null
+        New-AzuriteContainer -DataVolume $dataVolume
+        Show-Ok "$AzuriteContainer recreated with ports $AzuriteBlobPort-$AzuriteTablePort published"
     }
-    if (-not (Wait-Port $AzuriteTablePort 30)) {
-        Show-Err "Azurite table port $AzuriteTablePort did not come up in 30s. See: docker logs $AzuriteContainer"
+
+    foreach ($svc in @(@{ Name = 'blob'; Port = $AzuriteBlobPort }, @{ Name = 'table'; Port = $AzuriteTablePort })) {
+        if (Wait-Port $svc.Port 30) { continue }
+        Show-Err "Azurite $($svc.Name) port $($svc.Port) did not come up in 30s."
+        Show-Err "Container status: $(docker ps -a --filter "name=^/$AzuriteContainer$" --format '{{.Status}} | ports: {{.Ports}}')"
+        Show-Err "Logs:  docker logs $AzuriteContainer"
+        Show-Err "Rebuild from scratch (loses seeded data):  .\scripts\cleanLocal.ps1"
         exit 1
     }
     Show-Ok "Azurite ready on http://127.0.0.1:$AzuriteBlobPort/ (blob) + :$AzuriteTablePort (table)"
