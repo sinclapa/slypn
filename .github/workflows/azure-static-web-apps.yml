@@ -194,8 +194,13 @@ jobs:
           VITE_MSAL_AUTHORITY: ${{ secrets.VITE_MSAL_AUTHORITY }}
           VITE_MSAL_CLIENT_ID: ${{ secrets.VITE_MSAL_CLIENT_ID }}
           VITE_API_SCOPE:      ${{ secrets.VITE_API_SCOPE }}
-          # Faro frontend observability — URL stored as secret (client-side but kept out of source).
-          # VITE_FARO_ENV: push to main → prod, PR preview builds → dev.
+          # Faro frontend observability. VITE_FARO_URL lives in repo secrets for
+          # config hygiene and easy rotation, not confidentiality: Vite bakes it
+          # into the bundle, so every visitor can read it. That is fine because
+          # it is a write-only ingest endpoint. .env.example therefore carries a
+          # placeholder rather than the live URL, so the two agree about what
+          # this value is.
+          # VITE_FARO_ENV: CI-gated deploy of main → prod, PR previews → dev.
           VITE_FARO_URL:             ${{ secrets.VITE_FARO_URL }}
           VITE_FARO_ENV:             ${{ github.event_name == 'workflow_run' && 'prod' || 'dev' }}
           # Faro source map uploads — build-time only, never exposed to the browser.
