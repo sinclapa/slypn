@@ -396,11 +396,27 @@ jobs:
 
           # Confirm against a fresh listing, so a delete that was refused rather
           # than merely unpollable still fails the job instead of passing quietly.
-          REMAINING=$(az staticwebapp environment list             --name swa-slypn-prod --resource-group rg-slypn-prod             --query "[?name!='default'].name" -o tsv)
+          #
+          # Ignoring az's exit code also gave up the wait that came with it — the
+          # status poll it was refused permission for is what used to block until
+          # the delete landed — so deletion is now fire-and-forget and an
+          # environment stays listed while its removal is in flight. Environment
+          # 170 was mid-delete when this check first ran, and the job failed over
+          # work that had actually succeeded. Poll until the listing agrees
+          # rather than reading it once.
+          STUCK="$REAPED"
+          for attempt in $(seq 1 8); do
+            REMAINING=$(az staticwebapp environment list               --name swa-slypn-prod --resource-group rg-slypn-prod               --query "[?name!='default'].name" -o tsv)
 
-          STUCK=""
-          for env in $REAPED; do
-            if echo "$REMAINING" | grep -qx "$env"; then STUCK="$STUCK $env"; fi
+            PENDING=""
+            for env in $STUCK; do
+              if echo "$REMAINING" | grep -qx "$env"; then PENDING="$PENDING $env"; fi
+            done
+            STUCK="$PENDING"
+
+            if [ -z "$STUCK" ]; then break; fi
+            echo "attempt $attempt/8: still being deleted:$STUCK"
+            sleep 15
           done
 
           if [ -n "$STUCK" ]; then
