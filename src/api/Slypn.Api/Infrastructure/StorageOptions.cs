@@ -15,4 +15,17 @@ public sealed class StorageOptions
 
     /// <summary>How long a generated read SAS URL is valid for.</summary>
     public TimeSpan ReadSasLifetime { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Largest media upload accepted, in bytes. Checked against Content-Length
+    /// before the multipart body is buffered, so an oversized request is refused
+    /// rather than read into memory first.
+    /// </summary>
+    public long MaxMediaUploadBytes { get; set; } = 5 * 1024 * 1024;
+
+    /// <summary>
+    /// Largest newsletter file accepted, in bytes. Higher than media because
+    /// these are PDFs and Word documents rather than images.
+    /// </summary>
+    public long MaxNewsletterFileBytes { get; set; } = 25 * 1024 * 1024;
 }

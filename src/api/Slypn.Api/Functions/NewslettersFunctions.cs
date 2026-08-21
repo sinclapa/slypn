@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Options;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
@@ -15,7 +16,10 @@ using static Slypn.Api.Functions.FunctionHelpers;
 
 namespace Slypn.Api.Functions;
 
-public sealed class NewslettersFunctions(IContentRepository repo, ILogger<NewslettersFunctions> log)
+public sealed class NewslettersFunctions(
+    IContentRepository repo,
+    ILogger<NewslettersFunctions> log,
+    IOptions<StorageOptions> storage)
 {
     [Function("GetNewsletters")]
     [OpenApiOperation(operationId: "newsletters.list", tags: new[] { "newsletters" }, Summary = "List newsletters", Description = "Returns all newsletters.")]
@@ -94,6 +98,13 @@ public sealed class NewslettersFunctions(IContentRepository repo, ILogger<Newsle
         {
             return await Reject(req, HttpStatusCode.UnsupportedMediaType,
                 "Expected multipart/form-data with a 'file' part.");
+        }
+
+        // Before ParseAsync, which would otherwise buffer the whole body into
+        // memory and only then let the content-type allowlist reject it.
+        if (UploadLimits.Validate(req, storage.Value.MaxNewsletterFileBytes) is { } refusal)
+        {
+            return await Reject(req, refusal.Code, refusal.Message);
         }
 
         MultipartFormDataParser parsed;

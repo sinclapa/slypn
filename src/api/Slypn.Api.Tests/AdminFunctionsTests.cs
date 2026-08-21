@@ -1,6 +1,7 @@
 using Azure;
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Slypn.Api.Functions;
 using Slypn.Api.Infrastructure;
 using Slypn.Api.Models;
@@ -154,7 +155,7 @@ public class AdminFunctionsTests
     [Fact]
     public async Task Media_503_when_unconfigured()
     {
-        var fn = new MediaFunctions(new FakeBlobService { Configured = false });
+        var fn = new MediaFunctions(new FakeBlobService { Configured = false }, Options.Create(new StorageOptions()));
         var resp = (TestHttpResponseData)await fn.Upload(TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/media", ""));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
     }
@@ -162,7 +163,7 @@ public class AdminFunctionsTests
     [Fact]
     public async Task Media_415_when_not_multipart()
     {
-        var fn = new MediaFunctions(new FakeBlobService());
+        var fn = new MediaFunctions(new FakeBlobService(), Options.Create(new StorageOptions()));
         var req = new TestHttpRequestData(new TestFunctionContext(), "POST", "http://localhost/api/media", "x",
             new Dictionary<string, string> { ["Content-Type"] = "application/json" });
         var resp = (TestHttpResponseData)await fn.Upload(req);
@@ -172,7 +173,7 @@ public class AdminFunctionsTests
     [Fact]
     public async Task Media_400_when_multipart_has_no_file_part()
     {
-        var fn = new MediaFunctions(new FakeBlobService());
+        var fn = new MediaFunctions(new FakeBlobService(), Options.Create(new StorageOptions()));
         // Body has only a text parameter (no filename → not a file part), so parsed.Files is empty.
         var resp = (TestHttpResponseData)await fn.Upload(MultipartParam("field"));
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
@@ -181,7 +182,7 @@ public class AdminFunctionsTests
     [Fact]
     public async Task Media_415_when_file_content_type_not_allowed()
     {
-        var fn = new MediaFunctions(new FakeBlobService());
+        var fn = new MediaFunctions(new FakeBlobService(), Options.Create(new StorageOptions()));
         var resp = (TestHttpResponseData)await fn.Upload(MultipartFile("file", "doc.pdf", "application/pdf"));
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, resp.StatusCode);
     }
@@ -189,7 +190,7 @@ public class AdminFunctionsTests
     [Fact]
     public async Task Media_201_on_successful_upload()
     {
-        var fn = new MediaFunctions(new FakeBlobService());
+        var fn = new MediaFunctions(new FakeBlobService(), Options.Create(new StorageOptions()));
         var resp = (TestHttpResponseData)await fn.Upload(MultipartFile("file", "photo.png", "image/png"));
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
         Assert.Contains("url", resp.ReadBodyAsString());
@@ -201,7 +202,13 @@ public class AdminFunctionsTests
         var body = $"--{boundary}\r\nContent-Disposition: form-data; name=\"{partName}\"; filename=\"{fileName}\"\r\nContent-Type: {mimeType}\r\n\r\n{content}\r\n--{boundary}--\r\n";
         return TestHttp.Raw(
             new TestFunctionContext(), "POST", "http://localhost/api/media", body,
-            new Dictionary<string, string> { ["Content-Type"] = $"multipart/form-data; boundary={boundary}" });
+            new Dictionary<string, string>
+            {
+                ["Content-Type"] = $"multipart/form-data; boundary={boundary}",
+                // Real clients declare a length, and the upload endpoints now
+                // require one so an oversized body is refused before buffering.
+                ["Content-Length"] = System.Text.Encoding.UTF8.GetByteCount(body).ToString(),
+            });
     }
 
     private static TestHttpRequestData MultipartParam(string paramName)
@@ -210,7 +217,13 @@ public class AdminFunctionsTests
         var body = $"--{boundary}\r\nContent-Disposition: form-data; name=\"{paramName}\"\r\n\r\nvalue\r\n--{boundary}--\r\n";
         return TestHttp.Raw(
             new TestFunctionContext(), "POST", "http://localhost/api/media", body,
-            new Dictionary<string, string> { ["Content-Type"] = $"multipart/form-data; boundary={boundary}" });
+            new Dictionary<string, string>
+            {
+                ["Content-Type"] = $"multipart/form-data; boundary={boundary}",
+                // Real clients declare a length, and the upload endpoints now
+                // require one so an oversized body is refused before buffering.
+                ["Content-Length"] = System.Text.Encoding.UTF8.GetByteCount(body).ToString(),
+            });
     }
 
     [Fact]
