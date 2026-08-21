@@ -47,10 +47,22 @@ concurrency:
 
 jobs:
   build_and_deploy:
-    # A workflow_run fires on completion whatever the outcome, so the
-    # conclusion check is what actually does the gating.
+    # A workflow_run fires on completion whatever the outcome, so the conclusion
+    # check is what actually does the gating.
+    #
+    # workflow_run runs in the base repository with access to secrets, and its
+    # `branches` filter matches the *triggering run's* head branch — which for a
+    # pull request is the source branch, fork or not. A fork PR opened from a
+    # branch called `main` would therefore satisfy `branches: [main]`, and
+    # checking out its head_sha here would run attacker-controlled code against
+    # the deployment token and CIAM secrets. Requiring the triggering run to be a
+    # push closes that off, since fork PR runs of CI are `pull_request`; the
+    # repository check is belt and braces.
     if: >-
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
       (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
     name: Build + deploy
