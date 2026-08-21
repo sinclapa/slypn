@@ -11,7 +11,16 @@ name: Azure Static Web Apps deploy
 #   SPA_OBJECT_ID      — slypn-web app object ID
 
 on:
+  # `push` no longer deploys: it only runs the orphan reaper. Production deploys
+  # hang off CI instead, so a commit whose tests fail on main cannot ship. The
+  # two workflows used to start in parallel on every merge, and branch
+  # protection is not strict, so a branch that was green when it was cut could
+  # merge into a main it had never been tested against and deploy red.
   push:
+    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   # Nightly safety net for the orphan reaper, so a quiet period on main cannot
   # let dead preview environments sit on the Free-tier cap.
@@ -38,7 +47,11 @@ concurrency:
 
 jobs:
   build_and_deploy:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    # A workflow_run fires on completion whatever the outcome, so the
+    # conclusion check is what actually does the gating.
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
     name: Build + deploy
     permissions:
@@ -46,8 +59,12 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      # workflow_run runs against the default branch, which may already have
+      # moved on. Check out the commit CI actually tested so what ships is what
+      # passed. For pull_request this is the usual refs/pull/N/merge.
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           submodules: true
           lfs: false
 
@@ -129,7 +146,7 @@ jobs:
         run: |
           BASE=$(node -p "require('./src/web/package.json').version")
           SHA=$(git rev-parse --short HEAD)
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "value=$BASE" >> $GITHUB_OUTPUT
           else
             echo "value=${BASE}-pr.${{ github.event.pull_request.number }}+${SHA}" >> $GITHUB_OUTPUT
@@ -138,7 +155,7 @@ jobs:
 
       - name: Write API appsettings
         env:
-          OTEL_ENV:      ${{ github.event_name == 'push' && 'prod' || 'dev' }}
+          OTEL_ENV:      ${{ github.event_name == 'workflow_run' && 'prod' || 'dev' }}
           SPA_CLIENT_ID: ${{ secrets.VITE_MSAL_CLIENT_ID }}
         run: |
           printf '{\n  "Otel": { "Env": "%s" },\n  "Swagger": { "SpaClientId": "%s" }\n}\n' \
@@ -164,7 +181,7 @@ jobs:
           # Faro frontend observability — URL stored as secret (client-side but kept out of source).
           # VITE_FARO_ENV: push to main → prod, PR preview builds → dev.
           VITE_FARO_URL:             ${{ secrets.VITE_FARO_URL }}
-          VITE_FARO_ENV:             ${{ github.event_name == 'push' && 'prod' || 'dev' }}
+          VITE_FARO_ENV:             ${{ github.event_name == 'workflow_run' && 'prod' || 'dev' }}
           # Faro source map uploads — build-time only, never exposed to the browser.
           # Find these values in Grafana Cloud → Frontend Observability → Settings → Source Maps.
           FARO_SOURCEMAP_ENDPOINT:   ${{ secrets.FARO_SOURCEMAP_ENDPOINT }}
@@ -174,7 +191,7 @@ jobs:
           VITE_APP_VERSION:          ${{ steps.version.outputs.value }}
 
       - name: Set Otel__Env=prod on production
-        if: github.event_name == 'push'
+        if: github.event_name == 'workflow_run'
         run: |
           az staticwebapp appsettings set \
             --name swa-slypn-prod --resource-group rg-slypn-prod \
