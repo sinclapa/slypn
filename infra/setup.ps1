@@ -595,6 +595,24 @@ if (-not $SkipEntra) {
 
     $spaApp           = Invoke-Graph GET "/applications/$spaObjectId"
     $currentRedirects = @($spaApp.spa.redirectUris)
+
+    # Carry over PR-preview callbacks. The deploy workflow registers one per open PR
+    # and the close-PR job removes it again, so they are legitimately present here and
+    # not ours to prune. Replacing the list wholesale used to strip them out from under
+    # every open PR, breaking preview sign-in until each was redeployed.
+    #
+    # A preview host is <prefix>-<pr>.<region>.<suffix> against production's
+    # <prefix>.<suffix>, so the first label ending in -<digits> is what marks one.
+    # $uriHost, not $host — the latter is a read-only PowerShell automatic variable.
+    $previewUris = @($currentRedirects | Where-Object {
+        $uriHost = ([uri]$_).Host
+        $uriHost.EndsWith('azurestaticapps.net') -and ($uriHost.Split('.')[0] -match '-\d+$')
+    })
+    if ($previewUris.Count -gt 0) {
+        Info "Preserving $($previewUris.Count) PR-preview redirect URI(s)"
+        $redirectUris = @($redirectUris + $previewUris | Select-Object -Unique)
+    }
+
     if (Compare-StringSets $redirectUris $currentRedirects) {
         Info "Redirect URIs already correct"
     } else {
