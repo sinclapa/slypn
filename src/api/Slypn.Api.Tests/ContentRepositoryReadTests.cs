@@ -6,7 +6,7 @@ using Xunit;
 namespace Slypn.Api.Tests;
 
 // Storage is unconfigured, so ContentRepository serves reads from MockDataService
-// and rejects all writes / member / draft access via EnsureWrites.
+// and rejects all writes / member / subscriber / draft access via EnsureWrites.
 file sealed class UnconfiguredTableStore : ITableStore
 {
     public bool IsConfigured => false;
@@ -16,6 +16,7 @@ file sealed class UnconfiguredTableStore : ITableStore
     public TableClient Resources   => throw new NotSupportedException();
     public TableClient Newsletters => throw new NotSupportedException();
     public TableClient Members     => throw new NotSupportedException();
+    public TableClient Subscribers => throw new NotSupportedException();
 }
 
 file sealed class NoopBodyStore : IContentBodyStore
@@ -142,5 +143,7 @@ public class ContentRepositoryReadTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => Repo().ListMembersAsync(Ct));
         await Assert.ThrowsAsync<InvalidOperationException>(() => Repo().GetMemberByEmailAsync("a@b.com", Ct));
         await Assert.ThrowsAsync<InvalidOperationException>(() => Repo().ListDraftsByAuthorAsync("oid", Ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Repo().ListSubscribersAsync(Ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Repo().GetSubscriberByEmailAsync("a@b.com", Ct));
     }
 }

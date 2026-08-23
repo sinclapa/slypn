@@ -96,8 +96,8 @@ resource contentContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
   }
 }
 
-// Table service — the six content tables (articles, drafts, events, resources,
-// newsletters, members) are created at runtime by TableBootstrapper.
+// Table service — the seven content tables (articles, drafts, events, resources,
+// newsletters, members, subscribers) are created at runtime by TableBootstrapper.
 resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2024-01-01' = {
   parent: storage
   name: 'default'

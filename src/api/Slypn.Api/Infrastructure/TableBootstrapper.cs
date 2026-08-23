@@ -7,7 +7,7 @@ using Slypn.Api.Services;
 namespace Slypn.Api.Infrastructure;
 
 /// <summary>
-/// Creates the six SLYPN content tables on startup. Uses the singleton
+/// Creates the seven SLYPN content tables on startup. Uses the singleton
 /// <see cref="ITableStore"/> so we don't open a second client. The body-blob
 /// container is created lazily by <see cref="ContentBodyStore"/>. No-op when
 /// storage is not configured. When SkipAuth is on (local dev), also seeds the
@@ -20,7 +20,7 @@ public sealed class TableBootstrapper(
     ILogger<TableBootstrapper> logger) : IHostedService
 {
     private static readonly string[] Tables =
-        ["articles", "drafts", "events", "resources", "newsletters", "members"];
+        ["articles", "drafts", "events", "resources", "newsletters", "members", "subscribers"];
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -82,6 +82,7 @@ public sealed class TableBootstrapper(
         "resources"   => store.Resources,
         "newsletters" => store.Newsletters,
         "members"     => store.Members,
+        "subscribers" => store.Subscribers,
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown table"),
     };
 }

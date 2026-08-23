@@ -16,6 +16,7 @@ file sealed class UnconfiguredStore : ITableStore
     public TableClient Resources   => throw new NotSupportedException();
     public TableClient Newsletters => throw new NotSupportedException();
     public TableClient Members     => throw new NotSupportedException();
+    public TableClient Subscribers => throw new NotSupportedException();
 }
 
 public class TableBootstrapperTests

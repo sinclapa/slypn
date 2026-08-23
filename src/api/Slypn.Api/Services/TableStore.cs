@@ -45,6 +45,7 @@ public sealed class TableStore : ITableStore
     public TableClient Resources   => Table("resources");
     public TableClient Newsletters => Table("newsletters");
     public TableClient Members     => Table("members");
+    public TableClient Subscribers => Table("subscribers");
 
     private TableClient Table(string name) =>
         (_service ?? throw NotConfigured()).GetTableClient(name);

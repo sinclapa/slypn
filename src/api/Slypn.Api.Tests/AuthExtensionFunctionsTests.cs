@@ -227,11 +227,13 @@ public class AuthExtensionFunctionsTests
     }
 
     // ── SEC-1: subscribing is not an invitation ─────────────────────────────
-    // The members table doubles as the newsletter subscriber list, and the gate
-    // used to allow any address with a row. Anyone could POST to the anonymous
-    // /api/newsletter/subscribe and then sign up through CIAM.
+    // The members table used to double as the newsletter subscriber list, and the gate
+    // allowed any address with a row. Anyone could POST to the anonymous
+    // /api/newsletter/subscribe and then sign up through CIAM. Subscribers have their own
+    // table since SEC-5, so these rows are now legacy shapes — the gate must still reject
+    // them, and anything else that learns to write a role-less member row.
 
-    private static Member Subscriber(string email) =>
+    private static Member LegacySubscriberRow(string email) =>
         new("s1", email, email, Array.Empty<string>(), "subscribed", DateTime.UtcNow);
 
     private static Member Invited(string email) =>
@@ -240,7 +242,7 @@ public class AuthExtensionFunctionsTests
     [Fact]
     public async Task Blocks_a_newsletter_subscriber_who_was_never_invited()
     {
-        var repo = new FakeContentRepository { MemberByEmail = Subscriber("subscriber@x.com") };
+        var repo = new FakeContentRepository { MemberByEmail = LegacySubscriberRow("subscriber@x.com") };
         var fn = Make(repo);
         var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", Body("subscriber@x.com"));
 
@@ -253,10 +255,10 @@ public class AuthExtensionFunctionsTests
     [Fact]
     public async Task A_subscriber_and_an_unknown_address_get_the_identical_block_page()
     {
-        // No oracle: if the subscriber saw a different message, the gate would confirm
+        // No oracle: if the role-less row saw a different message, the gate would confirm
         // which addresses hold a row in the members table to anyone who asked.
         var subscriberResp = (TestHttpResponseData)await Make(
-                new FakeContentRepository { MemberByEmail = Subscriber("subscriber@x.com") })
+                new FakeContentRepository { MemberByEmail = LegacySubscriberRow("subscriber@x.com") })
             .AllowSignup(
                 TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", Body("subscriber@x.com")),
                 Ct);
@@ -272,8 +274,8 @@ public class AuthExtensionFunctionsTests
     [Fact]
     public async Task Still_allows_an_invited_address_that_also_subscribed()
     {
-        // Subscribe preserves the roles of an existing member, so an invitee who also
-        // signed up for the newsletter keeps their role and must still get through.
+        // Subscribing no longer writes here at all, so an invitee who also signed up for the
+        // newsletter keeps their member row untouched and must still get through.
         var repo = new FakeContentRepository { MemberByEmail = Invited("both@x.com") };
         var fn = Make(repo);
         var req = TestHttp.Raw(new TestFunctionContext(), "POST", "http://localhost/api/auth/allow-signup", Body("both@x.com"));

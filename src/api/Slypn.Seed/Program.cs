@@ -9,10 +9,11 @@ using Slypn.Seed;
 
 // Args:
 //   [<docx-path>]  --connection-string <cs>  [--table <name>]  [--container <name>]
-//   [--dir <folder>]  [--demo]
+//   [--dir <folder>]  [--demo]  [--migrate-subscribers [--dry-run]]
 //
 // At least one of <docx-path> (seed one newsletter), --dir (bulk-import a folder
-// of YYYY-MM.pdf/.docx issues), or --demo (seed demo content) is required. Each
+// of YYYY-MM.pdf/.docx issues), --demo (seed demo content), or --migrate-subscribers
+// (one-off SEC-5 data move, see MigrateSubscribers) is required. Each
 // newsletter's file is uploaded to the content blob container under
 // newsletters/{id}; its metadata row is upserted into the newsletters table.
 // Defaults: table = "newsletters", container = "content".
@@ -22,6 +23,8 @@ const string DocxContentType = "application/vnd.openxmlformats-officedocument.wo
 
 var argList = args.ToList();
 var demo = argList.Remove("--demo");
+var migrateSubscribers = argList.Remove("--migrate-subscribers");
+var dryRun = argList.Remove("--dry-run");
 
 // Optional positional docx path = first arg that isn't a --flag.
 string? docxPath = argList.Count > 0 && !argList[0].StartsWith("--") ? argList[0] : null;
@@ -36,10 +39,10 @@ var table = named.GetValueOrDefault("table", "newsletters");
 var container = named.GetValueOrDefault("container", "content");
 named.TryGetValue("dir", out var importDir);
 
-if (docxPath is null && importDir is null && !demo)
+if (docxPath is null && importDir is null && !demo && !migrateSubscribers)
 {
-    await Console.Error.WriteLineAsync("usage: dotnet run -- [<docx-path>] --connection-string <cs> [--table <name>] [--container <name>] [--dir <folder>] [--demo]");
-    await Console.Error.WriteLineAsync("Pass a docx path or --dir to seed newsletters, and/or --demo to seed demo content.");
+    await Console.Error.WriteLineAsync("usage: dotnet run -- [<docx-path>] --connection-string <cs> [--table <name>] [--container <name>] [--dir <folder>] [--demo] [--migrate-subscribers [--dry-run]]");
+    await Console.Error.WriteLineAsync("Pass a docx path or --dir to seed newsletters, --demo to seed demo content, or --migrate-subscribers to run the SEC-5 data move.");
     return 1;
 }
 
@@ -127,6 +130,21 @@ if (demo)
     catch (Exception ex)
     {
         await Console.Error.WriteLineAsync($"Demo seed failed: {ex.Message}");
+        return 3;
+    }
+}
+
+// ----- SEC-5: move legacy subscriber rows out of members ----------------------
+if (migrateSubscribers)
+{
+    try
+    {
+        var code = await MigrateSubscribers.RunAsync(connectionString, dryRun, Console.Out);
+        if (code != 0) return code;
+    }
+    catch (Exception ex)
+    {
+        await Console.Error.WriteLineAsync($"Subscriber migration failed: {ex.Message}");
         return 3;
     }
 }

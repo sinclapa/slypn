@@ -75,9 +75,9 @@ public sealed class MeSelfFunctions(
         if (string.IsNullOrEmpty(email))
             return null;
 
-        // A newsletter subscriber has a row here but is not a member, so their row must never
-        // be claimed by a signed-in caller: linking an OID would also flip it to "active" below
-        // and surface them in Member Management as though an admin had invited them.
+        // Only a row an admin actually created may be claimed by a signed-in caller: linking an
+        // OID also flips it to "active" below and surfaces it in Member Management as though an
+        // admin had invited them. Newsletter subscribers used to land here and be claimable.
         var byEmail = await repo.GetMemberByEmailAsync(email.Trim().ToLowerInvariant(), ct);
         if (byEmail is null || !byEmail.IsInvited || byEmail.Oid == callerOid)
             return null;

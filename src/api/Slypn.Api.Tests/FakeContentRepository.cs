@@ -165,6 +165,37 @@ internal sealed class FakeContentRepository : IContentRepository
     }
     public Task DeleteMemberAsync(string id, string? ifMatch, CancellationToken ct) => Guard(Task.CompletedTask);
 
+    /// <summary>Rows returned by ListSubscribersAsync.</summary>
+    public List<Subscriber> Subscribers = new();
+
+    /// <summary>Row returned by GetSubscriberByEmailAsync — null means "not subscribed yet".</summary>
+    public Subscriber? SubscriberByEmail { get; set; }
+
+    /// <summary>Every subscriber handed to UpsertSubscriberAsync, in order. Lets a test assert both
+    /// the count (idempotency) and the payload without a mocking framework.</summary>
+    public List<Subscriber> SubscriberUpserts { get; } = new();
+
+    /// <summary>Set to throw from the next GetSubscriberByEmailAsync call, to test the
+    /// subscribe endpoint's lookup-error branch without disturbing other reads.</summary>
+    public Exception? ThrowOnSubscriberLookup { get; set; }
+
+    public Task<Subscriber?> GetSubscriberByEmailAsync(string email, CancellationToken ct)
+    {
+        if (ThrowOnSubscriberLookup is not null) throw ThrowOnSubscriberLookup;
+        return Task.FromResult(SubscriberByEmail);
+    }
+    public Task<IReadOnlyList<Subscriber>> ListSubscribersAsync(CancellationToken ct)
+    {
+        if (ThrowOnRead is not null) throw ThrowOnRead;
+        return Task.FromResult<IReadOnlyList<Subscriber>>(Subscribers);
+    }
+    public Task<Subscriber> UpsertSubscriberAsync(Subscriber subscriber, string? ifMatch, CancellationToken ct)
+    {
+        SubscriberUpserts.Add(subscriber);
+        return Task.FromResult(Guard(subscriber));
+    }
+    public Task DeleteSubscriberAsync(string id, string? ifMatch, CancellationToken ct) => Guard(Task.CompletedTask);
+
     public Task<Draft?> GetDraftAsync(string id, string authorId, CancellationToken ct)
     {
         if (ThrowOnRead is not null) throw ThrowOnRead;

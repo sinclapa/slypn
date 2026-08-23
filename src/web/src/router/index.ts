@@ -60,6 +60,8 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
     { path: '/admin/members', name: 'admin-members', component: () => import('@/views/MemberManagementView.vue'),
       meta: { requiresAuth: true, requiresRole: ['Admin'] } },
+    { path: '/admin/subscribers', name: 'admin-subscribers', component: () => import('@/views/SubscriberManagementView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['Admin'] } },
     { path: '/admin/content', name: 'admin-content', component: () => import('@/views/ManageContentView.vue'),
       meta: { requiresAuth: true, requiresRole: ['Admin', 'Contributor'] } },
     { path: '/admin/resources', name: 'admin-resources', component: () => import('@/views/ResourceManagementView.vue'),

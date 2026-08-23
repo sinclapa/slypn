@@ -24,7 +24,8 @@ To keep it simple and cheap we:
 | `events` | `yearMonth` (e.g. `2026-05`) | `id` | — | Listing events is by date range; a year-month partition keeps "this month + next" cheap. The API derives `yearMonth` from `startsAt` on write. |
 | `resources` | `category` | `id` | — | The Resources page filters by category. Partitioning matches the access pattern. |
 | `newsletters` | `"newsletter"` (constant) | `id` | `content/newsletters/{id}` (attached issue file, PDF/DOCX) | Volumes are small (~12 issues/year); a single partition keeps `ListNewsletters` a single-partition scan. |
-| `members` | `"member"` (constant) | `id` | — | Member counts are small; a single partition makes `ListMembers` and the email/oid lookups single-partition scans, and point reads by id are PK+RK lookups. |
+| `members` | `"member"` (constant) | `id` | — | Member counts are small; a single partition makes `ListMembers` and the email/oid lookups single-partition scans, and point reads by id are PK+RK lookups. Invited members only — see `subscribers`. |
+| `subscribers` | `"subscriber"` (constant) | `sha256(email)` | — | Newsletter subscribers, kept apart from `members` on purpose: subscribing is anonymous, so a subscriber row must never read as evidence someone was invited (SEC-5). Hashing the address into the RowKey makes a repeat subscribe a point-read upsert rather than a partition scan, and keeps the key clear of the characters Table Storage forbids. |
 
 ## Concurrency
 
