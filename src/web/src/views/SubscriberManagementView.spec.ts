@@ -87,6 +87,69 @@ describe('SubscriberManagementView', () => {
     expect(w.get('[data-testid="subscriber-save-error"]').text()).toContain('403')
   })
 
+  describe('search', () => {
+    const three = () => [
+      subscriber({ id: 'a', email: 'alice@example.com', displayName: 'Alice Adams' }),
+      subscriber({ id: 'b', email: 'bob@other.org', displayName: 'Bob Brown' }),
+      subscriber({ id: 'c', email: 'carol@example.com', displayName: 'Carol Clark' }),
+    ]
+
+    async function mountWithSearch(term: string) {
+      apiJson.mockResolvedValue(three())
+      const w = mountC()
+      await flushPromises()
+      await w.get('[data-testid="subscriber-search"]').setValue(term)
+      return w
+    }
+
+    it('filters on the email', async () => {
+      const w = await mountWithSearch('example.com')
+      const rows = w.findAll('[data-testid="subscriber-row"]')
+      expect(rows.map(r => r.attributes('data-id'))).toEqual(['a', 'c'])
+    })
+
+    it('filters on the display name, case-insensitively', async () => {
+      const w = await mountWithSearch('bOb')
+      const rows = w.findAll('[data-testid="subscriber-row"]')
+      expect(rows.map(r => r.attributes('data-id'))).toEqual(['b'])
+    })
+
+    it('ignores surrounding whitespace', async () => {
+      const w = await mountWithSearch('   carol   ')
+      expect(w.findAll('[data-testid="subscriber-row"]')).toHaveLength(1)
+    })
+
+    it('shows how many of the total matched', async () => {
+      const w = await mountWithSearch('example.com')
+      expect(w.text()).toContain('(2 of 3)')
+    })
+
+    it('shows a no-matches state that is distinct from having no subscribers', async () => {
+      const w = await mountWithSearch('nobody')
+      expect(w.findAll('[data-testid="subscriber-row"]')).toHaveLength(0)
+      expect(w.get('[data-testid="subscriber-no-matches"]').text()).toContain('nobody')
+      expect(w.text()).not.toContain('No subscribers yet')
+    })
+
+    it('restores the full list when cleared', async () => {
+      const w = await mountWithSearch('alice')
+      expect(w.findAll('[data-testid="subscriber-row"]')).toHaveLength(1)
+      await w.get('[data-testid="subscriber-search-clear"]').trigger('click')
+      expect(w.findAll('[data-testid="subscriber-row"]')).toHaveLength(3)
+      expect(w.text()).toContain('(3)')
+    })
+
+    it('removes the subscriber the filter is showing, not the first of the unfiltered list', async () => {
+      // The row list is what Remove is wired to, so a stale index here would delete the
+      // wrong person — the one case where this filter could do real damage.
+      apiFetch.mockResolvedValue(ok({}))
+      const w = await mountWithSearch('carol')
+      await w.get('[data-testid="subscriber-remove"]').trigger('click')
+      await flushPromises()
+      expect(apiFetch).toHaveBeenCalledWith('/subscribers/c', expect.objectContaining({ method: 'DELETE' }))
+    })
+  })
+
   it('renders an empty state', async () => {
     apiJson.mockResolvedValue([])
     const w = mountC()

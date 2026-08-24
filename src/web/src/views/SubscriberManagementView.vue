@@ -23,6 +23,21 @@ const sortedSubscribers = computed(() =>
   [...(subscribers.value ?? [])].sort((a, b) =>
     b.subscribedAt.localeCompare(a.subscribedAt)))
 
+// ── Search ─────────────────────────────────────────────────────────────────
+
+// Filtering happens here rather than server-side: the whole list is already in
+// memory and small, so there is nothing to gain from a round trip per keystroke.
+const search = ref('')
+
+const filteredSubscribers = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return sortedSubscribers.value
+  return sortedSubscribers.value.filter(s =>
+    s.email.toLowerCase().includes(q) || s.displayName.toLowerCase().includes(q))
+})
+
+const isFiltering = computed(() => search.value.trim().length > 0)
+
 // ── Remove ─────────────────────────────────────────────────────────────────
 
 const deletingId = ref<string | null>(null)
@@ -67,13 +82,36 @@ const fmtDate = (iso: string) =>
 
   <section class="page-container space-y-6 py-16">
     <article class="rounded-xl border border-slypn-100 bg-white shadow-sm">
-      <div class="border-b border-slypn-100 px-6 py-4">
+      <div class="flex flex-col gap-3 border-b border-slypn-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="font-display text-xl font-bold text-slypn-700">
           All subscribers
           <span v-if="subscribers?.length" class="ml-1 text-sm font-medium text-slypn-500">
-            ({{ subscribers.length }})
+            <template v-if="isFiltering">({{ filteredSubscribers.length }} of {{ subscribers.length }})</template>
+            <template v-else>({{ subscribers.length }})</template>
           </span>
         </h2>
+
+        <div v-if="subscribers?.length" class="relative sm:w-72">
+          <label for="subscriber-search" class="sr-only">Search subscribers</label>
+          <!-- type=text, not search: Chrome renders its own clear affordance for type=search,
+               which would sit on top of ours, and Firefox renders none at all. -->
+          <input
+            id="subscriber-search"
+            v-model="search"
+            type="text"
+            data-testid="subscriber-search"
+            placeholder="Search by email or name"
+            class="w-full rounded-md border border-slypn-200 py-2 pl-3 pr-8 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
+          />
+          <button
+            v-if="isFiltering"
+            type="button"
+            data-testid="subscriber-search-clear"
+            aria-label="Clear search"
+            class="absolute inset-y-0 right-0 px-2.5 text-slypn-400 hover:text-slypn-700"
+            @click="search = ''"
+          >&times;</button>
+        </div>
       </div>
 
       <p v-if="loading && !subscribers" class="px-6 py-8 text-center text-sm text-slypn-900/60">
@@ -90,9 +128,9 @@ const fmtDate = (iso: string) =>
         <button class="ml-2 underline" @click="saveError = null">Dismiss</button>
       </p>
 
-      <div v-if="subscribers?.length" class="divide-y divide-slypn-100">
+      <div v-if="filteredSubscribers.length" class="divide-y divide-slypn-100">
         <div
-          v-for="s in sortedSubscribers"
+          v-for="s in filteredSubscribers"
           :key="s.id"
           data-testid="subscriber-row"
           :data-id="s.id"
@@ -115,6 +153,11 @@ const fmtDate = (iso: string) =>
           >{{ deletingId === s.id ? 'Removing…' : 'Remove' }}</button>
         </div>
       </div>
+
+      <p v-else-if="isFiltering" data-testid="subscriber-no-matches" class="px-6 py-8 text-center text-sm text-slypn-900/60">
+        No subscribers match &ldquo;{{ search.trim() }}&rdquo;.
+        <button class="ml-1 underline" @click="search = ''">Clear search</button>
+      </p>
 
       <p v-else-if="subscribers" class="px-6 py-8 text-center text-sm text-slypn-900/60">
         No subscribers yet.

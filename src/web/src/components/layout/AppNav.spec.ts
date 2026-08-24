@@ -91,6 +91,7 @@ describe('AppNav', () => {
     const account = w.find('#mobile-account')
     expect(account.text()).toContain('Dashboard')
     expect(account.text()).toContain('Members')
+    expect(account.text()).toContain('Newsletter subscribers')
     expect(account.text()).toContain('Newsletters')
     expect(account.text()).toContain('Sign out')
 
