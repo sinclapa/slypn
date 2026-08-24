@@ -33,6 +33,13 @@ param repositoryUrl string = 'https://github.com/sinclapa/slypn'
 @description('Branch to track for the Static Web App.')
 param repositoryBranch string = 'main'
 
+@description('''Custom hostname for the production site, e.g. slypn.cookingcode.com.
+Empty skips custom-domain setup entirely.
+The CNAME must ALREADY point at the SWA default hostname before you deploy: validation runs
+during deployment, and a missing or wrong record fails the whole deployment, not just this
+resource. Free-tier SWA allows two custom domains.''')
+param customDomain string = ''
+
 @description('Tags applied to every resource.')
 param tags object = {
   app: 'slypn'
@@ -136,9 +143,28 @@ resource swa 'Microsoft.Web/staticSites@2025-05-01' = { // NOSONAR (S6378) — s
 }
 
 // ---------------------------------------------------------------------------
+// Custom domain. cname-delegation validates by following the CNAME the hostname
+// already carries, so no _dnsauth TXT record is needed — but that CNAME has to
+// exist first (see docs/custom-domain.md). The SWA's managed certificate is
+// issued automatically once validation passes and auto-renews.
+//
+// This is additive: the default *.azurestaticapps.net hostname keeps working and
+// stays the canonical prodUrl, which is what the PR-preview redirect-URI logic in
+// setup.ps1 keys on.
+// ---------------------------------------------------------------------------
+resource swaCustomDomain 'Microsoft.Web/staticSites/customDomains@2025-05-01' = if (!empty(customDomain)) {
+  parent: swa
+  name: customDomain
+  properties: {
+    validationMethod: 'cname-delegation'
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs — consumed by the deploy workflow in #41.
 // ---------------------------------------------------------------------------
 output swaUrl              string = 'https://${swa.properties.defaultHostname}'
+output customDomainUrl     string = empty(customDomain) ? '' : 'https://${customDomain}'
 output swaName             string = swa.name
 output storageAccountName  string = storage.name
 output mediaContainerName  string = mediaContainer.name

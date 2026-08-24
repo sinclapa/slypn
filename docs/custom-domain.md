@@ -25,6 +25,43 @@ Some registrars don't support `ALIAS`/`ANAME` on the apex — in that case eithe
 
 ## 2. Add the custom domain in Azure
 
+### The managed path (preferred)
+
+For the production hostname this is now **declarative** — `infra/main.bicep` owns it:
+
+```bicep
+param customDomain string = ''   // '' skips custom-domain setup entirely
+
+resource swaCustomDomain 'Microsoft.Web/staticSites/customDomains@2025-05-01' = if (!empty(customDomain)) {
+  parent: swa
+  name: customDomain
+  properties: { validationMethod: 'cname-delegation' }
+}
+```
+
+Set the hostname in `infra/main.parameters.prod.json` and deploy — `infra/setup.ps1` Phase 1 does
+this for you, and stores the resulting URL as `customDomainUrl` in `infra/secrets.json`:
+
+```json
+"customDomain": { "value": "slypn.cookingcode.com" },
+```
+
+> **Order matters.** `cname-delegation` validates by following the CNAME the hostname already
+> carries, so **the DNS record must exist before you deploy**. If it doesn't, validation fails and
+> takes the *whole deployment* down with it, not just this resource. Add the record (step 3) first.
+
+Phase 2 then adds `https://<customDomain>/auth/callback` and `/oauth2-redirect.html` to the SPA app
+registration automatically. Do **not** add those by hand in the portal: the preview-URI preservation
+logic in Phase 2 only carries over `azurestaticapps.net` hosts, so a hand-added custom-domain URI is
+pruned on the next run of the script.
+
+The default `*.azurestaticapps.net` hostname keeps working alongside it and remains the canonical
+`prodUrl`.
+
+### The manual path
+
+Still useful for a one-off or a non-production host.
+
 Portal route:
 1. SWA → **Custom domains → + Add**.
 2. **Custom domain on an existing domain** → enter `slypn.org.uk`.
@@ -120,6 +157,11 @@ Then remove the DNS records. The managed SSL cert auto-cleans within a day.
 ## 8. Troubleshooting
 
 - **"DNS validation failed"** → the TXT record hasn't propagated yet. Wait 5-10 min, click Re-validate.
+- **"An unknown error has occurred while adding your custom domain. Please try again later."** →
+  generic and usually transient, *not* a DNS problem — confirm the CNAME against the
+  authoritative nameservers (`nslookup -type=CNAME <host> <ns>`) and if it is correct, delete the
+  failed entry and re-add. Note the deletion carries its own **~15 minute propagation delay**;
+  re-adding inside that window tends to fail the same way.
 - **Apex `A` record but Azure still shows "DNS_VALIDATION"** → your registrar's apex isn't pointing where you think; `dig slypn.org.uk` to confirm.
 - **`SSL certificate is invalid`** → the cert provisioned but DNS is still pointing somewhere else (e.g. an old A record). Remove competing records.
 - **Sign-in fails after switching to the custom domain** → you forgot section 5's Entra redirect URI step. Add it and clear the Entra session cache (incognito tab).
