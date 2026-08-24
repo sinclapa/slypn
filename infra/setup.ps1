@@ -243,8 +243,19 @@ if (-not $SkipBicep) {
     $s['storageAccountName']   = $deployResult.storageAccountName.value
     $s['mediaContainerName']   = $deployResult.mediaContainerName.value
     $s['contentContainerName'] = $deployResult.contentContainerName.value
+
+    # Custom domain is optional (customDomain param empty = not configured). Store it
+    # only when set, so Phase 2 can tell "no custom domain" from "custom domain = ''".
+    $customDomainUrl = $deployResult.customDomainUrl.value
+    if (-not [string]::IsNullOrWhiteSpace($customDomainUrl)) {
+        $s['customDomainUrl'] = $customDomainUrl.TrimEnd('/')
+    } else {
+        $s.Remove('customDomainUrl')
+    }
+
     Save-Secrets $s
     Ok "SWA deployed: $($s['prodUrl'])"
+    if ($s.Contains('customDomainUrl')) { Ok "Custom domain: $($s['customDomainUrl'])" }
 
     # Storage connection string (Table + Blob) — permanent auth path; Free-tier SWA has no managed identity to use instead.
     Info 'Fetching Storage connection string...'
@@ -591,6 +602,16 @@ if (-not $SkipEntra) {
     $pUrl = if ($s.Contains('prodUrl')) { $s['prodUrl'] } else { '' }
     if (-not [string]::IsNullOrWhiteSpace($pUrl)) {
         $redirectUris = @("$pUrl/auth/callback", "$pUrl/oauth2-redirect.html") + $redirectUris
+    }
+
+    # The custom domain is a separate origin, so it needs its own callbacks — MSAL
+    # matches redirect URIs exactly. This must be built into the list rather than
+    # added by hand in the portal: the preview-preservation filter below only keeps
+    # azurestaticapps.net hosts, so a hand-added custom-domain URI would be pruned
+    # on the next run of this script.
+    $cUrl = if ($s.Contains('customDomainUrl')) { $s['customDomainUrl'] } else { '' }
+    if (-not [string]::IsNullOrWhiteSpace($cUrl)) {
+        $redirectUris = @("$cUrl/auth/callback", "$cUrl/oauth2-redirect.html") + $redirectUris
     }
 
     $spaApp           = Invoke-Graph GET "/applications/$spaObjectId"
