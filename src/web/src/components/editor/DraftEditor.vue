@@ -5,7 +5,7 @@ import SaveIndicator from '@/components/editor/SaveIndicator.vue'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { useBeforeUnload } from '@/composables/useBeforeUnload'
 import { apiErrorMessage, apiFetch } from '@/lib/api'
-import { EMPTY_DRAFT, type DraftPayload, type DraftSummary } from '@/lib/draft'
+import { EMPTY_DRAFT, htmlToText, type DraftPayload, type DraftSummary } from '@/lib/draft'
 
 const props = defineProps<{
   draftId: string
@@ -46,7 +46,7 @@ function isDirty(): boolean {
 async function loadDraft(id: string) {
   // Read-only mode shows a passed-in in-review payload; there's no draft to fetch.
   if (props.readonly) {
-    draft.value = { ...EMPTY_DRAFT, ...(props.initialContent ?? {}) }
+    draft.value = { ...EMPTY_DRAFT, ...props.initialContent }
     currentEtag.value = null
     conflict.value = null
     submitError.value = null
@@ -177,7 +177,7 @@ const categoryHints = computed(() =>
 // isn't enough — require real text or an image before allowing submit.
 function hasBodyContent(html: string): boolean {
   if (/<img\b/i.test(html)) return true
-  return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').trim().length > 0
+  return htmlToText(html).trim().length > 0
 }
 
 const missingToSubmit = computed(() => {
@@ -203,7 +203,7 @@ useBeforeUnload(computed(() =>
 ))
 
 watch(() => draft.value.body, (html) => {
-  const text  = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const text  = htmlToText(html).replace(/\s+/g, ' ').trim()
   const words = text ? text.split(' ').length : 0
   draft.value.readingMinutes = Math.max(1, Math.round(words / 200))
 })
@@ -331,7 +331,7 @@ watch(() => draft.value.body, (html) => {
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-slypn-800">Reading time</label>
+        <span class="block text-sm font-medium text-slypn-800">Reading time</span>
         <p class="mt-1 rounded-md border border-slypn-100 bg-slypn-50 px-3 py-2 text-sm text-slypn-700">
           {{ draft.readingMinutes }} min <span class="text-slypn-400">· auto-calculated</span>
         </p>

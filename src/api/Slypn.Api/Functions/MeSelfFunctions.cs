@@ -22,7 +22,7 @@ public sealed class MeSelfFunctions(
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Unauthorized, Description = "Missing or invalid token")]
     [Function("WhoAmI")]
     [RequireRole]
-    public async Task<HttpResponseData> WhoAmI(
+    public static async Task<HttpResponseData> WhoAmI(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "whoami")] HttpRequestData req,
         FunctionContext context)
     {

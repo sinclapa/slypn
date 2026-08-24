@@ -30,6 +30,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     private const string NewslettersPartition = "newsletter";
     private const string ArticleType       = "article";
     private const string InReviewStatus    = "in-review";
+    private const string PublishedStatus   = "published";
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -90,7 +91,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
 
         // Fallback: treat the value as an article id. Covers content created before
         // hybrid slugs existed (empty/blank slug) so it stays addressable.
-        return await GetArticleAsync(slugOrId, "published", ct);
+        return await GetArticleAsync(slugOrId, PublishedStatus, ct);
     }
 
     public async Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)
@@ -98,7 +99,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         // ListArticlesAsync returns newest-first, matching the articles list page order.
         // prev = the article above the current one in the list (newer),
         // next = the article below (older).
-        var sorted = (await ListArticlesAsync("published", ct)).ToList();
+        var sorted = (await ListArticlesAsync(PublishedStatus, ct)).ToList();
 
         var idx = sorted.FindIndex(a =>
             string.Equals(a.Slug, slugOrId, StringComparison.OrdinalIgnoreCase) ||
@@ -572,7 +573,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     {
         EnsureWrites();
 
-        var published = await GetArticleAsync(articleId, "published", ct)
+        var published = await GetArticleAsync(articleId, PublishedStatus, ct)
             ?? throw new InvalidOperationException($"Published article {articleId} not found.");
 
         // Resume an in-progress revision the editor already started for this article,
@@ -610,12 +611,12 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             ?? throw new InvalidOperationException($"Article {id} is not in 'in-review'.");
 
         if (string.IsNullOrEmpty(review.ReplacesArticleId))
-            return await TransitionAsync(id, fromStatus: InReviewStatus, toStatus: "published",
+            return await TransitionAsync(id, fromStatus: InReviewStatus, toStatus: PublishedStatus,
                 update: a => a with { PublishedAt = DateTime.UtcNow, RejectionReason = null }, ct);
 
         // Revision: overwrite the target published article's content in place, keeping its
         // id, slug and original published date so the public URL never changes.
-        var target = await GetArticleAsync(review.ReplacesArticleId, "published", ct)
+        var target = await GetArticleAsync(review.ReplacesArticleId, PublishedStatus, ct)
             ?? throw new InvalidOperationException($"Target published article {review.ReplacesArticleId} not found.");
 
         var replacement = target with
@@ -625,7 +626,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             Category       = review.Category,
             ReadingMinutes = review.ReadingMinutes,
             Type           = review.Type,
-            Status         = "published",
+            Status         = PublishedStatus,
             RejectionReason     = null,
             ReplacesArticleId   = null,
             DeletionRequestedBy = null,
@@ -664,7 +665,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         Article source;
         try
         {
-            var read = await store.Articles.GetEntityAsync<TableEntity>("published", id, cancellationToken: ct);
+            var read = await store.Articles.GetEntityAsync<TableEntity>(PublishedStatus, id, cancellationToken: ct);
             source = Deserialize<Article>(read.Value);
         }
         catch (RequestFailedException ex) when (ex.Status == 404)

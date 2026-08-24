@@ -23,7 +23,7 @@ set -euo pipefail
 
 MODE="${1:-}"
 TARGET="${2:-}"
-if [ -z "$MODE" ] || [ -z "$TARGET" ]; then
+if [[ -z "$MODE" || -z "$TARGET" ]]; then
   echo "usage: $(basename "$0") <add|remove> <pr-number|base-url>" >&2
   exit 2
 fi
@@ -105,7 +105,7 @@ case "$MODE" in
     ;;
 esac
 
-if [ "$UPDATED" = "$CURRENT" ]; then
+if [[ "$UPDATED" == "$CURRENT" ]]; then
   echo "No change needed ($MODE): $DESCRIPTION"
   exit 0
 fi

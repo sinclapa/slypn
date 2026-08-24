@@ -49,15 +49,18 @@ public sealed class SwaggerOAuthFilter(IConfiguration config) : IDocumentFilter
             Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "oauth2" }
         };
 
-        foreach (var path in document.Paths.Values)
-        foreach (var op in path.Operations.Values)
+        var operationSecurities = document.Paths.Values
+            .SelectMany(path => path.Operations.Values)
+            .Select(op => op.Security);
+
+        foreach (var security in operationSecurities)
         {
-            if (op.Security is null) continue;
-            var bearerReq = op.Security.FirstOrDefault(
+            if (security is null) continue;
+            var bearerReq = security.FirstOrDefault(
                 r => r.Keys.Any(k => k.Reference?.Id == "bearer_auth"));
             if (bearerReq is null) continue;
-            op.Security.Remove(bearerReq);
-            op.Security.Add(new OpenApiSecurityRequirement { [oauth2Ref] = [scope] });
+            security.Remove(bearerReq);
+            security.Add(new OpenApiSecurityRequirement { [oauth2Ref] = [scope] });
         }
     }
 }

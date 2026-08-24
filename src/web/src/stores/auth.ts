@@ -68,6 +68,19 @@ function makeDevAccount(): AccountInfo {
   } as AccountInfo
 }
 
+/**
+ * Dev-skip only: switch the active test persona. Persists the choice and
+ * reloads so every Pinia store + fetched dataset is rebuilt under the new
+ * identity (simpler and more reliable than re-running each store's loaders).
+ * Kept at module scope: it touches no store state, so re-creating it per
+ * store instance buys nothing.
+ */
+function setPersona(key: DevPersonaKey) {
+  if (!isDevSkipAuth) return
+  setActivePersonaKey(key)
+  globalThis.location.reload()
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const account = ref<AccountInfo | null>(null)
   const apiRoles = ref<string[]>([])
@@ -203,17 +216,6 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
     await msalInstance.logoutRedirect({ account: account.value })
-  }
-
-  /**
-   * Dev-skip only: switch the active test persona. Persists the choice and
-   * reloads so every Pinia store + fetched dataset is rebuilt under the new
-   * identity (simpler and more reliable than re-running each store's loaders).
-   */
-  function setPersona(key: DevPersonaKey) {
-    if (!isDevSkipAuth) return
-    setActivePersonaKey(key)
-    globalThis.location.reload()
   }
 
   /**

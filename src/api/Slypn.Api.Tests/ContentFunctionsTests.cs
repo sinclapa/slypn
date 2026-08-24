@@ -733,10 +733,8 @@ public class ContentFunctionsTests
     [Fact]
     public async Task WhoAmI_returns_claims_for_current_principal()
     {
-        var repo = new FakeContentRepository();
-        var fn = MeFn(repo);
         var ctx = new TestFunctionContext().WithUser("oid-1", "Alice", "Admin");
-        var resp = (TestHttpResponseData)await fn.WhoAmI(TestHttp.Get(ctx, "http://localhost/api/whoami"), ctx);
+        var resp = (TestHttpResponseData)await MeSelfFunctions.WhoAmI(TestHttp.Get(ctx, "http://localhost/api/whoami"), ctx);
         Assert.Equal(System.Net.HttpStatusCode.OK, resp.StatusCode);
         var body = resp.ReadBodyAsString();
         Assert.Contains("oid", body);
@@ -745,10 +743,8 @@ public class ContentFunctionsTests
     [Fact]
     public async Task WhoAmI_returns_empty_claims_when_no_principal()
     {
-        var repo = new FakeContentRepository();
-        var fn = MeFn(repo);
         var ctx = new TestFunctionContext(); // no principal
-        var resp = (TestHttpResponseData)await fn.WhoAmI(TestHttp.Get(ctx, "http://localhost/api/whoami"), ctx);
+        var resp = (TestHttpResponseData)await MeSelfFunctions.WhoAmI(TestHttp.Get(ctx, "http://localhost/api/whoami"), ctx);
         Assert.Equal(System.Net.HttpStatusCode.OK, resp.StatusCode);
     }
 

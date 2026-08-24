@@ -74,10 +74,9 @@ public sealed class HtmlSanitizer : IHtmlSanitizer
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
 
-            foreach (var required in RequiredBlankRel)
-            {
-                if (!tokens.Contains(required, StringComparer.OrdinalIgnoreCase)) tokens.Add(required);
-            }
+            tokens.AddRange(RequiredBlankRel
+                .Where(required => !tokens.Contains(required, StringComparer.OrdinalIgnoreCase))
+                .ToList());
 
             element.SetAttribute("rel", string.Join(' ', tokens));
         };

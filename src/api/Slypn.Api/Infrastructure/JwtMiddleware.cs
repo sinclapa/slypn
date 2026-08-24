@@ -269,7 +269,7 @@ public sealed class JwtMiddleware(
     private static async Task ShortCircuit(FunctionContext context, HttpRequestData req, HttpStatusCode code, string message)
     {
         var resp = req.CreateResponse(code);
-        await resp.WriteStringAsync(message);
+        await resp.WriteStringAsync(message, context.CancellationToken);
         context.GetInvocationResult().Value = resp;
     }
 }

@@ -87,7 +87,7 @@ async function subscribe() {
 
     <div v-else-if="error" class="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
       Couldn&rsquo;t load newsletters: {{ error }}.
-      <button class="ml-2 underline" @click="refresh">Retry</button>
+      <button type="button" class="ml-2 underline" @click="refresh">Retry</button>
     </div>
 
     <p v-else-if="!newsletters?.length" class="text-slypn-900/70">

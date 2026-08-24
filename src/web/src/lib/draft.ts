@@ -25,11 +25,18 @@ export const EMPTY_DRAFT: DraftPayload = {
 }
 
 export function makeDraftId(): string {
-  if ('randomUUID' in crypto) return crypto.randomUUID().replace(/-/g, '')
+  if ('randomUUID' in crypto) return crypto.randomUUID().replaceAll('-', '')
   return randomHexFallback()
 }
 
 function randomHexFallback(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Strips markup so callers can reason about the text a draft actually carries.
+// Parsing beats a tag-stripping regex here: it can't backtrack on malformed
+// HTML, and it decodes entities (&nbsp; and friends) for free.
+export function htmlToText(html: string): string {
+  return new DOMParser().parseFromString(html, 'text/html').body.textContent ?? ''
 }

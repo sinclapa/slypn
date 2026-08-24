@@ -25,7 +25,7 @@ public static class DevPersonas
         new("member",       "33333333-3333-3333-3333-333333333333", "slypn.test.member@cookingcode.com",        "Test Member",        ["Member"]),
     ];
 
-    private static readonly IReadOnlyDictionary<string, DevPersona> ByKey =
+    private static readonly Dictionary<string, DevPersona> ByKey =
         All.ToDictionary(p => p.Key, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Resolve a persona by key, falling back to the default (admin) when unknown/null.</summary>

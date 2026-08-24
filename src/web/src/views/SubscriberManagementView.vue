@@ -120,12 +120,12 @@ const fmtDate = (iso: string) =>
 
       <div v-else-if="error" class="px-6 py-4 text-sm text-rose-700">
         Couldn't load subscribers: {{ error }}.
-        <button class="ml-2 underline" @click="refresh">Retry</button>
+        <button type="button" class="ml-2 underline" @click="refresh">Retry</button>
       </div>
 
       <p v-else-if="saveError" data-testid="subscriber-save-error" class="bg-rose-50 px-6 py-3 text-sm text-rose-700">
         {{ saveError }}
-        <button class="ml-2 underline" @click="saveError = null">Dismiss</button>
+        <button type="button" class="ml-2 underline" @click="saveError = null">Dismiss</button>
       </p>
 
       <div v-if="filteredSubscribers.length" class="divide-y divide-slypn-100">
@@ -156,7 +156,7 @@ const fmtDate = (iso: string) =>
 
       <p v-else-if="isFiltering" data-testid="subscriber-no-matches" class="px-6 py-8 text-center text-sm text-slypn-900/60">
         No subscribers match &ldquo;{{ search.trim() }}&rdquo;.
-        <button class="ml-1 underline" @click="search = ''">Clear search</button>
+        <button type="button" class="ml-1 underline" @click="search = ''">Clear search</button>
       </p>
 
       <p v-else-if="subscribers" class="px-6 py-8 text-center text-sm text-slypn-900/60">

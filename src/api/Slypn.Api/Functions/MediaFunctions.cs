@@ -60,7 +60,8 @@ public sealed class MediaFunctions(IBlobService blob, IOptions<StorageOptions> s
             return await Reject(req, HttpStatusCode.BadRequest, $"Could not parse multipart body: {ex.Message}");
         }
 
-        var file = parsed.Files.FirstOrDefault(f => f.Name == "file") ?? parsed.Files.FirstOrDefault();
+        var file = parsed.Files.FirstOrDefault(f => f.Name == "file")
+                   ?? (parsed.Files.Count > 0 ? parsed.Files[0] : null);
         if (file is null)
         {
             return await Reject(req, HttpStatusCode.BadRequest, "No file part in the upload.");
