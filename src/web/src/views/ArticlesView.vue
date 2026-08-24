@@ -55,7 +55,7 @@ const visible = computed(() => {
 
     <div v-else-if="error" class="mt-12 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
       Couldn&rsquo;t load articles: {{ error }}.
-      <button class="ml-2 underline" @click="refresh">Retry</button>
+      <button type="button" class="ml-2 underline" @click="refresh">Retry</button>
     </div>
 
     <div v-else class="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">

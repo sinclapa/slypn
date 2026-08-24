@@ -21,5 +21,5 @@ public sealed class OpenApiConfig : IOpenApiConfigurationOptions
     public bool IncludeRequestingHostName { get; set; } = false;
     public bool ForceHttp { get; set; } = false;
     public bool ForceHttps { get; set; } = false;
-    public List<IDocumentFilter> DocumentFilters { get; set; } = [];
+    public List<IDocumentFilter> DocumentFilters { get; set; }
 }

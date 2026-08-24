@@ -18,10 +18,9 @@ public class SwaggerTests
     [Fact]
     public async Task SwaggerOAuth2Redirect_returns_200_html_page()
     {
-        var fn = new SwaggerOAuth2RedirectFunction();
         var ctx = new TestFunctionContext();
         var req = TestHttp.Get(ctx, "http://localhost/api/swagger/oauth2-redirect.html");
-        var resp = (TestHttpResponseData)await fn.Run(req);
+        var resp = (TestHttpResponseData)await SwaggerOAuth2RedirectFunction.Run(req);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.True(resp.Headers.TryGetValues("Content-Type", out var ct));

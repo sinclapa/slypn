@@ -240,12 +240,12 @@ const fmtDate = (iso: string) =>
 
       <div v-else-if="error" class="px-6 py-4 text-sm text-rose-700">
         Couldn't load members: {{ error }}.
-        <button class="ml-2 underline" @click="refresh">Retry</button>
+        <button type="button" class="ml-2 underline" @click="refresh">Retry</button>
       </div>
 
       <p v-else-if="saveError" data-testid="member-save-error" class="px-6 py-3 text-sm text-rose-700 bg-rose-50">
         {{ saveError }}
-        <button class="ml-2 underline" @click="saveError = null">Dismiss</button>
+        <button type="button" class="ml-2 underline" @click="saveError = null">Dismiss</button>
       </p>
 
       <div v-if="members?.length" class="divide-y divide-slypn-100">

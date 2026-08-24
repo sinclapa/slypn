@@ -90,7 +90,7 @@ describe('EditorView', () => {
     mockLists([draftSummary()])
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     await flushPromises()
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
   })
@@ -122,7 +122,7 @@ describe('EditorView', () => {
     await flushPromises()
     expect(w.text()).toContain('Pending Article')
     expect(w.text()).toContain('In review')
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
   })
 
@@ -133,7 +133,7 @@ describe('EditorView', () => {
     ])
     const w = mountV()
     await flushPromises()
-    const rows = w.findAll('[role="button"]').map(el => el.text())
+    const rows = w.findAll('[data-testid="draft-row-open"]').map(el => el.text())
     expect(rows[0]).toContain('Newer item')
   })
 
@@ -141,7 +141,7 @@ describe('EditorView', () => {
     mockLists([draftSummary()])
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
     await w.findAll('button').find(b => b.text() === 'Close editor')!.trigger('click')
     await flushPromises()
@@ -152,7 +152,7 @@ describe('EditorView', () => {
     mockLists([draftSummary()])
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     await w.findAll('button').find(b => b.text() === 'Save draft')!.trigger('click')
     expect(w.text()).toContain('Saved title')
   })
@@ -161,7 +161,7 @@ describe('EditorView', () => {
     mockLists([draftSummary()])
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     await w.findAll('button').find(b => b.text() === 'Submit draft')!.trigger('click')
     await flushPromises()
     expect(w.text()).toContain('Submitted for admin review')
@@ -213,7 +213,7 @@ describe('EditorView', () => {
     apiFetch.mockResolvedValue(ok({}))
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click') // open draft d1
+    await w.find('[data-testid="draft-row-open"]').trigger('click') // open draft d1
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
     apiJson.mockResolvedValue([]) // refresh returns empty list
     await w.find('button[title="Delete draft"]').trigger('click')
@@ -225,20 +225,20 @@ describe('EditorView', () => {
     mockLists([draftSummary()])
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
     const saveCount = (apiFetch as ReturnType<typeof vi.fn>).mock.calls.length
-    await w.find('[role="button"]').trigger('click') // second click on same draft — should early-return
-    expect((apiFetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(saveCount)
+    await w.find('[data-testid="draft-row-open"]').trigger('click') // second click on same draft — should early-return
+    expect((apiFetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(saveCount)
   })
 
   it('does not re-open read-only when the same pending item is already open', async () => {
     mockWithPending([], [pendingItem()])
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
-    await w.find('[role="button"]').trigger('click') // second click — early-return
+    await w.find('[data-testid="draft-row-open"]').trigger('click') // second click — early-return
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
   })
 
@@ -258,7 +258,7 @@ describe('EditorView', () => {
     mockLists([draftSummary()])
     const w = mountV()
     await flushPromises()
-    await w.find('[role="button"]').trigger('click')
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
     // emit saved with an id that does not exist in the current list
     await w.findAll('button').find(b => b.text() === 'Save draft')!.trigger('click')
     // The DraftEditorStub emits the same id (d1) which IS in the list — splice replaces it

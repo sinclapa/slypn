@@ -203,7 +203,7 @@ async function deleteEvent(event: CommunityEvent) {
       <p v-if="loading" class="mt-4 text-sm text-slypn-900/60">Loading events…</p>
       <p v-else-if="loadError" class="mt-4 rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
         Couldn&rsquo;t load events: {{ loadError }}.
-        <button class="ml-1 underline" @click="refresh">Retry</button>
+        <button type="button" class="ml-1 underline" @click="refresh">Retry</button>
       </p>
       <p v-else-if="!filtered.length" class="mt-4 text-sm text-slypn-900/60">No events match.</p>
 

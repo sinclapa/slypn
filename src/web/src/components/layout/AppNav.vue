@@ -196,10 +196,10 @@ async function onSignOut() {
                   >{{ approvalsStore.pendingCount }}</span>
                 </RouterLink>
               </li>
-              <li v-if="link.dividerAfter" class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></li>
+              <li v-if="link.dividerAfter" aria-hidden="true"><hr class="my-1 border-t border-slypn-100" /></li>
             </template>
             <li>
-              <button class="block w-full px-4 py-2 text-left hover:bg-slypn-50" @click="onSignOut">Sign out</button>
+              <button type="button" class="block w-full px-4 py-2 text-left hover:bg-slypn-50" @click="onSignOut">Sign out</button>
             </li>
           </ul>
         </div>
@@ -256,7 +256,7 @@ async function onSignOut() {
         >
           {{ item.label }}
         </RouterLink>
-        <button
+        <button type="button"
           v-if="!auth.isAuthenticated"
           class="mt-1 rounded-md bg-slypn-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-slypn-700"
           @click="mobileOpen = false; onSignIn()"
@@ -292,9 +292,9 @@ async function onSignOut() {
               class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
             >{{ approvalsStore.pendingCount }}</span>
           </RouterLink>
-          <div v-if="link.dividerAfter" class="my-1 border-t border-slypn-100" role="separator" aria-hidden="true"></div>
+          <hr v-if="link.dividerAfter" class="my-1 border-t border-slypn-100" aria-hidden="true" />
         </template>
-        <button
+        <button type="button"
           class="mt-1 rounded-md border border-slypn-200 bg-white px-3 py-2 text-center text-base font-semibold text-slypn-700 hover:bg-slypn-50"
           @click="onSignOut"
         >

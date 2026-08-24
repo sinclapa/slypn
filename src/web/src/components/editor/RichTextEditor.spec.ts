@@ -25,7 +25,7 @@ describe('RichTextEditor', () => {
 
   it('hides the toolbar in readonly mode', () => {
     const w = mountEditor({ readonly: true })
-    expect(w.findAll('button').length).toBe(0)
+    expect(w.findAll('button')).toHaveLength(0)
   })
 
   it('runs formatting commands without error', async () => {

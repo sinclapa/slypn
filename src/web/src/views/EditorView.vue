@@ -245,10 +245,7 @@ const fmtDate = (iso: string) =>
             data-testid="draft-row"
             :data-id="e.id"
             :data-state="e.state"
-            role="button"
-            tabindex="0"
-            :aria-current="editorOpen && e.id === draftId"
-            :class="['flex cursor-pointer items-center gap-3 px-6 py-3 transition-colors',
+            :class="['flex items-center gap-3 px-6 py-3 transition-colors',
               editorOpen && e.id === draftId
                 ? (e.state === 'in-review'
                     ? 'bg-amber-100/60 ring-1 ring-inset ring-amber-300'
@@ -256,37 +253,43 @@ const fmtDate = (iso: string) =>
                 : (e.state === 'in-review'
                     ? 'bg-amber-50/40 hover:bg-amber-50'
                     : 'hover:bg-slypn-50/50')]"
-            @click="onRowClick(e)"
-            @keydown.enter="onRowClick(e)"
           >
-            <span class="shrink-0 rounded-full bg-slypn-100 px-2 py-0.5 text-xs font-semibold text-slypn-700">
-              {{ e.type === 'blog' ? 'Blog' : 'Article' }}
-            </span>
-            <p class="min-w-0 flex-1 truncate text-sm font-medium text-slypn-800">
-              {{ e.title || '(untitled)' }}
-            </p>
-            <span
-              v-if="e.state === 'in-review' && e.isRevision"
-              class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700"
-            >Revision</span>
-            <span
-              v-if="e.state === 'in-review'"
-              data-testid="draft-row-state"
-              class="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white"
-            >In review</span>
-            <span
-              v-else-if="editorOpen && e.id === draftId"
-              data-testid="draft-row-state"
-              class="shrink-0 rounded-full bg-slypn-600 px-2 py-0.5 text-xs font-semibold text-white"
-            >Editing</span>
-            <span class="shrink-0 text-xs text-slypn-400">{{ fmtDate(e.date) }}</span>
+            <button
+              type="button"
+              data-testid="draft-row-open"
+              class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+              :aria-current="editorOpen && e.id === draftId"
+              @click="onRowClick(e)"
+            >
+              <span class="shrink-0 rounded-full bg-slypn-100 px-2 py-0.5 text-xs font-semibold text-slypn-700">
+                {{ e.type === 'blog' ? 'Blog' : 'Article' }}
+              </span>
+              <span class="min-w-0 flex-1 truncate text-sm font-medium text-slypn-800">
+                {{ e.title || '(untitled)' }}
+              </span>
+              <span
+                v-if="e.state === 'in-review' && e.isRevision"
+                class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700"
+              >Revision</span>
+              <span
+                v-if="e.state === 'in-review'"
+                data-testid="draft-row-state"
+                class="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white"
+              >In review</span>
+              <span
+                v-else-if="editorOpen && e.id === draftId"
+                data-testid="draft-row-state"
+                class="shrink-0 rounded-full bg-slypn-600 px-2 py-0.5 text-xs font-semibold text-white"
+              >Editing</span>
+              <span class="shrink-0 text-xs text-slypn-400">{{ fmtDate(e.date) }}</span>
+            </button>
             <button
               v-if="e.state === 'draft'"
               type="button"
               data-testid="draft-row-delete"
               class="shrink-0 rounded px-2 py-1 text-xs font-semibold text-rose-500 hover:bg-rose-50"
               title="Delete draft"
-              @click.stop="deleteDraft(e.id, e.etag)"
+              @click="deleteDraft(e.id, e.etag)"
             >✕</button>
             <span v-else class="w-7 shrink-0" aria-hidden="true"></span>
           </div>

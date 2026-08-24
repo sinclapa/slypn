@@ -1,7 +1,7 @@
 import pluginVue from 'eslint-plugin-vue'
-import vueTsEslintConfig from '@vue/eslint-config-typescript'
+import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 
-export default [
+export default defineConfigWithVueTs(
   {
     name: 'slypn/files-to-lint',
     files: ['**/*.{ts,mts,tsx,vue}'],
@@ -16,12 +16,12 @@ export default [
       '**/*.cjs', '**/*.mjs',
     ],
   },
-  ...pluginVue.configs['flat/essential'],
-  ...vueTsEslintConfig(),
+  pluginVue.configs['flat/essential'],
+  vueTsConfigs.recommended,
   {
     name: 'slypn/rules',
     rules: {
       'vue/multi-word-component-names': 'off',
     },
   },
-]
+)

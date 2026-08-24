@@ -57,7 +57,7 @@ public sealed class SwaggerOAuth2RedirectFunction
         """;
 
     [Function("SwaggerOAuth2Redirect")]
-    public async Task<HttpResponseData> Run(
+    public static async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "swagger/oauth2-redirect.html")] HttpRequestData req)
     {
         var response = req.CreateResponse(HttpStatusCode.OK);
