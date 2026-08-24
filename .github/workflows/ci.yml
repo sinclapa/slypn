@@ -209,18 +209,13 @@ jobs:
     name: SonarCloud
     runs-on: ubuntu-latest
     needs: [web, api]
-    # Dependabot PRs run against Dependabot's own secret store, so secrets.SONAR_TOKEN
-    # arrives empty and the scan dies on "Not authorized or project not found". Mirroring
-    # the token over there would let a bot-authored PR spend our Sonar credentials, and it
-    # would buy nothing: Dependabot is configured for github-actions only, so its PRs change
-    # workflow YAML and no analysed source. Skip instead — a skipped job still satisfies a
-    # required check, and web/api/e2e need no secrets, so the bumped SHAs are still tested.
-    #
-    # Keyed on the PR author rather than github.actor: the actor is whoever triggered the run,
-    # which is forgeable as a trust signal (sonar githubactions:S8232) and would also match a
-    # human merging a Dependabot PR. On a push there is no pull_request payload, so this is
-    # null and main stays analysed.
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    # This job deliberately has no Dependabot exclusion. "SonarCloud Code Analysis" is a
+    # required check posted by the SonarCloud app only when an analysis is actually
+    # submitted, so skipping the job leaves it permanently unreported rather than skipped,
+    # and the PR can never merge. SONAR_TOKEN is therefore mirrored into the Dependabot
+    # secret store by infra/setup.ps1. Only that token is — the deployment and CIAM
+    # credentials stay out of reach of bot-authored PRs, which is why Build + deploy in
+    # azure-static-web-apps.yml still skips for Dependabot.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

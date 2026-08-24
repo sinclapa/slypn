@@ -997,6 +997,15 @@ if (-not $SkipGitHub) {
             if ($LASTEXITCODE -eq 0) { Ok $name; $script:setSecretNames += $name } else { Warn "Failed to set $name" }
         }
 
+        # Dependabot PRs run against a separate secret store, so nothing set above is
+        # visible to them. Only tokens that a bot-authored PR may safely spend belong here.
+        $script:setDependabotSecretNames = @()
+        function Set-GhDependabotSecret([string]$name, [string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { Warn "Skipping $name (dependabot) — value not available"; return }
+            $value | gh secret set $name --repo $gitHubRepo --app dependabot
+            if ($LASTEXITCODE -eq 0) { Ok "$name (dependabot)"; $script:setDependabotSecretNames += $name } else { Warn "Failed to set $name (dependabot)" }
+        }
+
         # SWA deployment token — fetch fresh from Azure each run.
         if ($swaName -and $s['resourceGroup']) {
             if ($s.Contains('subscriptionId')) { Switch-ToSubscription $s['subscriptionId'] }
@@ -1100,6 +1109,14 @@ if (-not $SkipGitHub) {
         $sonarToken = Ask $s 'sonarToken' 'SonarCloud token (sonarcloud.io -> My Account -> Security, Enter to skip)'
         Set-GhSecret 'SONAR_TOKEN' $sonarToken
 
+        # ...and mirrored to Dependabot, which cannot see the secret above. Without it the
+        # scan fails to authenticate on every Dependabot PR, and because the required
+        # "SonarCloud Code Analysis" check is only posted when an analysis is submitted, the
+        # PR is left waiting on a status that never arrives. This is the only secret shared
+        # with Dependabot: it submits analyses and nothing else, unlike the deployment and
+        # CIAM credentials above.
+        Set-GhDependabotSecret 'SONAR_TOKEN' $sonarToken
+
         # ── Validate all expected secrets are present ────────────────────────
         Step 'Phase 4 · Validating GitHub secrets'
         $actualSecretNames   = @(gh secret list --repo $gitHubRepo --json name -q '.[].name' 2>$null)
@@ -1109,6 +1126,19 @@ if (-not $SkipGitHub) {
             Ok "All $($expectedSecretNames.Count) secret(s) confirmed present on $gitHubRepo"
         } else {
             Warn "Missing on $gitHubRepo`: $($missingSecretNames -join ', ')"
+        }
+
+        # The Dependabot store is listed separately — `gh secret list` without --app only
+        # ever shows Actions secrets, so a missing mirror would otherwise pass unnoticed.
+        $expectedDependabotNames = @($script:setDependabotSecretNames | Select-Object -Unique)
+        if ($expectedDependabotNames.Count -gt 0) {
+            $actualDependabotNames  = @(gh secret list --repo $gitHubRepo --app dependabot --json name -q '.[].name' 2>$null)
+            $missingDependabotNames = @($expectedDependabotNames | Where-Object { $_ -notin $actualDependabotNames })
+            if ($missingDependabotNames.Count -eq 0) {
+                Ok "All $($expectedDependabotNames.Count) Dependabot secret(s) confirmed present on $gitHubRepo"
+            } else {
+                Warn "Missing from the Dependabot store on $gitHubRepo`: $($missingDependabotNames -join ', ')"
+            }
         }
     }
 }
