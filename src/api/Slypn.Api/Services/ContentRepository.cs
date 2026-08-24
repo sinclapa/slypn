@@ -26,6 +26,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     private const string DraftBodyPrefix      = "drafts";
     private const string NewsletterFilePrefix = "newsletters";
     private const string MembersPartition     = "member";
+    private const string SubscribersPartition = "subscriber";
     private const string NewslettersPartition = "newsletter";
     private const string ArticleType       = "article";
     private const string InReviewStatus    = "in-review";
@@ -416,6 +417,50 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         var filter = TableClient.CreateQueryFilter($"PartitionKey eq {MembersPartition}");
         var entities = await QueryAsync(store.Members, filter, ct);
         return entities.Select(e => Deserialize<Member>(e) with { Etag = EncodeEtag(e.ETag) }).ToList();
+    }
+
+    // ---- Subscribers ----------------------------------------------------------
+
+    public async Task<Subscriber?> GetSubscriberByEmailAsync(string email, CancellationToken ct)
+    {
+        EnsureWrites();
+        try
+        {
+            var resp = await store.Subscribers.GetEntityAsync<TableEntity>(
+                SubscribersPartition, Subscriber.KeyFor(email), cancellationToken: ct);
+            return Deserialize<Subscriber>(resp.Value) with { Etag = EncodeEtag(resp.Value.ETag) };
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
+    public async Task<IReadOnlyList<Subscriber>> ListSubscribersAsync(CancellationToken ct)
+    {
+        EnsureWrites();
+        var filter = TableClient.CreateQueryFilter($"PartitionKey eq {SubscribersPartition}");
+        var entities = await QueryAsync(store.Subscribers, filter, ct);
+        return entities
+            .Select(e => Deserialize<Subscriber>(e) with { Etag = EncodeEtag(e.ETag) })
+            .OrderByDescending(s => s.SubscribedAt)
+            .ToList();
+    }
+
+    public async Task<Subscriber> UpsertSubscriberAsync(Subscriber subscriber, string? ifMatch, CancellationToken ct)
+    {
+        EnsureWrites();
+        var entity = Entity(SubscribersPartition, subscriber.Id, subscriber);
+        var resp = ifMatch is null
+            ? await store.Subscribers.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct)
+            : await store.Subscribers.UpdateEntityAsync(entity, DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        return subscriber with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
+    }
+
+    public async Task DeleteSubscriberAsync(string id, string? ifMatch, CancellationToken ct)
+    {
+        EnsureWrites();
+        await store.Subscribers.DeleteEntityAsync(SubscribersPartition, id, DecodeEtag(ifMatch), ct);
     }
 
     // ---- Drafts ---------------------------------------------------------------

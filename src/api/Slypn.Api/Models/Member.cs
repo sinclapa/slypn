@@ -19,14 +19,13 @@ public sealed record Member(
 
     /// <summary>
     /// True when an admin actually invited this person, as opposed to their address merely
-    /// having a row here. The members table doubles as the newsletter subscriber list, so
-    /// existence alone says nothing about whether someone may sign in.
+    /// having a row here.
     ///
-    /// Holding a role is the real test — every invite assigns exactly one
-    /// (<c>MemberInviteInput</c> requires it) and the dev-persona seed does too, while the
-    /// anonymous newsletter subscribe is the one write path that produces neither a role nor
-    /// any status but "subscribed". The status check guards against a future write path that
-    /// forgets to assign one.
+    /// Newsletter subscribers now live in their own table, so no anonymous write path reaches
+    /// this one any more — but the predicate stays as a regression guard. Holding a role is the
+    /// real test: every invite assigns exactly one (<c>MemberInviteInput</c> requires it) and the
+    /// dev-persona seed does too. The legacy "subscribed" status is still rejected in case a row
+    /// predating the split survived the migration.
     ///
     /// [JsonIgnore] is load-bearing: members persist as a JSON blob in the entity's Json
     /// column, so without it this computed value would be written into storage.

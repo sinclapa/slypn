@@ -107,9 +107,10 @@ public sealed class AuthExtensionFunctions(
 
         try
         {
-            // Existence is not an invitation. The members table also holds newsletter
-            // subscribers, written by the anonymous POST /api/newsletter/subscribe, so
-            // gating on "a row exists" let anyone subscribe and then sign up.
+            // Existence is not an invitation. The members table used to hold newsletter
+            // subscribers too, so gating on "a row exists" let anyone subscribe and then sign
+            // up; subscribers have their own table now, and IsInvited keeps the gate honest
+            // regardless of what else learns to write here.
             var member = await repo.GetMemberByEmailAsync(email.Trim().ToLowerInvariant(), ct);
             if (member is { IsInvited: true })
             {

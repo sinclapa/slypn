@@ -208,10 +208,10 @@ public sealed class NewslettersFunctions(
     }
 
     /// <summary>
-    /// Public anonymous newsletter subscribe. Stores the email as a Member row
-    /// with Status="subscribed" so we get free dedupe (UpsertMemberAsync is
-    /// idempotent on a given id). No role assignment — subscribers aren't
-    /// SLYPN members in the auth sense.
+    /// Public anonymous newsletter subscribe. Writes to the <c>subscribers</c> table, which is
+    /// separate from <c>members</c> on purpose: subscribing is anonymous, so a subscriber row must
+    /// never be mistaken for evidence that someone was invited. Dedupe comes from the row key being
+    /// derived from the email, so repeat subscribes upsert the same row.
     /// </summary>
     [Function("SubscribeToNewsletter")]
     [OpenApiOperation(operationId: "newsletter.subscribe", tags: new[] { "newsletters" }, Summary = "Subscribe to newsletter", Description = "Subscribes an email address to the newsletter.")]
@@ -228,43 +228,22 @@ public sealed class NewslettersFunctions(
 
         var email = input!.Email.Trim().ToLowerInvariant();
 
-        Member? existing;
-        try { existing = await repo.GetMemberByEmailAsync(email, ct); }
+        Subscriber? existing;
+        try { existing = await repo.GetSubscriberByEmailAsync(email, ct); }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
-        var now = DateTime.UtcNow;
         var displayName = input.DisplayName?.Trim();
-
-        Member record;
-        if (existing is null)
-        {
-            var newDisplayName = string.IsNullOrWhiteSpace(displayName) ? email : displayName;
-            record = new Member(
-                Id:          Guid.NewGuid().ToString("N"),
-                Email:       email,
-                DisplayName: newDisplayName,
-                Roles:       Array.Empty<string>(),
-                Status:      "subscribed",
-                InvitedAt:   now);
-        }
-        else
-        {
-            // Promote any earlier "invited" -> still "subscribed" but keep
-            // their roles + oid if they're an actual member. For pure
-            // subscribers (no roles, no oid), we just refresh the timestamp.
-            var isExistingMember = existing.Roles.Count > 0 || existing.Oid is not null;
-            var resolvedDisplayName = string.IsNullOrWhiteSpace(displayName) ? existing.DisplayName : displayName;
-            record = existing with
-            {
-                Status      = isExistingMember ? existing.Status : "subscribed",
-                DisplayName = resolvedDisplayName,
-            };
-        }
+        var record = new Subscriber(
+            Id:           Subscriber.KeyFor(email),
+            Email:        email,
+            DisplayName:  string.IsNullOrWhiteSpace(displayName) ? existing?.DisplayName ?? email : displayName,
+            // Keep the date they first signed up rather than resetting it on every resubmit.
+            SubscribedAt: existing?.SubscribedAt ?? DateTime.UtcNow);
 
         try
         {
-            var saved = await repo.UpsertMemberAsync(record, existing?.Etag, ct);
-            return await Created(req, new { saved.Email, saved.Status });
+            var saved = await repo.UpsertSubscriberAsync(record, existing?.Etag, ct);
+            return await Created(req, new { saved.Email });
         }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }

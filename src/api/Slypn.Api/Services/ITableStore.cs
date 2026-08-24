@@ -20,4 +20,5 @@ public interface ITableStore
     TableClient Resources   { get; }
     TableClient Newsletters { get; }
     TableClient Members     { get; }
+    TableClient Subscribers { get; }
 }

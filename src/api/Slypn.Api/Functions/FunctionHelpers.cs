@@ -96,6 +96,20 @@ internal static class FunctionHelpers
         return resp;
     }
 
+    /// <summary>
+    /// The envelope a storage-backed endpoint shares with every other one: refuse when storage
+    /// isn't configured, run the operation, and map an Azure storage failure onto the status it
+    /// deserves. Worth factoring out because the guard and the try/catch around the one
+    /// interesting line are longer than the line itself.
+    /// </summary>
+    public static async Task<HttpResponseData> WithStorageAsync(
+        HttpRequestData req, IContentRepository repo, ILogger log, Func<Task<HttpResponseData>> operation)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+        try { return await operation(); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+    }
+
     public static async Task<HttpResponseData> MapStorageException(
         HttpRequestData req, RequestFailedException ex, ILogger? log = null)
     {

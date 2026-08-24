@@ -145,16 +145,23 @@ test.describe('public browsing', () => {
     expect(response.ok(), `subscribe returned ${response.status()}`).toBeTruthy()
     await expect(page.getByTestId('subscribe-result')).toBeVisible()
 
-    // The address becomes a member row with status "subscribed" — only an admin
-    // may read the members list, so assert it with the persona header.
+    // SEC-5: the address lands in the subscribers table, never in members — a subscriber
+    // that shows up as a member is what let an anonymous subscribe past the sign-up gate.
+    // Both lists are admin-only, so read them with the persona header.
     const members = await request.get(`${API}/members`, {
       headers: { 'X-Slypn-Dev-User': 'admin' },
     })
-    const subscribed = await members.json() as { id: string; email: string; status: string }[]
-    const row = subscribed.find((m) => m.email === email)
-    expect(row?.status).toBe('subscribed')
+    const memberRows = await members.json() as { email: string }[]
+    expect(memberRows.some((m) => m.email === email)).toBe(false)
 
-    await request.delete(`${API}/members/${row!.id}`, {
+    const subscribers = await request.get(`${API}/subscribers`, {
+      headers: { 'X-Slypn-Dev-User': 'admin' },
+    })
+    const subscriberRows = await subscribers.json() as { id: string; email: string }[]
+    const row = subscriberRows.find((s) => s.email === email)
+    expect(row, `${email} not found in the subscriber list`).toBeDefined()
+
+    await request.delete(`${API}/subscribers/${row!.id}`, {
       headers: { 'X-Slypn-Dev-User': 'admin' },
     })
   })

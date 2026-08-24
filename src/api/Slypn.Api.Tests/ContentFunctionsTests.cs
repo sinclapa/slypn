@@ -325,12 +325,12 @@ public class ContentFunctionsTests
         var ctx = new TestFunctionContext();
         var payload = TestHttp.Json(ctx, "POST", "http://localhost/api/newsletter/subscribe", new { email = "me@example.com" });
 
-        // GetMemberByEmailAsync throws → line 119
-        var repo1 = new FakeContentRepository { ThrowOnMemberEmailLookup = new RequestFailedException(500, "Lookup failed") };
+        // GetSubscriberByEmailAsync throws
+        var repo1 = new FakeContentRepository { ThrowOnSubscriberLookup = new RequestFailedException(500, "Lookup failed") };
         var err1 = (TestHttpResponseData)await NewslettersFn(repo1).Subscribe(payload, Ct);
         Assert.Equal(HttpStatusCode.InternalServerError, err1.StatusCode);
 
-        // UpsertMemberAsync throws → line 148
+        // UpsertSubscriberAsync throws
         var repo2 = new FakeContentRepository { ThrowOnWrite = new RequestFailedException(412, "Precondition failed") };
         var err2 = (TestHttpResponseData)await NewslettersFn(repo2).Subscribe(
             TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe", new { email = "me@example.com" }), Ct);
@@ -600,9 +600,10 @@ public class ContentFunctionsTests
         Assert.DoesNotContain("Admin", resp.ReadBodyAsString());
     }
 
-    // SEC-1: a newsletter subscriber has a row in the members table but is not a
-    // member. Claiming it would link their OID and flip the row to "active", so they
-    // would appear in Member Management as though an admin had invited them.
+    // SEC-1: a row with no roles is not a member, whatever its status says. Subscribers no
+    // longer land in this table (SEC-5), but a legacy row that survived the migration must still
+    // not be claimable — claiming it links the caller's OID and flips the row to "active", so
+    // they would appear in Member Management as though an admin had invited them.
     [Fact]
     public async Task Me_does_not_claim_a_subscriber_row_for_the_caller()
     {
@@ -939,52 +940,113 @@ public class ContentFunctionsTests
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
+    // SEC-5: subscribing must never touch the members table. That conflation is what let an
+    // anonymous subscribe buy its way past the CIAM sign-up gate (SEC-1).
     [Fact]
-    public async Task Newsletters_subscribe_updates_existing_pure_subscriber()
+    public async Task Newsletters_subscribe_writes_a_subscriber_and_never_a_member()
     {
-        // existing subscriber with no roles and no Oid → Status stays "subscribed"
-        var existing = new Slypn.Api.Models.Member("m1", "sub@example.com", "Old Display",
-            Array.Empty<string>(), "subscribed", DateTime.UtcNow);
-        var repo = new FakeContentRepository { MemberByEmail = existing };
+        var repo = new FakeContentRepository();
         var fn = NewslettersFn(repo);
 
-        // With displayName → covers the non-whitespace displayName branch
         var resp = (TestHttpResponseData)await fn.Subscribe(
             TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
-                new { email = "sub@example.com", displayName = "New Display" }), Ct);
+                new { email = "  New@Example.com  " }), Ct);
+
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
-        Assert.Contains("sub@example.com", resp.ReadBodyAsString());
+        Assert.Equal(0, repo.MemberUpserts);
+
+        var saved = Assert.Single(repo.SubscriberUpserts);
+        Assert.Equal("new@example.com", saved.Email);              // trimmed + lower-cased
+        Assert.Equal("new@example.com", saved.DisplayName);        // falls back to the address
+        Assert.Equal(Subscriber.KeyFor("new@example.com"), saved.Id);
+        Assert.Contains("new@example.com", resp.ReadBodyAsString());
     }
 
     [Fact]
-    public async Task Newsletters_subscribe_existing_subscriber_without_display_name_keeps_existing()
+    public async Task Newsletters_subscribe_is_idempotent_and_keeps_the_original_date()
     {
-        var existing = new Slypn.Api.Models.Member("m1", "sub@example.com", "Old Display",
-            Array.Empty<string>(), "subscribed", DateTime.UtcNow);
-        var repo = new FakeContentRepository { MemberByEmail = existing };
+        // The row key is derived from the address, so a repeat subscribe upserts the same row.
+        var firstSeen = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var existing = new Subscriber(Subscriber.KeyFor("sub@example.com"), "sub@example.com", "Old Display", firstSeen);
+        var repo = new FakeContentRepository { SubscriberByEmail = existing };
         var fn = NewslettersFn(repo);
 
-        // Without displayName → keeps existing.DisplayName
         var resp = (TestHttpResponseData)await fn.Subscribe(
             TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
                 new { email = "sub@example.com" }), Ct);
+
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
+        var saved = Assert.Single(repo.SubscriberUpserts);
+        Assert.Equal(existing.Id, saved.Id);
+        Assert.Equal(firstSeen, saved.SubscribedAt);    // not reset by the resubmit
+        Assert.Equal("Old Display", saved.DisplayName); // no new name supplied -> keep theirs
     }
 
     [Fact]
-    public async Task Newsletters_subscribe_existing_member_with_roles_preserves_status()
+    public async Task Newsletters_subscribe_applies_a_supplied_display_name()
     {
-        // existing member with roles → Status preserved (not overwritten with "subscribed")
-        var existing = new Slypn.Api.Models.Member("m1", "mem@example.com", "Alice",
-            new[] { "Member" }, "active", DateTime.UtcNow, Oid: "oid-1");
-        var repo = new FakeContentRepository { MemberByEmail = existing };
+        var existing = new Subscriber(Subscriber.KeyFor("sub@example.com"), "sub@example.com", "Old Display", DateTime.UtcNow);
+        var repo = new FakeContentRepository { SubscriberByEmail = existing };
         var fn = NewslettersFn(repo);
 
         var resp = (TestHttpResponseData)await fn.Subscribe(
             TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
-                new { email = "mem@example.com" }), Ct);
+                new { email = "sub@example.com", displayName = "  New Display  " }), Ct);
+
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
-        Assert.Contains("active", resp.ReadBodyAsString());
+        Assert.Equal("New Display", Assert.Single(repo.SubscriberUpserts).DisplayName);
+    }
+
+    // ───── Subscribers: admin list + remove ─────
+
+    private static SubscribersFunctions SubscribersFn(FakeContentRepository repo) =>
+        new(repo, NullLogger<SubscribersFunctions>.Instance);
+
+    [Fact]
+    public async Task Subscribers_list_returns_rows_and_delete_removes_one()
+    {
+        var repo = new FakeContentRepository
+        {
+            Subscribers = { new Subscriber("s1", "sub@example.com", "Subby", DateTime.UtcNow) },
+        };
+        var fn = SubscribersFn(repo);
+        var ctx = new TestFunctionContext();
+
+        var list = (TestHttpResponseData)await fn.List(TestHttp.Get(ctx, "http://localhost/api/subscribers"), Ct);
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Contains("sub@example.com", list.ReadBodyAsString());
+
+        var del = (TestHttpResponseData)await fn.Delete(
+            TestHttp.Raw(ctx, "DELETE", "http://localhost/api/subscribers/s1", ""), "s1", Ct);
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+    }
+
+    [Fact]
+    public async Task Subscribers_503_when_writes_disabled()
+    {
+        var fn = SubscribersFn(new FakeContentRepository { Writes = false });
+        var ctx = new TestFunctionContext();
+
+        var list = (TestHttpResponseData)await fn.List(TestHttp.Get(ctx, "http://localhost/api/subscribers"), Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, list.StatusCode);
+
+        var del = (TestHttpResponseData)await fn.Delete(
+            TestHttp.Raw(ctx, "DELETE", "http://localhost/api/subscribers/s1", ""), "s1", Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, del.StatusCode);
+    }
+
+    [Fact]
+    public async Task Subscribers_map_storage_failures()
+    {
+        var listRepo = new FakeContentRepository { ThrowOnRead = new RequestFailedException(500, "Table down") };
+        var list = (TestHttpResponseData)await SubscribersFn(listRepo).List(
+            TestHttp.Get(new TestFunctionContext(), "http://localhost/api/subscribers"), Ct);
+        Assert.Equal(HttpStatusCode.InternalServerError, list.StatusCode);
+
+        var delRepo = new FakeContentRepository { ThrowOnWrite = new RequestFailedException(412, "Precondition failed") };
+        var del = (TestHttpResponseData)await SubscribersFn(delRepo).Delete(
+            TestHttp.Raw(new TestFunctionContext(), "DELETE", "http://localhost/api/subscribers/s1", ""), "s1", Ct);
+        Assert.Equal(HttpStatusCode.PreconditionFailed, del.StatusCode);
     }
 
     // ── Resources: writes-disabled and validation-error branches ─────────────
