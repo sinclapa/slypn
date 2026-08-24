@@ -209,6 +209,14 @@ jobs:
     name: SonarCloud
     runs-on: ubuntu-latest
     needs: [web, api]
+    # Dependabot PRs run against Dependabot's own secret store, so secrets.SONAR_TOKEN
+    # arrives empty and the scan dies on "Not authorized or project not found". Mirroring
+    # the token over there would let a bot-authored PR spend our Sonar credentials, and it
+    # would buy nothing: Dependabot is configured for github-actions only, so its PRs change
+    # workflow YAML and no analysed source. Skip instead — a skipped job still satisfies a
+    # required check, and web/api/e2e need no secrets, so the bumped SHAs are still tested.
+    # Scoped to pull_request: on a push the actor is whoever merged, and main must stay analysed.
+    if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
