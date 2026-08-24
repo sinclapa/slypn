@@ -62,12 +62,21 @@ jobs:
     # the deployment token and CIAM secrets. Requiring the triggering run to be a
     # push closes that off, since fork PR runs of CI are `pull_request`; the
     # repository check is belt and braces.
+    #
+    # The preview deploy additionally excludes Dependabot, for the same reason Dependabot gets
+    # no secrets: the deployment token and CIAM secrets should not be reachable from a
+    # bot-authored PR. Without it the job runs with empty secrets and fails every week. The
+    # exclusion sits on the pull_request arm only — a push to main is a real deploy whoever
+    # merged it, including Dependabot under auto-merge. It reads the PR author rather than
+    # github.actor, which is the triggering entity and not a trustworthy identity claim
+    # (sonar githubactions:S8232).
     if: >-
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_repository.full_name == github.repository) ||
-      (github.event_name == 'pull_request' && github.event.action != 'closed')
+      (github.event_name == 'pull_request' && github.event.action != 'closed' &&
+       github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: ubuntu-latest
     name: Build + deploy
     permissions:
