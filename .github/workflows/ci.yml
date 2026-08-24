@@ -215,8 +215,12 @@ jobs:
     # would buy nothing: Dependabot is configured for github-actions only, so its PRs change
     # workflow YAML and no analysed source. Skip instead — a skipped job still satisfies a
     # required check, and web/api/e2e need no secrets, so the bumped SHAs are still tested.
-    # Scoped to pull_request: on a push the actor is whoever merged, and main must stay analysed.
-    if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
+    #
+    # Keyed on the PR author rather than github.actor: the actor is whoever triggered the run,
+    # which is forgeable as a trust signal (sonar githubactions:S8232) and would also match a
+    # human merging a Dependabot PR. On a push there is no pull_request payload, so this is
+    # null and main stays analysed.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
