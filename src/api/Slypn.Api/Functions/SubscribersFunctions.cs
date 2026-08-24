@@ -1,5 +1,4 @@
 using System.Net;
-using Azure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -27,18 +26,10 @@ public sealed class SubscribersFunctions(
     [OpenApiOperation(operationId: "subscribers.list", tags: new[] { "subscribers" }, Summary = "List subscribers", Description = "Returns all newsletter subscribers, newest first.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Subscriber[]), Description = "List of subscribers")]
-    public async Task<HttpResponseData> List(
+    public Task<HttpResponseData> List(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "subscribers")] HttpRequestData req,
         CancellationToken ct)
-    {
-        if (!repo.SupportsWrites) return await WritesDisabled(req);
-        try
-        {
-            var subscribers = await repo.ListSubscribersAsync(ct);
-            return await Ok(req, subscribers);
-        }
-        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
-    }
+        => WithStorageAsync(req, repo, log, async () => await Ok(req, await repo.ListSubscribersAsync(ct)));
 
     [Function("DeleteSubscriber")]
     [RequireRole("Admin")]
@@ -46,16 +37,12 @@ public sealed class SubscribersFunctions(
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Subscriber id.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NoContent, Description = "Deleted")]
-    public async Task<HttpResponseData> Delete(
+    public Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "subscribers/{id}")] HttpRequestData req,
         string id, CancellationToken ct)
-    {
-        if (!repo.SupportsWrites) return await WritesDisabled(req);
-        try
+        => WithStorageAsync(req, repo, log, async () =>
         {
             await repo.DeleteSubscriberAsync(id, IfMatch(req), ct);
             return NoContent(req);
-        }
-        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
-    }
+        });
 }
