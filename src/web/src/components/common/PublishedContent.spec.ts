@@ -37,7 +37,9 @@ function ok(body: unknown) {
 
 const item = (over = {}) => ({
   id: 'i1', slug: 's', title: 'Live article', summary: 'sum', author: 'Jo',
-  authorId: 'oid1', publishedAt: '2026-05-01T00:00:00Z', category: 'Community',
+  // canEdit is computed by the API (Admin, or the authoring Contributor). The author's
+  // OID is no longer sent to the browser, so ownership is no longer compared here.
+  canEdit: true, publishedAt: '2026-05-01T00:00:00Z', category: 'Community',
   type: 'article', status: 'published', ...over,
 })
 
@@ -141,8 +143,8 @@ describe('PublishedContent', () => {
     await useAuthStore().initialize() // member persona
     apiFetch.mockImplementation((url: string, init?: { method?: string }) => {
       const method = init?.method ?? 'GET'
-      if (url.endsWith('/request-deletion') && method === 'POST') return Promise.resolve(ok(item({ authorId: memberOid, deletionRequestedBy: memberOid })))
-      if (method === 'GET' && url === '/articles?status=published') return Promise.resolve(ok([item({ authorId: memberOid })]))
+      if (url.endsWith('/request-deletion') && method === 'POST') return Promise.resolve(ok(item({ deletionRequestedBy: memberOid })))
+      if (method === 'GET' && url === '/articles?status=published') return Promise.resolve(ok([item()]))
       if (method === 'GET') return Promise.resolve(ok([]))
       return Promise.resolve(ok({}))
     })
@@ -315,7 +317,7 @@ describe('PublishedContent', () => {
   it('uses "blog post" in the confirm prompt for blog-type items', async () => {
     const confirmSpy = vi.fn(() => true)
     vi.stubGlobal('confirm', confirmSpy)
-    mockLoad([item({ type: 'blog', id: 'b1', title: 'My Blog', authorId: 'oid1' })])
+    mockLoad([item({ type: 'blog', id: 'b1', title: 'My Blog' })])
     const w = mountC()
     await flushPromises()
     apiFetch.mockResolvedValue(ok({}))
@@ -369,12 +371,11 @@ describe('PublishedContent', () => {
   })
 
   it('shows the non-admin description for a contributor', async () => {
-    const memberOid = '33333333-3333-3333-3333-333333333333'
     localStorage.setItem(DEV_PERSONA_STORAGE_KEY, 'member')
     pinia = createPinia()
     setActivePinia(pinia)
     await useAuthStore().initialize()
-    mockLoad([item({ authorId: memberOid })])
+    mockLoad([item()])
     const w = mountC()
     await flushPromises()
     expect(w.text()).toContain('Your published articles')

@@ -10,7 +10,7 @@ interface PublishedItem {
   title: string
   summary: string
   author: string
-  authorId?: string | null
+  canEdit?: boolean
   publishedAt: string
   category: string
   type?: 'article' | 'blog'
@@ -29,12 +29,15 @@ const errors    = ref<Record<string, string | null>>({})
 const revisionPending = ref<Set<string>>(new Set())
 
 // Admins manage everything; contributors only their own published content.
+// canEdit is computed by the API — the author's OID is no longer sent to the
+// browser, so there is nothing to compare here. The API enforces the same rule
+// on every write, so this is presentation only.
 const visibleItems = computed(() => {
   const sorted = [...items.value].sort(
     (a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt),
   )
   if (auth.isAdmin) return sorted
-  return sorted.filter(i => i.authorId && i.authorId === auth.oid)
+  return sorted.filter(i => i.canEdit)
 })
 
 // ── Filter / search / pagination ─────────────────────────────────────────────

@@ -20,13 +20,14 @@ import EventsView from './EventsView.vue'
 import EventsPreviousView from './EventsPreviousView.vue'
 import EventDetailView from './EventDetailView.vue'
 import ArticleDetailView from './ArticleDetailView.vue'
+import BlogDetailView from './BlogDetailView.vue'
 import DashboardView from './DashboardView.vue'
 import LoginView from './LoginView.vue'
 import NotFoundView from './NotFoundView.vue'
 import AuthCallbackView from './AuthCallbackView.vue'
 import { useAuthStore } from '@/stores/auth'
 
-const stubs = { RouterLink: RouterLinkStub, EventCalendar: { template: '<div class="event-calendar-stub" />' } }
+const stubs = { RouterLink: RouterLinkStub, EventCalendar: { template: '<div class="event-calendar-stub" />' }, DraftEditor: { template: '<div class="draft-editor-stub" />' } }
 let pinia: Pinia
 const mountView = (C: unknown) => mount(C as never, { global: { plugins: [pinia], stubs } })
 
@@ -359,7 +360,7 @@ describe('ArticleDetailView', () => {
     apiFetch.mockResolvedValue(jsonResponse(art()))
     const w = mountView(ArticleDetailView)
     await flushPromises()
-    await w.find('button').trigger('click')
+    await w.find('[data-testid="article-back"]').trigger('click')
     expect(router.back).toHaveBeenCalled()
     expect(router.push).not.toHaveBeenCalled()
   })
@@ -370,7 +371,7 @@ describe('ArticleDetailView', () => {
     apiFetch.mockResolvedValue(jsonResponse(art()))
     const w = mountView(ArticleDetailView)
     await flushPromises()
-    await w.find('button').trigger('click')
+    await w.find('[data-testid="article-back"]').trigger('click')
     expect(router.push).toHaveBeenCalledWith('/articles')
   })
 
@@ -402,6 +403,108 @@ describe('ArticleDetailView', () => {
     const w = mountView(ArticleDetailView)
     await flushPromises()
     expect(w.text()).toContain('Couldn’t load this article')
+  })
+
+  // ── Edit affordance ────────────────────────────────────────────────────────
+  // canEdit is computed by the API; the view only decides whether to show it.
+  // It is paired with isAuthenticated because in dev-skip mode a caller with no
+  // persona header resolves to the admin persona server-side.
+
+  it('shows the edit button when the API says the caller may edit', async () => {
+    route.params = { slug: 's' }
+    await useAuthStore().initialize() // dev-skip admin; the button also needs a signed-in user
+    apiFetch.mockResolvedValue(jsonResponse(art({ canEdit: true })))
+    const w = mountView(ArticleDetailView)
+    await flushPromises()
+    expect(w.find('[data-testid="edit-content"]').exists()).toBe(true)
+  })
+
+  it('hides the edit button when the API says the caller may not', async () => {
+    route.params = { slug: 's' }
+    apiFetch.mockResolvedValue(jsonResponse(art({ canEdit: false })))
+    const w = mountView(ArticleDetailView)
+    await flushPromises()
+    expect(w.find('[data-testid="edit-content"]').exists()).toBe(false)
+  })
+
+  it('hides the edit button when canEdit is absent', async () => {
+    // An older API response, or any endpoint that did not compute the flag.
+    route.params = { slug: 's' }
+    apiFetch.mockResolvedValue(jsonResponse(art()))
+    const w = mountView(ArticleDetailView)
+    await flushPromises()
+    expect(w.find('[data-testid="edit-content"]').exists()).toBe(false)
+  })
+
+  it('opens a revision draft in the editor when the edit button is clicked', async () => {
+    route.params = { slug: 's' }
+    apiFetch.mockImplementation((url: string, init?: { method?: string }) => {
+      if (url === '/articles/a1/edit' && init?.method === 'POST') return Promise.resolve(jsonResponse({ id: 'draft-9' }))
+      return Promise.resolve(jsonResponse(art({ canEdit: true })))
+    })
+    await useAuthStore().initialize()
+    const w = mountView(ArticleDetailView)
+    await flushPromises()
+    await w.find('[data-testid="edit-content"]').trigger('click')
+    await flushPromises()
+    expect(apiFetch).toHaveBeenCalledWith('/articles/a1/edit', { method: 'POST' })
+  })
+})
+
+describe('BlogDetailView', () => {
+  const post = (over = {}) => ({ id: 'b1', slug: 'p', title: 'A post', summary: 'sum', body: '<p>body text</p>', author: 'Jo', publishedAt: '2026-05-01T00:00:00Z', readingMinutes: 2, category: 'Community', ...over })
+
+  it('renders the fetched post', async () => {
+    route.params = { slug: 'p' }
+    apiFetch.mockResolvedValue(jsonResponse(post()))
+    const w = mountView(BlogDetailView)
+    await flushPromises()
+    expect(apiFetch).toHaveBeenCalledWith('/blog/p')
+    expect(w.text()).toContain('A post')
+    expect(w.html()).toContain('body text')
+  })
+
+  it('renders prev/next navigation pointing at blog URLs', async () => {
+    route.params = { slug: 'p' }
+    apiFetch.mockResolvedValue(jsonResponse(post({
+      prev: { slug: 'older', title: 'Older post' },
+      next: { slug: 'newer', title: 'Newer post' },
+    })))
+    const w = mountView(BlogDetailView)
+    await flushPromises()
+    const targets = w.findAllComponents(RouterLinkStub).map(l => l.props('to'))
+    expect(targets).toContain('/blog/older')
+    expect(targets).toContain('/blog/newer')
+  })
+
+  it('shows not-found when the post is 404', async () => {
+    route.params = { slug: 'missing' }
+    apiFetch.mockResolvedValue(jsonResponse(null, { status: 404, ok: false }))
+    const w = mountView(BlogDetailView)
+    await flushPromises()
+    expect(w.text()).toContain('Post not found')
+  })
+
+  it('shows an error on non-404 failure', async () => {
+    route.params = { slug: 'p' }
+    apiFetch.mockResolvedValue(jsonResponse(null, { status: 500, ok: false }))
+    const w = mountView(BlogDetailView)
+    await flushPromises()
+    expect(w.text()).toContain('Couldn’t load this post')
+  })
+
+  it('gates the edit button on canEdit', async () => {
+    route.params = { slug: 'p' }
+    await useAuthStore().initialize()
+    apiFetch.mockResolvedValue(jsonResponse(post({ canEdit: true })))
+    const shown = mountView(BlogDetailView)
+    await flushPromises()
+    expect(shown.find('[data-testid="edit-content"]').exists()).toBe(true)
+
+    apiFetch.mockResolvedValue(jsonResponse(post({ canEdit: false })))
+    const hidden = mountView(BlogDetailView)
+    await flushPromises()
+    expect(hidden.find('[data-testid="edit-content"]').exists()).toBe(false)
   })
 })
 

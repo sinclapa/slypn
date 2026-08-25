@@ -45,6 +45,7 @@ const router = createRouter({
     { path: '/articles',          name: 'articles',        component: ArticlesView },
     { path: '/articles/:slug',    name: 'article-detail',  component: ArticleDetailView },
     { path: '/blog',              name: 'blog',            component: BlogView },
+    { path: '/blog/:slug',        name: 'blog-detail',     component: () => import('@/views/BlogDetailView.vue') },
     { path: '/events',            name: 'events',          component: EventsView },
     { path: '/events/previous',  name: 'events-previous', component: () => import('@/views/EventsPreviousView.vue') },
     { path: '/events/:id',       name: 'event-detail',    component: () => import('@/views/EventDetailView.vue') },
