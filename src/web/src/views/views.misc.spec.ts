@@ -509,6 +509,29 @@ describe('BlogDetailView', () => {
 })
 
 describe('DashboardView', () => {
+  it('badges the Editor tile with the number of documents on the go', async () => {
+    const adminOid = '11111111-1111-1111-1111-111111111111'
+    apiFetch.mockImplementation((path: string) => {
+      const body = path === '/drafts' ? [{ id: 'd1' }, { id: 'd2' }]
+        : path === '/review/articles' ? [{ authorId: adminOid }]
+        : []
+      return Promise.resolve(jsonResponse(body))
+    })
+    await useAuthStore().initialize()
+    const w = mountView(DashboardView)
+    await flushPromises()
+    expect(w.find('[data-testid="dashboard-editor-badge"]').text()).toBe('3')
+  })
+
+  it('shows no Editor badge when there is nothing on the go', async () => {
+    apiFetch.mockResolvedValue(jsonResponse([]))
+    await useAuthStore().initialize()
+    const w = mountView(DashboardView)
+    await flushPromises()
+    expect(w.find('[data-testid="dashboard-editor-badge"]').exists()).toBe(false)
+  })
+
+
   it('greets the signed-in admin and shows admin tiles', async () => {
     apiFetch.mockResolvedValue(jsonResponse([]))
     const auth = useAuthStore()

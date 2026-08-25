@@ -3,11 +3,16 @@ import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useApprovalsStore } from '@/stores/approvals'
+import { useEditorQueueStore } from '@/stores/editorQueue'
 
 const auth = useAuthStore()
 const approvalsStore = useApprovalsStore()
+const editorQueueStore = useEditorQueueStore()
 
-onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
+onMounted(() => {
+  if (auth.isAdmin) approvalsStore.refresh()
+  if (auth.isContributor || auth.isAdmin) editorQueueStore.refresh()
+})
 </script>
 
 <template>
@@ -70,7 +75,14 @@ onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
         to="/editor"
         class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
       >
-        <p class="font-display font-bold text-slypn-700">Editor</p>
+        <p class="flex items-center gap-2 font-display font-bold text-slypn-700">
+          Editor
+          <span
+            v-if="editorQueueStore.openCount > 0"
+            data-testid="dashboard-editor-badge"
+            class="rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
+          >{{ editorQueueStore.openCount }}</span>
+        </p>
         <p class="mt-2 text-sm text-slypn-900/75">
           Draft articles and blog posts. Submit for admin approval when ready.
         </p>
