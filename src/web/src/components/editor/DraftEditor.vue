@@ -26,6 +26,10 @@ const switching   = ref(false)
 const uploadError = ref<string | null>(null)
 const submitting  = ref(false)
 const submitError = ref<string | null>(null)
+// Not every refusal is a failure. Submitting a revision that matches what is already
+// published comes back 409 — there is nothing to review, which is worth saying kindly
+// rather than in red. 409 is only reachable from that guard on this endpoint.
+const submitNotice = ref<string | null>(null)
 
 interface ConflictState { serverDraft: DraftPayload; serverEtag: string | null }
 const conflict = ref<ConflictState | null>(null)
@@ -50,12 +54,14 @@ async function loadDraft(id: string) {
     currentEtag.value = null
     conflict.value = null
     submitError.value = null
+    submitNotice.value = null
     loadedSnapshot.value = snapshot(draft.value)
     return
   }
   switching.value = true
   conflict.value  = null
   submitError.value = null
+  submitNotice.value = null
   try {
     const resp = await apiFetch(`/drafts/${id}`)
     if (!resp.ok) { draft.value = { ...EMPTY_DRAFT }; currentEtag.value = null; return }
@@ -110,10 +116,15 @@ defineExpose({ flush, isDirty })
 async function submitForReview() {
   if (submitting.value) return
   submitError.value = null
+  submitNotice.value = null
   submitting.value  = true
   try {
     await save(draft.value)
     const resp = await apiFetch(`/drafts/${props.draftId}/submit`, { method: 'POST' })
+    if (resp.status === 409) {
+      submitNotice.value = await resp.text()
+      return
+    }
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     emit('submitted', props.draftId)
   } catch (err) {
@@ -362,6 +373,17 @@ watch(() => draft.value.body, (html) => {
         @click="submitForReview"
       >{{ submitting ? 'Submitting…' : 'Submit for review' }}</button>
     </div>
+
+    <p
+      v-if="!readonly && submitNotice"
+      data-testid="draft-submit-notice"
+      class="flex items-start gap-2 rounded-md border border-slypn-100 bg-slypn-50 px-4 py-2 text-sm text-slypn-800"
+    >
+      <svg class="mt-0.5 h-4 w-4 shrink-0 text-slypn-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0Zm-9-4a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm1 3a1 1 0 0 0-1 1v4a1 1 0 1 0 2 0v-4a1 1 0 0 0-1-1Z" clip-rule="evenodd" />
+      </svg>
+      <span>{{ submitNotice }}</span>
+    </p>
 
     <p v-if="!readonly && submitError" data-testid="draft-submit-error" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
       Submit failed: {{ submitError }}

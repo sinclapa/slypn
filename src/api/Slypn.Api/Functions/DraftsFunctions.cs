@@ -172,6 +172,12 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
             var article = await repo.SubmitDraftAsync(id, authorId, ct);
             return await Created(req, article, article.Etag);
         }
+        catch (ContentUnchangedException ex)
+        {
+            // Not a failure — the author simply has nothing to submit yet. Distinct from
+            // the 400s below so the editor can say so gently rather than in red.
+            return await Conflict(req, ex.Message);
+        }
         catch (InvalidOperationException ex)
         {
             return await BadRequest(req, ex.Message);

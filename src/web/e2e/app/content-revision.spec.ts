@@ -104,8 +104,10 @@ test.describe('revision workflow', () => {
 
     const revision = await (await api.post(`/articles/${article.id}/edit`)).json() as { id: string }
 
+    // 409, not 400 — nothing is wrong with the request, there is just nothing to do,
+    // and the editor shows it as information rather than an error.
     const refused = await api.post(`/drafts/${revision.id}/submit`)
-    expect(refused.status()).toBe(400)
+    expect(refused.status()).toBe(409)
     expect(await refused.text()).toContain('identical to the published version')
 
     // Change one thing and it goes through, so this is a no-op guard and not a block.

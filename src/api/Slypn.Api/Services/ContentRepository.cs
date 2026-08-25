@@ -547,7 +547,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         {
             var target = await GetArticleAsync(draft.ReplacesArticleId, PublishedStatus, ct);
             if (target is not null && IsSameContent(draft, draftBody, target))
-                throw new InvalidOperationException(
+                throw new ContentUnchangedException(
                     "This revision is identical to the published version, so there is nothing "
                     + "to review. Make a change first, or close the editor to discard it.");
         }

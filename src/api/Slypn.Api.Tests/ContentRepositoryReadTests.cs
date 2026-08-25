@@ -186,4 +186,15 @@ public class ContentRepositoryReadTests
             RevisionDraft(title: "  T  "), "\n<p>hi</p>\n", PublishedTarget()));
     }
 
+
+    [Fact]
+    public void ContentUnchanged_is_its_own_exception_type()
+    {
+        // The Submit endpoint answers 409 for this and 400 for every other
+        // InvalidOperationException, so it must not be one of those.
+        var ex = new Slypn.Api.Services.ContentUnchangedException("nothing to review");
+        Assert.IsNotType<InvalidOperationException>(ex);
+        Assert.Equal("nothing to review", ex.Message);
+    }
+
 }
