@@ -35,6 +35,7 @@ Optimistic concurrency uses the **native Table entity ETag**. `ContentRepository
 
 - **`articles` partition on `status`** creates a hot `published` partition (the vast majority of reads). Fine at our scale (hundreds of articles, light traffic).
 - **List endpoints fetch bodies.** Article/draft list responses include the body (the approvals queue renders it), so those lists fetch the body blobs in parallel. Cheap at our volumes; could be trimmed to summaries later.
+- **`authorId` never leaves the API on a public read.** It is an Entra OID, so anonymous-reachable responses (`/articles`, `/articles/{slug}`, `/blog`, `/blog/{slug}`) are projected through `ArticleVisibility.ForPublic`, which strips it and adds a computed `canEdit` — Admin, or the Contributor who wrote it — for the caller to gate the edit affordance on. `canEdit` is per-request and never persisted; `/review/*` and `/drafts/*` are gated, so they still carry `authorId`. Content published before `AuthorId` existed has none, which makes it admin-only by construction.
 - **Workflow transitions are not atomic.** Submit/publish/revise and an event partition-key change are read→write→delete sequences. Admin actions are rare and re-runs are idempotent (the source is gone, surfacing a clean error). The body blob is keyed by id, so it never moves during a status change.
 
 ## Bootstrap

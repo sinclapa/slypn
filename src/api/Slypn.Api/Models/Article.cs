@@ -17,8 +17,20 @@ public sealed record Article(
     /// <summary>"article" or "blog". Defaults to "article" for rows that predate the field.</summary>
     public string Type { get; init; } = "article";
 
-    /// <summary>Author's Entra oid — set on submit; carries through workflow transitions.</summary>
+    /// <summary>Author's Entra oid — set on submit; carries through workflow transitions.
+    /// Stripped from responses an anonymous caller can reach (see ArticleVisibility.ForPublic):
+    /// it is an internal identifier, not public data. Omitted entirely when null, so the
+    /// key itself does not appear on a public payload; a null round-trips to null either
+    /// way, so storage is unaffected.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AuthorId { get; init; }
+
+    /// <summary>Whether the calling principal may open this item in the editor — an Admin, or
+    /// the Contributor who authored it. Computed per request, never persisted: the conditional
+    /// ignore keeps it out of the stored Json column, which is serialised from this same record.
+    /// Null (and omitted) on responses where it was not computed.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? CanEdit { get; init; }
 
     /// <summary>Set when an admin rejects an in-review article. Null otherwise.</summary>
     public string? RejectionReason { get; init; }

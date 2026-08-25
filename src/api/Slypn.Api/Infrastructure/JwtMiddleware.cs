@@ -49,6 +49,15 @@ public sealed class JwtMiddleware(
 
         if (!result.IsAllowed)
         {
+            // Optional auth: a caller we can't vouch for is simply anonymous. No principal
+            // goes into Items, so GetPrincipal() stays null and every caller-varying
+            // projection falls back to the public shape.
+            if (attr.Optional)
+            {
+                await next(context);
+                return;
+            }
+
             await ShortCircuit(context, httpReq, result.RefusalCode!.Value, result.RefusalMessage!);
             return;
         }
@@ -304,4 +313,7 @@ public static class FunctionContextExtensions
 
     public static bool IsAdmin(this FunctionContext context) =>
         context.GetPrincipal()?.FindAll("roles").Any(c => c.Value == "Admin") ?? false;
+
+    public static bool IsContributor(this FunctionContext context) =>
+        context.GetPrincipal()?.FindAll("roles").Any(c => c.Value == "Contributor") ?? false;
 }

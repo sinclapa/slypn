@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import BlogIcon from '@/components/common/BlogIcon.vue'
 import PillFilter from '@/components/common/PillFilter.vue'
@@ -69,7 +69,12 @@ const formatDate = (iso: string) =>
     <ol v-else class="space-y-12">
       <li v-for="post in sorted" :id="`post-${post.id}`" :key="post.id" class="scroll-mt-24 border-b border-slypn-100 pb-12 last:border-b-0">
         <p class="text-xs text-slypn-900/60">{{ formatDate(post.publishedAt) }} &middot; {{ post.author }}</p>
-        <h2 class="mt-2 text-2xl font-bold text-slypn-700">{{ post.title }}</h2>
+        <h2 class="mt-2 text-2xl font-bold text-slypn-700">
+          <RouterLink
+            :to="`/blog/${post.slug || post.id}`"
+            class="hover:text-slypn-900 hover:underline underline-offset-4"
+          >{{ post.title }}</RouterLink>
+        </h2>
         <p class="mt-3 text-slypn-900/85">{{ post.summary }}</p>
         <div class="prose prose-slypn mt-4 max-w-none text-slypn-900/80" v-html="post.body" />
       </li>

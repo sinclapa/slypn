@@ -19,6 +19,14 @@ export interface Article {
   publishedAt: string
   readingMinutes: number
   category: ArticleCategory
+  type?: 'article' | 'blog'
+  /**
+   * Server-computed: may the signed-in caller open this in the editor (Admin, or the
+   * Contributor who wrote it)? Deliberately a flag rather than an authorId to compare
+   * against — the author's Entra OID has no business in a public payload. Presentation
+   * only; the API re-checks on POST /articles/{id}/edit.
+   */
+  canEdit?: boolean
   prev?: ArticleNeighbour
   next?: ArticleNeighbour
 }

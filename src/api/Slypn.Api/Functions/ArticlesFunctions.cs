@@ -25,6 +25,13 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     private static readonly HashSet<string> AuthorSettableStatuses =
         new(StringComparer.OrdinalIgnoreCase) { "draft", InReviewStatus };
 
+    private const string EditOwnershipRefusal =
+        "You can only edit your own published content. Ask an Admin to make the change, "
+        + "or to reassign the item to you.";
+
+    private const string DeletionOwnershipRefusal =
+        "You can only request deletion of your own published content.";
+
     private const string PublishedReplaceRefusal =
         "This article is published — only an Admin can replace it. "
         + "Use POST /api/articles/{id}/edit to propose a revision, which keeps the live version up until an Admin approves.";
@@ -52,14 +59,16 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     /// reachable through GetPendingArticles below, which carries a role gate.
     /// </summary>
     [Function("GetArticles")]
+    [OptionalAuth]
     [OpenApiOperation(operationId: "articles.list", tags: new[] { "articles" }, Summary = "List articles", Description = "Returns published articles.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of published articles")]
     public async Task<HttpResponseData> GetArticles(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "articles")] HttpRequestData req,
+        FunctionContext context,
         CancellationToken ct)
     {
         var articles = await repo.ListArticlesAsync(PublishedStatus, ct);
-        return await Ok(req, articles);
+        return await Ok(req, articles.Select(a => a.ForPublic(context)).ToList());
     }
 
     /// <summary>
@@ -82,24 +91,40 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Forbidden, Description = "Caller lacks the required role")]
     public async Task<HttpResponseData> GetPendingArticles(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "review/articles")] HttpRequestData req,
+        FunctionContext context,
         CancellationToken ct)
     {
         var articles = await repo.ListArticlesAsync(InReviewStatus, ct);
-        return await Ok(req, articles);
+        return await Ok(req, VisibleInReview(articles, context));
     }
 
+    /// <summary>
+    /// In-review items the caller may act on: everything for an Admin, own work only
+    /// for a Contributor. Filtering here rather than in the browser — the client-side
+    /// filter in EditorView is a display convenience, not the boundary.
+    /// </summary>
+    internal static IReadOnlyList<Article> VisibleInReview(
+        IReadOnlyList<Article> items, FunctionContext context) =>
+        context.IsAdmin()
+            ? items
+            : context.GetUserOid() is { Length: > 0 } oid
+                ? items.Where(a => a.AuthorId == oid).ToList()
+                : [];
+
     [Function("GetArticleBySlug")]
+    [OptionalAuth]
     [OpenApiOperation(operationId: "articles.getBySlug", tags: new[] { "articles" }, Summary = "Get article by slug", Description = "Returns a single article identified by slug.")]
     [OpenApiParameter(name: "slug", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Article slug.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article), Description = "Article")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Description = "Not found")]
     public async Task<HttpResponseData> GetArticleBySlug(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "articles/{slug}")] HttpRequestData req,
+        FunctionContext context,
         string slug, CancellationToken ct)
     {
         var article = await repo.GetArticleWithNeighboursAsync(slug, ct);
         if (article is null) return req.CreateResponse(HttpStatusCode.NotFound);
-        return await Ok(req, article, article.Etag);
+        return await Ok(req, article.ForPublic(context), article.Etag);
     }
 
     [Function("CreateArticle")]
@@ -235,6 +260,13 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         var editorName = context.GetUserName() ?? "Member";
         try
         {
+            // Admins may revise anything; a Contributor only their own work. Checked
+            // here rather than in the UI alone — the endpoint is reachable directly.
+            var published = await repo.GetArticleAsync(id, PublishedStatus, ct);
+            if (published is null) return await NotFound(req, "Published article not found.");
+            if (!ArticleVisibility.MayEdit(published, context))
+                return await Forbidden(req, EditOwnershipRefusal);
+
             var draft = await repo.CreateRevisionDraftAsync(id, editorOid, editorName, ct);
             return await Created(req, draft, draft.Etag);
         }
@@ -262,6 +294,11 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         if (requesterOid is null) return await BadRequest(req, "Token missing oid claim.");
         try
         {
+            var published = await repo.GetArticleAsync(id, PublishedStatus, ct);
+            if (published is null) return await NotFound(req, "Published article not found.");
+            if (!ArticleVisibility.MayEdit(published, context))
+                return await Forbidden(req, DeletionOwnershipRefusal);
+
             var article = await repo.RequestArticleDeletionAsync(id, requesterOid, ct);
             return await Ok(req, article, article.Etag);
         }
