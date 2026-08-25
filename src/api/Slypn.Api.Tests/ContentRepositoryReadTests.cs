@@ -1,4 +1,5 @@
 using Azure.Data.Tables;
+using Slypn.Api.Models;
 using Slypn.Api.Models.Inputs;
 using Slypn.Api.Services;
 using Xunit;
@@ -146,4 +147,43 @@ public class ContentRepositoryReadTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => Repo().ListSubscribersAsync(Ct));
         await Assert.ThrowsAsync<InvalidOperationException>(() => Repo().GetSubscriberByEmailAsync("a@b.com", Ct));
     }
+
+    // ── No-op revision guard ────────────────────────────────────────────────────
+    // A revision draft starts as a copy of the article it replaces, so submitting one
+    // untouched would queue an identical item for an admin to approve for nothing.
+
+    private static Draft RevisionDraft(string title = "T", string summary = "S", string category = "Community", int minutes = 4) =>
+        new("d1", "oid", "Ann", "article", title, "slug", summary, "", category, minutes,
+            DateTime.UtcNow, DateTime.UtcNow, null, "a1");
+
+    private static Article PublishedTarget(string title = "T", string summary = "S", string body = "<p>hi</p>", string category = "Community", int minutes = 4) =>
+        new("a1", "slug", title, summary, body, "Ann", DateTime.UtcNow, minutes, category);
+
+    [Fact]
+    public void IsSameContent_is_true_for_an_untouched_revision()
+    {
+        Assert.True(ContentRepository.IsSameContent(RevisionDraft(), "<p>hi</p>", PublishedTarget()));
+    }
+
+    [Theory]
+    [InlineData("Changed", "S", "Community", 4, "<p>hi</p>")]
+    [InlineData("T", "Changed", "Community", 4, "<p>hi</p>")]
+    [InlineData("T", "S", "Treatment", 4, "<p>hi</p>")]
+    [InlineData("T", "S", "Community", 9, "<p>hi</p>")]
+    [InlineData("T", "S", "Community", 4, "<p>edited</p>")]
+    public void IsSameContent_is_false_when_any_authored_field_differs(
+        string title, string summary, string category, int minutes, string draftBody)
+    {
+        Assert.False(ContentRepository.IsSameContent(
+            RevisionDraft(title, summary, category, minutes), draftBody, PublishedTarget()));
+    }
+
+    [Fact]
+    public void IsSameContent_ignores_surrounding_whitespace()
+    {
+        // Trailing newlines from the editor are not an edit.
+        Assert.True(ContentRepository.IsSameContent(
+            RevisionDraft(title: "  T  "), "\n<p>hi</p>\n", PublishedTarget()));
+    }
+
 }
