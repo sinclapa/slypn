@@ -234,7 +234,7 @@ internal sealed class FakeContentRepository : IContentRepository
         return Task.FromResult(ArticleByIdAndStatus);
     }
     public Task<Article> PublishArticleAsync(string id, CancellationToken ct) => Task.FromResult(Guard(MakeArticle(id, null)));
-    public Task<Draft> ReviseArticleAsync(string id, string feedback, CancellationToken ct)
+    public Task<Draft> ReviseArticleAsync(string id, string? feedback, CancellationToken ct)
         => Task.FromResult(Guard(MakeDraft(id, "oid", "name") with { RevisionFeedback = feedback }));
 
     private static Article MakeArticle(string id, ArticleInput? input) => new(

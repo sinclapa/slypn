@@ -88,5 +88,5 @@ public interface IContentRepository
     Task<Article>             PublishArticleAsync(string id, CancellationToken ct);
 
     /// <summary>Send an in-review article back to the author as a draft with revision feedback.</summary>
-    Task<Draft>               ReviseArticleAsync(string id, string feedback, CancellationToken ct);
+    Task<Draft>               ReviseArticleAsync(string id, string? feedback, CancellationToken ct);
 }

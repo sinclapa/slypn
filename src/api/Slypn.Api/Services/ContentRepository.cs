@@ -688,7 +688,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         return updated with { Etag = EncodeEtag(saved.Headers.ETag!.Value) };
     }
 
-    public async Task<Draft> ReviseArticleAsync(string id, string feedback, CancellationToken ct)
+    public async Task<Draft> ReviseArticleAsync(string id, string? feedback, CancellationToken ct)
     {
         EnsureWrites();
         Article source;

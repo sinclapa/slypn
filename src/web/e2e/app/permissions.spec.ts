@@ -129,6 +129,49 @@ test.describe('a contributor', () => {
     }
   })
 
+  test('cannot withdraw another author’s submission', async ({ api, cleanup, uid }) => {
+    const otherAuthor = await createApiClient('contributor2')
+    try {
+      const draft = await createDraft(otherAuthor, cleanup, { title: titleFor(uid, 'Theirs in review') })
+      await submitDraft(otherAuthor, cleanup, draft.id)
+
+      expect((await api.post(`/articles/${draft.id}/withdraw`)).status()).toBe(403)
+
+      // ...and it is genuinely still in review for its author.
+      const theirs = await (await otherAuthor.get('/review/articles')).json() as { id: string }[]
+      expect(theirs.some(a => a.id === draft.id)).toBe(true)
+    } finally {
+      await otherAuthor.dispose()
+    }
+  })
+
+  test('withdraws their own submission back to a draft', async ({ api, cleanup, uid }) => {
+    const draft = await createDraft(api, cleanup, { title: titleFor(uid, 'Mine in review') })
+    await submitDraft(api, cleanup, draft.id)
+
+    // In review, so not in drafts.
+    expect(((await (await api.get('/drafts')).json()) as { id: string }[])
+      .some(d => d.id === draft.id)).toBe(false)
+
+    expect((await api.post(`/articles/${draft.id}/withdraw`)).ok()).toBeTruthy()
+
+    // Back in drafts, out of the review queue.
+    expect(((await (await api.get('/drafts')).json()) as { id: string }[])
+      .some(d => d.id === draft.id)).toBe(true)
+    expect(((await (await api.get('/review/articles')).json()) as { id: string }[])
+      .some(a => a.id === draft.id)).toBe(false)
+  })
+
+  test('an admin cannot withdraw someone else’s work, only revise it', async ({ api, adminApi, cleanup, uid }) => {
+    // Deliberate: /revise requires feedback, so the author is told why. Withdraw
+    // has no admin bypass precisely so that cannot be sidestepped.
+    const draft = await createDraft(api, cleanup, { title: titleFor(uid, 'Admin cannot withdraw') })
+    await submitDraft(api, cleanup, draft.id)
+
+    expect((await adminApi.post(`/articles/${draft.id}/withdraw`)).status()).toBe(403)
+    expect((await adminApi.post(`/articles/${draft.id}/revise`, { feedback: 'Needs another pass please.' })).ok()).toBeTruthy()
+  })
+
   test('can still read the pending queues they work from', async ({ api }) => {
     // The role gate must not lock out the people who need it: EditorView and
     // PublishedContent both read these.

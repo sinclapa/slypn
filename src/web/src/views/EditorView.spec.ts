@@ -3,7 +3,11 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 
 const { apiJson, apiFetch } = vi.hoisted(() => ({ apiJson: vi.fn(), apiFetch: vi.fn() }))
-vi.mock('@/lib/api', () => ({ apiJson, apiFetch }))
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  // Partial: keep the real apiErrorMessage so error text is formatted as it is in the app.
+  return { ...actual, apiJson, apiFetch }
+})
 
 import EditorView from './EditorView.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -58,6 +62,63 @@ beforeEach(async () => {
 })
 
 describe('EditorView', () => {
+  // ── Withdraw from review ───────────────────────────────────────────────────
+
+  it('offers Withdraw on an in-review row and not on a draft', async () => {
+    mockWithPending([draftSummary()], [pendingItem()])
+    const w = mountV()
+    await flushPromises()
+
+    const rows = w.findAll('[data-testid="draft-row"]')
+    const withReview = rows.find(r => r.attributes('data-state') === 'in-review')!
+    const withDraft  = rows.find(r => r.attributes('data-state') === 'draft')!
+    expect(withReview.find('[data-testid="draft-row-withdraw"]').exists()).toBe(true)
+    expect(withDraft.find('[data-testid="draft-row-withdraw"]').exists()).toBe(false)
+  })
+
+  it('withdraws a submission back into drafts', async () => {
+    mockWithPending([], [pendingItem()])
+    apiFetch.mockResolvedValue(ok(draftSummary({ id: 'r1', title: 'Pending Article' })))
+    const w = mountV()
+    await flushPromises()
+
+    await w.find('[data-testid="draft-row-withdraw"]').trigger('click')
+    await flushPromises()
+
+    expect(apiFetch).toHaveBeenCalledWith('/articles/r1/withdraw', { method: 'POST' })
+    // It leaves review and arrives in drafts, so the row is editable rather than in-review.
+    const rows = w.findAll('[data-testid="draft-row"]')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].attributes('data-state')).toBe('draft')
+    expect(w.text()).toContain('back in your drafts')
+  })
+
+  it('does not withdraw when the confirm is dismissed', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => false))
+    mockWithPending([], [pendingItem()])
+    const w = mountV()
+    await flushPromises()
+
+    await w.find('[data-testid="draft-row-withdraw"]').trigger('click')
+    await flushPromises()
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a refusal from the API', async () => {
+    mockWithPending([], [pendingItem()])
+    apiFetch.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden', text: () => Promise.resolve('You can only withdraw your own submissions.') } as unknown as Response)
+    const w = mountV()
+    await flushPromises()
+
+    await w.find('[data-testid="draft-row-withdraw"]').trigger('click')
+    await flushPromises()
+
+    expect(w.find('[data-testid="withdraw-error"]').text()).toContain('your own submissions')
+    // ...and it is still in review, not silently moved.
+    expect(w.find('[data-testid="draft-row"]').attributes('data-state')).toBe('in-review')
+  })
+
+
   it('lists existing drafts', async () => {
     mockLists([draftSummary(), draftSummary({ id: 'd2', title: 'Second draft' })])
     const w = mountV()

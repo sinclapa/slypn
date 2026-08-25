@@ -29,6 +29,10 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         "You can only edit your own published content. Ask an Admin to make the change, "
         + "or to reassign the item to you.";
 
+    private const string WithdrawOwnershipRefusal =
+        "You can only withdraw your own submissions. An Admin returns someone else's work "
+        + "with POST /api/articles/{id}/revise, which carries feedback.";
+
     private const string DeletionOwnershipRefusal =
         "You can only request deletion of your own published content.";
 
@@ -322,6 +326,50 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         {
             var article = await repo.CancelArticleDeletionAsync(id, ct);
             return await Ok(req, article, article.Etag);
+        }
+        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+    }
+
+    /// <summary>
+    /// The author pulls their own submission back out of review so they can keep working
+    /// on it. Same transition as Revise — the in-review article becomes a draft again,
+    /// keeping its body and any ReplacesArticleId — but self-service and with no feedback
+    /// note, because there is no reviewer telling them what to change.
+    ///
+    /// Deliberately author-only, with no Admin bypass: an Admin acting on someone else's
+    /// submission should use POST /articles/{id}/revise, which requires feedback and so
+    /// leaves the author a reason. Silently yanking someone's work back is not a thing we
+    /// want to be easy.
+    /// </summary>
+    [Function("WithdrawArticle")]
+    [RequireRole("Admin", "Contributor")]
+    [OpenApiOperation(operationId: "articles.withdraw", tags: new[] { "articles" }, Summary = "Withdraw from review", Description = "Returns the caller's own in-review article or blog post to their drafts so they can edit it again.")]
+    [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "In-review article id.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Draft), Description = "The submission, back as an editable draft")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Forbidden, Description = "Not the author")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Description = "Not awaiting review")]
+    public async Task<HttpResponseData> Withdraw(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/withdraw")] HttpRequestData req,
+        FunctionContext context,
+        string id, CancellationToken ct)
+    {
+        if (!repo.SupportsWrites) return await WritesDisabled(req);
+        var callerOid = context.GetUserOid();
+        if (callerOid is null) return await BadRequest(req, "Token missing oid claim.");
+
+        try
+        {
+            var inReview = await repo.GetArticleAsync(id, InReviewStatus, ct);
+            if (inReview is null) return await NotFound(req, "No submission awaiting review with that id.");
+
+            // Author only — not MayEdit. An Admin who did not write it has /revise.
+            if (inReview.AuthorId is not { Length: > 0 } author || author != callerOid)
+                return await Forbidden(req, WithdrawOwnershipRefusal);
+
+            var draft = await repo.ReviseArticleAsync(id, feedback: null, ct);
+            return await Ok(req, draft, draft.Etag);
         }
         catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
