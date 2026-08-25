@@ -19,16 +19,18 @@ public sealed class BlogFunctions(IContentRepository repo)
     /// distinguishes by Type if it needs to.
     /// </summary>
     [Function("GetBlogPosts")]
+    [OptionalAuth]
     [OpenApiOperation(operationId: "blog.list", tags: new[] { "blog" }, Summary = "List blog posts", Description = "Returns published blog posts.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Article[]), Description = "List of published blog posts")]
     public async Task<HttpResponseData> GetBlogPosts(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "blog")] HttpRequestData req,
+        FunctionContext context,
         CancellationToken ct)
     {
         // Pinned to published: ?status= previously let an anonymous caller read
         // in-review submissions. See GetPendingBlogPosts for the gated route.
         var posts = await repo.ListBlogPostsAsync(PublishedStatus, ct);
-        return await Ok(req, posts);
+        return await Ok(req, posts.Select(p => p.ForPublic(context)).ToList());
     }
 
     /// <summary>Blog posts awaiting review. Role-gated counterpart to the public list.</summary>
@@ -41,9 +43,10 @@ public sealed class BlogFunctions(IContentRepository repo)
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Forbidden, Description = "Caller lacks the required role")]
     public async Task<HttpResponseData> GetPendingBlogPosts(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "review/blog")] HttpRequestData req,
+        FunctionContext context,
         CancellationToken ct)
     {
         var posts = await repo.ListBlogPostsAsync(InReviewStatus, ct);
-        return await Ok(req, posts);
+        return await Ok(req, ArticlesFunctions.VisibleInReview(posts, context));
     }
 }

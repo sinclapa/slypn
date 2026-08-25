@@ -72,12 +72,37 @@ public class JwtMiddlewareTests
     [Fact]
     public async Task Passthrough_when_function_has_no_RequireRole()
     {
-        var ctx = new TestMiddlewareContext("Slypn.Api.Functions.BlogFunctions.GetBlogPosts");
+        // GetResources carries no auth attribute at all. (GetBlogPosts used to serve as
+        // the example here, until it gained [OptionalAuth] — which takes the authenticate
+        // path and so no longer exercises this branch.)
+        var ctx = new TestMiddlewareContext("Slypn.Api.Functions.ResourcesFunctions.GetResources");
         var called = false;
 
         await Make().Invoke(ctx, _ => { called = true; return Task.CompletedTask; });
 
         Assert.True(called);
+    }
+
+    // [OptionalAuth] relaxes *authentication*, not the HTTP-trigger requirement: reaching
+    // it on a non-HTTP trigger is still a misconfiguration and must fail loudly rather
+    // than silently serving everyone as anonymous.
+    [Fact]
+    public async Task Throws_when_OptionalAuth_is_on_a_non_http_context()
+    {
+        var ctx = new TestMiddlewareContext("Slypn.Api.Functions.BlogFunctions.GetBlogPosts");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Make().Invoke(ctx, _ => Task.CompletedTask));
+    }
+
+    [Fact]
+    public void OptionalAuth_is_a_RequireRole_with_no_roles_that_never_refuses()
+    {
+        var optional = new Slypn.Api.Infrastructure.OptionalAuthAttribute();
+        Assert.Empty(optional.Roles);
+        Assert.True(optional.Optional);
+        // The plain attribute must keep refusing, or every gate in the app opens.
+        Assert.False(new Slypn.Api.Infrastructure.RequireRoleAttribute("Admin").Optional);
     }
 
     // Unknown entry point → GetRoleAttribute returns null → next called.

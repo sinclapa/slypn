@@ -37,7 +37,8 @@ public class ArticlesFunctionsTests
     public async Task GetArticles_always_asks_for_published(string url)
     {
         var (fn, repo) = Make();
-        var resp = (TestHttpResponseData)await fn.GetArticles(TestHttp.Get(new TestFunctionContext(), url), Ct);
+        var rctx = new TestFunctionContext();
+        var resp = (TestHttpResponseData)await fn.GetArticles(TestHttp.Get(rctx, url), rctx, Ct);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("published", repo.LastArticlesStatus);
@@ -49,8 +50,9 @@ public class ArticlesFunctionsTests
         var (fn, repo) = Make();
         repo.Articles.Add(Sample());
 
+        var ctx = Admin();
         var resp = (TestHttpResponseData)await fn.GetPendingArticles(
-            TestHttp.Get(new TestFunctionContext(), "http://localhost/api/review/articles"), Ct);
+            TestHttp.Get(ctx, "http://localhost/api/review/articles"), ctx, Ct);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("in-review", repo.LastArticlesStatus);
@@ -78,7 +80,7 @@ public class ArticlesFunctionsTests
         var (fn, repo) = Make();
         repo.Articles.Add(Sample());
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.GetArticles(TestHttp.Get(ctx, "http://localhost/api/articles"), Ct);
+        var resp = (TestHttpResponseData)await fn.GetArticles(TestHttp.Get(ctx, "http://localhost/api/articles"), ctx, Ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var body = resp.ReadBodyAs<List<Article>>();
         Assert.Single(body!);
@@ -89,7 +91,7 @@ public class ArticlesFunctionsTests
     {
         var (fn, _) = Make();
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.GetArticleBySlug(TestHttp.Get(ctx, "http://localhost/api/articles/x"), "x", Ct);
+        var resp = (TestHttpResponseData)await fn.GetArticleBySlug(TestHttp.Get(ctx, "http://localhost/api/articles/x"), ctx, "x", Ct);
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 
@@ -99,7 +101,7 @@ public class ArticlesFunctionsTests
         var (fn, repo) = Make();
         repo.ArticleBySlug = Sample();
         var ctx = new TestFunctionContext();
-        var resp = (TestHttpResponseData)await fn.GetArticleBySlug(TestHttp.Get(ctx, "http://localhost/api/articles/slug"), "slug", Ct);
+        var resp = (TestHttpResponseData)await fn.GetArticleBySlug(TestHttp.Get(ctx, "http://localhost/api/articles/slug"), ctx, "slug", Ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 
@@ -165,7 +167,9 @@ public class ArticlesFunctionsTests
     [Fact]
     public async Task Edit_requires_oid_and_returns_201_with_user()
     {
-        var (fn, _) = Make();
+        var (fn, repo) = Make();
+        // The ownership check reads the live row first, so it must exist and be ours.
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-1" };
         var noUser = new TestFunctionContext();
         var bad = (TestHttpResponseData)await fn.Edit(TestHttp.Raw(noUser, "POST", "http://localhost/api/articles/a1/edit", ""), noUser, "a1", Ct);
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
@@ -214,6 +218,8 @@ public class ArticlesFunctionsTests
         Assert.Equal(HttpStatusCode.BadRequest, noOid.StatusCode);
 
         var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
+        // The ownership check reads the live row first, so it must exist and be ours.
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-1" };
         repo.Writes = false;
         var disabled = (TestHttpResponseData)await fn.RequestDeletion(TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/request-deletion", ""), ctx, "a1", Ct);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, disabled.StatusCode);
@@ -328,8 +334,9 @@ public class ArticlesFunctionsTests
         var (fn, repo) = Make();
         repo.ArticleBySlug = Sample();
         var ctx = new TestFunctionContext();
+        var rctx = ctx;
         var resp = (TestHttpResponseData)await fn.GetArticleBySlug(
-            TestHttp.Get(ctx, "http://localhost/api/articles/slug"), "slug", Ct);
+            TestHttp.Get(rctx, "http://localhost/api/articles/slug"), rctx, "slug", Ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 
@@ -372,6 +379,8 @@ public class ArticlesFunctionsTests
     {
         var (fn, repo) = Make();
         var ctx = new TestFunctionContext().WithUser("oid-1", "Ed", "Contributor");
+        // The ownership check reads the live row first, so it must exist and be ours.
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-1" };
 
         repo.ThrowOnWrite = new InvalidOperationException("Article not published");
         var bad = (TestHttpResponseData)await fn.Edit(
@@ -389,6 +398,8 @@ public class ArticlesFunctionsTests
     {
         var (fn, repo) = Make();
         var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
+        // The ownership check reads the live row first, so it must exist and be ours.
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-1" };
 
         repo.ThrowOnWrite = new InvalidOperationException("Not eligible");
         var bad = (TestHttpResponseData)await fn.RequestDeletion(
@@ -448,6 +459,183 @@ public class ArticlesFunctionsTests
         body = "Body content long enough.", author = "Jane", readingMinutes = 5,
         category = "Community", status,
     };
+
+    // ── Ownership on the revision + deletion endpoints ──────────────────────────
+    // The UI hides these controls, but the routes are reachable directly, so the rule
+    // has to hold here. ThrowOnWrite proves the refusal happens BEFORE the repository
+    // is touched — otherwise a 403 could be a storage error in disguise.
+
+    private static TestFunctionContext Author() =>
+        new TestFunctionContext().WithUser("oid-author", "Ann", "Contributor");
+
+    [Fact]
+    public async Task Edit_allows_the_author_of_the_published_article()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
+        Assert.Equal("published", repo.LastArticleLookupStatus);
+    }
+
+    [Fact]
+    public async Task Edit_forbids_a_contributor_who_is_not_the_author()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Contains("your own", resp.ReadBodyAsString());
+    }
+
+    [Fact]
+    public async Task Edit_allows_an_admin_regardless_of_author()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "someone-else" };
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
+    }
+
+    [Fact]
+    public async Task Edit_is_admin_only_on_legacy_content_that_has_no_author()
+    {
+        // Everything published before AuthorId existed carries none. A null author must
+        // match nobody rather than everybody — including an anonymous caller's null oid.
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = null };
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var contributor = Contributor();
+
+        var refused = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(contributor, "POST", "http://localhost/api/articles/a1/edit", ""), contributor, "a1", Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+
+        repo.ThrowOnWrite = null;
+        var admin = Admin();
+        var allowed = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(admin, "POST", "http://localhost/api/articles/a1/edit", ""), admin, "a1", Ct);
+        Assert.Contains((int)allowed.StatusCode, new[] { 200, 201 });
+    }
+
+    [Fact]
+    public async Task Edit_404s_when_the_published_article_is_missing()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = null;
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/nope/edit", ""), ctx, "nope", Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_forbids_a_contributor_who_is_not_the_author()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.RequestDeletion(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/request-deletion", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    // ── canEdit / authorId on public reads ──────────────────────────────────────
+
+    [Fact]
+    public async Task GetArticleBySlug_never_leaks_the_author_oid()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleBySlug = Sample() with { AuthorId = "oid-secret" };
+        var anon = new TestFunctionContext();
+
+        var resp = (TestHttpResponseData)await fn.GetArticleBySlug(
+            TestHttp.Get(anon, "http://localhost/api/articles/slug"), anon, "slug", Ct);
+
+        // Asserted on the raw body: deserialising into Article would hide the leak.
+        var body = resp.ReadBodyAsString();
+        Assert.DoesNotContain("authorId", body);
+        Assert.DoesNotContain("oid-secret", body);
+    }
+
+    [Theory]
+    [InlineData("oid-author", "Contributor", true)]   // the author
+    [InlineData("oid-other", "Contributor", false)]   // a different contributor
+    [InlineData("oid-admin", "Admin", true)]          // any admin
+    [InlineData("oid-author", "Member", false)]       // authored it, but lost the role
+    public async Task GetArticleBySlug_reports_canEdit_for_the_caller(string oid, string role, bool expected)
+    {
+        var (fn, repo) = Make();
+        repo.ArticleBySlug = Sample() with { AuthorId = "oid-author" };
+        var ctx = new TestFunctionContext().WithUser(oid, "U", role);
+
+        var resp = (TestHttpResponseData)await fn.GetArticleBySlug(
+            TestHttp.Get(ctx, "http://localhost/api/articles/slug"), ctx, "slug", Ct);
+
+        Assert.Equal(expected, resp.ReadBodyAs<Article>()!.CanEdit);
+    }
+
+    [Fact]
+    public async Task GetArticleBySlug_reports_canEdit_false_when_anonymous()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleBySlug = Sample() with { AuthorId = "oid-author" };
+        var anon = new TestFunctionContext();
+
+        var resp = (TestHttpResponseData)await fn.GetArticleBySlug(
+            TestHttp.Get(anon, "http://localhost/api/articles/slug"), anon, "slug", Ct);
+
+        Assert.False(resp.ReadBodyAs<Article>()!.CanEdit);
+    }
+
+    [Fact]
+    public void Public_reads_carry_OptionalAuth()
+    {
+        // Without it JwtMiddleware never populates a principal on these routes, so
+        // canEdit would be silently false for everyone — including the author.
+        foreach (var name in new[] { nameof(ArticlesFunctions.GetArticles), nameof(ArticlesFunctions.GetArticleBySlug) })
+        {
+            var attrs = typeof(ArticlesFunctions).GetMethod(name)!
+                .GetCustomAttributes(typeof(Slypn.Api.Infrastructure.OptionalAuthAttribute), inherit: false);
+            Assert.True(attrs.Length == 1, name + " is missing [OptionalAuth]");
+        }
+    }
+
+    [Fact]
+    public async Task GetPendingArticles_shows_a_contributor_only_their_own_submissions()
+    {
+        var (fn, repo) = Make();
+        repo.Articles.Add(Sample("mine") with { AuthorId = "oid-contrib" });
+        repo.Articles.Add(Sample("theirs") with { AuthorId = "oid-someone-else" });
+
+        var ctx = Contributor();
+        var mine = (TestHttpResponseData)await fn.GetPendingArticles(
+            TestHttp.Get(ctx, "http://localhost/api/review/articles"), ctx, Ct);
+        Assert.Equal("mine", Assert.Single(mine.ReadBodyAs<List<Article>>()!).Id);
+
+        var admin = Admin();
+        var all = (TestHttpResponseData)await fn.GetPendingArticles(
+            TestHttp.Get(admin, "http://localhost/api/review/articles"), admin, Ct);
+        Assert.Equal(2, all.ReadBodyAs<List<Article>>()!.Count);
+    }
 
     private static TestFunctionContext Contributor() =>
         new TestFunctionContext().WithUser("oid-contrib", "Carla", "Contributor");

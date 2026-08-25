@@ -810,7 +810,9 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     {
         var e = new TableEntity(article.Status, article.Id)
         {
-            ["Json"] = Serialize(article with { Body = string.Empty, Etag = null }),
+            // CanEdit is a per-request projection, never storage. Blanked explicitly so a
+            // projected instance can't be written back carrying another caller's answer.
+            ["Json"] = Serialize(article with { Body = string.Empty, Etag = null, CanEdit = null }),
             ["Slug"] = article.Slug,
         };
         return e;
