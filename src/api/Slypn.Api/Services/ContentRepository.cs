@@ -29,6 +29,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     private const string SubscribersPartition = "subscriber";
     private const string NewslettersPartition = "newsletter";
     private const string ArticleType       = "article";
+    private const string BlogType          = "blog";
     private const string InReviewStatus    = "in-review";
     private const string PublishedStatus   = "published";
 
@@ -39,7 +40,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         => await ListArticlesAsync(status, type: ArticleType, ct);
 
     public async Task<IReadOnlyList<Article>> ListBlogPostsAsync(string? status, CancellationToken ct)
-        => await ListArticlesAsync(status, type: "blog", ct);
+        => await ListArticlesAsync(status, type: BlogType, ct);
 
     private async Task<IReadOnlyList<Article>> ListArticlesAsync(string? status, string type, CancellationToken ct)
     {
@@ -94,12 +95,21 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         return await GetArticleAsync(slugOrId, PublishedStatus, ct);
     }
 
-    public async Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)
+    public Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)
+        => WithNeighboursAsync(slugOrId, ArticleType, ct);
+
+    public Task<Article?> GetBlogPostWithNeighboursAsync(string slugOrId, CancellationToken ct)
+        => WithNeighboursAsync(slugOrId, BlogType, ct);
+
+    /// <summary>Find one published item of the given type and the two either side of it,
+    /// so a detail page can offer prev/next. Neighbours stay within the type: a blog post
+    /// never links into the article list.</summary>
+    private async Task<Article?> WithNeighboursAsync(string slugOrId, string type, CancellationToken ct)
     {
-        // ListArticlesAsync returns newest-first, matching the articles list page order.
-        // prev = the article above the current one in the list (newer),
-        // next = the article below (older).
-        var sorted = (await ListArticlesAsync(PublishedStatus, ct)).ToList();
+        // The list is newest-first, matching the list page order.
+        // prev = the item above the current one in the list (newer),
+        // next = the item below (older).
+        var sorted = (await ListArticlesAsync(PublishedStatus, type, ct)).ToList();
 
         var idx = sorted.FindIndex(a =>
             string.Equals(a.Slug, slugOrId, StringComparison.OrdinalIgnoreCase) ||
