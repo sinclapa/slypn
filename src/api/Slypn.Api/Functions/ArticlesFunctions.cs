@@ -252,7 +252,8 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
     [OpenApiOperation(operationId: "articles.edit", tags: new[] { "articles" }, Summary = "Edit published", Description = "Creates a draft revision of a published article or blog post for approval.")]
     [OpenApiSecurity("bearer_auth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "Published article id.")]
-    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(Draft), Description = "Created draft revision")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(Draft), Description = "A new draft revision")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(Draft), Description = "An in-progress revision this author already had, returned untouched")]
     public async Task<HttpResponseData> Edit(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "articles/{id}/edit")] HttpRequestData req,
         FunctionContext context,
@@ -271,8 +272,13 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
             if (!ArticleVisibility.MayEdit(published, context))
                 return await Forbidden(req, EditOwnershipRefusal);
 
-            var draft = await repo.CreateRevisionDraftAsync(id, editorOid, editorName, ct);
-            return await Created(req, draft, draft.Etag);
+            var (draft, resumed) = await repo.CreateRevisionDraftAsync(id, editorOid, editorName, ct);
+            // 200 when we handed back a revision this author already had on the go, 201 when
+            // one was minted. The client sends them to the editor in the first case rather
+            // than opening a second window onto work already in progress.
+            return resumed
+                ? await Ok(req, draft, draft.Etag)
+                : await Created(req, draft, draft.Etag);
         }
         catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }

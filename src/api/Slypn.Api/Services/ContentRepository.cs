@@ -593,7 +593,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         }
     }
 
-    public async Task<Draft> CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct)
+    public async Task<(Draft Draft, bool Resumed)> CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct)
     {
         EnsureWrites();
 
@@ -606,9 +606,15 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         var existing = (await ListDraftsByAuthorAsync(editorOid, ct))
             .FirstOrDefault(d => d.ReplacesArticleId == articleId);
 
+        // Return it untouched. Rebuilding it from the published article would overwrite
+        // whatever the author had already written — the second click on Edit would throw
+        // their work away — and the caller wants to know it is resuming so it can send
+        // them to the editor rather than opening a fresh one.
+        if (existing is not null) return (existing, Resumed: true);
+
         var now = DateTime.UtcNow;
         var draft = new Draft(
-            Id:                existing?.Id ?? Guid.NewGuid().ToString("N"),
+            Id:                Guid.NewGuid().ToString("N"),
             AuthorId:          editorOid,
             AuthorName:        editorName,
             Type:              published.Type,
@@ -618,11 +624,11 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             Body:              published.Body,
             Category:          published.Category,
             ReadingMinutes:    published.ReadingMinutes,
-            CreatedAt:         existing?.CreatedAt ?? now,
+            CreatedAt:         now,
             UpdatedAt:         now,
             ReplacesArticleId: articleId);
 
-        return await UpsertDraftAsync(draft, existing?.Etag, ct);
+        return (await UpsertDraftAsync(draft, ifMatch: null, ct), Resumed: false);
     }
 
     public async Task<Article> PublishArticleAsync(string id, CancellationToken ct)

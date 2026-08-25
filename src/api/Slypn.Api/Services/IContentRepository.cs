@@ -73,7 +73,7 @@ public interface IContentRepository
 
     /// <summary>Create (or resume) a draft revision of a published article. The published
     /// article stays live; on approval the revision replaces it in place.</summary>
-    Task<Draft>               CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct);
+    Task<(Draft Draft, bool Resumed)> CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct);
 
     /// <summary>Flag a published article for deletion (pending admin approval). Stays live.</summary>
     Task<Article>             RequestArticleDeletionAsync(string id, string requesterOid, CancellationToken ct);

@@ -558,6 +558,36 @@ public class ArticlesFunctionsTests
         new TestFunctionContext().WithUser("oid-author", "Ann", "Contributor");
 
     [Fact]
+    public async Task Edit_returns_201_when_it_mints_a_new_revision()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.RevisionResumes = false;
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Edit_returns_200_when_the_author_already_has_a_revision_on_the_go()
+    {
+        // The client branches on this to send them to the editor instead of opening a
+        // second window onto work already in progress.
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.RevisionResumes = true;
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
     public async Task Edit_allows_the_author_of_the_published_article()
     {
         var (fn, repo) = Make();

@@ -9,6 +9,13 @@ vi.mock('@/lib/api', async (importOriginal) => {
   return { ...actual, apiJson, apiFetch }
 })
 
+// EditorView reads ?draft= to open a resumed revision directly.
+const route = { query: {} as Record<string, string> }
+vi.mock('vue-router', async (orig) => {
+  const actual = await (orig() as Promise<Record<string, unknown>>)
+  return { ...actual, useRoute: () => route }
+})
+
 import EditorView from './EditorView.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -57,11 +64,29 @@ beforeEach(async () => {
   pinia = createPinia()
   setActivePinia(pinia)
   apiJson.mockReset(); apiFetch.mockReset()
+  route.query = {}
   vi.stubGlobal('confirm', vi.fn(() => true))
   await useAuthStore().initialize()
 })
 
 describe('EditorView', () => {
+  it('opens the draft named by ?draft= on arrival', async () => {
+    // Arriving from the edit affordance with a revision already in progress.
+    route.query = { draft: 'd1' }
+    mockLists([draftSummary({ id: 'd1' })])
+    const w = mountV()
+    await flushPromises()
+    expect(w.find('.draft-editor-stub').exists()).toBe(true)
+  })
+
+  it('ignores a ?draft= that is not one of theirs', async () => {
+    route.query = { draft: 'someone-elses' }
+    mockLists([draftSummary({ id: 'd1' })])
+    const w = mountV()
+    await flushPromises()
+    expect(w.find('.draft-editor-stub').exists()).toBe(false)
+  })
+
   // ── Withdraw from review ───────────────────────────────────────────────────
 
   it('offers Withdraw on an in-review row and not on a draft', async () => {

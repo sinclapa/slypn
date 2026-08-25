@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import DraftEditor from '@/components/editor/DraftEditor.vue'
 import { apiErrorMessage, apiFetch, apiJson } from '@/lib/api'
@@ -10,6 +11,7 @@ import { useEditorQueueStore } from '@/stores/editorQueue'
 const DRAFT_ID_KEY = 'slypn:editor:draft-id'
 
 const auth = useAuthStore()
+const route = useRoute()
 const editorQueue = useEditorQueueStore()
 
 // ── Draft list ──────────────────────────────────────────────────────────────
@@ -238,7 +240,15 @@ async function withdraw(id: string) {
   }
 }
 
-onMounted(() => { loadDraftList(); loadPending() })
+onMounted(async () => {
+  await Promise.all([loadDraftList(), loadPending()])
+  // Arriving from the edit affordance on a published page with a revision already in
+  // progress: open it directly rather than making them find it in the list.
+  const requested = route.query.draft
+  if (typeof requested === 'string' && allDrafts.value.some(d => d.id === requested)) {
+    openDraft(requested)
+  }
+})
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
