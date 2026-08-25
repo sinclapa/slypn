@@ -87,26 +87,6 @@ onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
       </RouterLink>
       <RouterLink
         v-if="auth.isAdmin"
-        to="/admin/members"
-        class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-      >
-        <p class="font-display font-bold text-slypn-700">Members</p>
-        <p class="mt-2 text-sm text-slypn-900/75">
-          Invite new members, view all members, and manage roles.
-        </p>
-      </RouterLink>
-      <RouterLink
-        v-if="auth.isAdmin"
-        to="/admin/subscribers"
-        class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-      >
-        <p class="font-display font-bold text-slypn-700">Newsletter subscribers</p>
-        <p class="mt-2 text-sm text-slypn-900/75">
-          View who signed up for the newsletter, and remove addresses.
-        </p>
-      </RouterLink>
-      <RouterLink
-        v-if="auth.isAdmin"
         to="/admin/resources"
         class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
       >
@@ -123,6 +103,26 @@ onMounted(() => { if (auth.isAdmin) approvalsStore.refresh() })
         <p class="font-display font-bold text-slypn-700">Newsletters</p>
         <p class="mt-2 text-sm text-slypn-900/75">
           Add, edit, and remove newsletter issues, and attach their files.
+        </p>
+      </RouterLink>
+      <RouterLink
+        v-if="auth.isAdmin"
+        to="/admin/members"
+        class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+      >
+        <p class="font-display font-bold text-slypn-700">Members</p>
+        <p class="mt-2 text-sm text-slypn-900/75">
+          Invite new members, view all members, and manage roles.
+        </p>
+      </RouterLink>
+      <RouterLink
+        v-if="auth.isAdmin"
+        to="/admin/subscribers"
+        class="rounded-xl border border-slypn-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+      >
+        <p class="font-display font-bold text-slypn-700">Newsletter subscribers</p>
+        <p class="mt-2 text-sm text-slypn-900/75">
+          View who signed up for the newsletter, and remove addresses.
         </p>
       </RouterLink>
     </section>
