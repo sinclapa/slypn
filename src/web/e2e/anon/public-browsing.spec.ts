@@ -76,6 +76,29 @@ test.describe('public browsing', () => {
     expect(detail.body.length).toBeGreaterThan(0)
   })
 
+  test('a blog post opens a detail page with its body', async ({ page, request }) => {
+    const [post] = await apiJson<Article[]>(request, '/blog?status=published')
+
+    await page.goto('/blog')
+    await page.getByRole('link', { name: post.title }).first().click()
+
+    await expect(page).toHaveURL(`/blog/${post.slug}`)
+    await expect(page.getByRole('heading', { name: post.title })).toBeVisible()
+  })
+
+  test('a signed-out visitor is offered no edit control', async ({ page, request }) => {
+    // UI gate only. The API here runs with SkipAuth, which resolves a caller with
+    // no persona header to the admin persona, so canEdit comes back true — see
+    // permissions.spec.ts. The anonymous API case is covered in the xUnit suite.
+    const [article] = await apiJson<Article[]>(request, '/articles?status=published')
+    await page.goto(`/articles/${article.slug}`)
+    await expect(page.getByTestId('edit-content')).toHaveCount(0)
+
+    const [post] = await apiJson<Article[]>(request, '/blog?status=published')
+    await page.goto(`/blog/${post.slug}`)
+    await expect(page.getByTestId('edit-content')).toHaveCount(0)
+  })
+
   test('the blog page lists published posts', async ({ page, request }) => {
     const posts = await apiJson<Article[]>(request, '/blog?status=published')
     expect(posts.length).toBeGreaterThan(0)

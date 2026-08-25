@@ -1,5 +1,6 @@
 import { expect, test } from '../support/fixtures'
-import { PIXEL_PNG, createDraft, publishAuthoredArticle, submitDraft } from '../support/data'
+import { PIXEL_PNG, createDraft, createPublishedArticle, publishAuthoredArticle, submitDraft } from '../support/data'
+import { createApiClient } from '../support/api-client'
 import { titleFor } from '../support/ids'
 
 /**
@@ -60,6 +61,72 @@ test.describe('a contributor', () => {
 
     // ...and it really is still there.
     expect((await adminApi.get(`/articles/${article.slug}`)).ok()).toBeTruthy()
+  })
+
+  test('cannot revise or flag another author’s published content', async ({ api, adminApi, cleanup, uid }) => {
+    // The pencil on the detail page is hidden for content you did not write, so the
+    // only way to prove the rule is enforced is to ask the API without the UI in the way.
+    const otherAuthor = await createApiClient('contributor2')
+    try {
+      const theirs = await publishAuthoredArticle(otherAuthor, adminApi, cleanup, {
+        title: titleFor(uid, 'Owned by contributor2'),
+      })
+
+      expect((await api.post(`/articles/${theirs.id}/edit`)).status()).toBe(403)
+      expect((await api.post(`/articles/${theirs.id}/request-deletion`)).status()).toBe(403)
+
+      // ...and our own is still editable, so this is ownership and not a blanket refusal.
+      const mine = await publishAuthoredArticle(api, adminApi, cleanup, {
+        title: titleFor(uid, 'Owned by contributor'),
+      })
+      expect((await api.post(`/articles/${mine.id}/edit`)).ok()).toBeTruthy()
+    } finally {
+      await otherAuthor.dispose()
+    }
+  })
+
+  test('cannot revise legacy content that has no recorded author', async ({ api, adminApi, cleanup, uid }) => {
+    // createPublishedArticle leaves authorId null, exactly like everything published
+    // before the field existed. A null author must match nobody, not everybody.
+    const legacy = await createPublishedArticle(adminApi, cleanup, {
+      title: titleFor(uid, 'Legacy no author'),
+    })
+
+    expect((await api.post(`/articles/${legacy.id}/edit`)).status()).toBe(403)
+    expect((await adminApi.post(`/articles/${legacy.id}/edit`)).ok()).toBeTruthy()
+  })
+
+  test('sees only their own submissions in the review queues', async ({ api, adminApi, cleanup, uid }) => {
+    const otherAuthor = await createApiClient('contributor2')
+    try {
+      await publishAuthoredArticle(otherAuthor, adminApi, cleanup, {
+        title: titleFor(uid, 'Not mine'),
+      })
+      const listed = await (await api.get('/review/articles')).json() as { title: string }[]
+      expect(listed.some(a => a.title === titleFor(uid, 'Not mine'))).toBe(false)
+    } finally {
+      await otherAuthor.dispose()
+    }
+  })
+
+  test('is offered the edit control on their own article, and not on another’s', async ({ page, api, adminApi, cleanup, uid }) => {
+    const mine = await publishAuthoredArticle(api, adminApi, cleanup, {
+      title: titleFor(uid, 'My article'),
+    })
+    const otherAuthor = await createApiClient('contributor2')
+    try {
+      const theirs = await publishAuthoredArticle(otherAuthor, adminApi, cleanup, {
+        title: titleFor(uid, 'Their article'),
+      })
+
+      await page.goto(`/articles/${mine.slug}`)
+      await expect(page.getByTestId('edit-content')).toBeVisible()
+
+      await page.goto(`/articles/${theirs.slug}`)
+      await expect(page.getByTestId('edit-content')).toHaveCount(0)
+    } finally {
+      await otherAuthor.dispose()
+    }
   })
 
   test('can still read the pending queues they work from', async ({ api }) => {
