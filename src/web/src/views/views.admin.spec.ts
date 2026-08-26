@@ -355,6 +355,31 @@ describe('ApprovalsQueue', () => {
 })
 
 describe('ResourceManagementView', () => {
+  it('counts the fields as they fill, and clears the category', async () => {
+    apiJson.mockResolvedValue([])
+    const w = mountC(ResourceManagementView)
+    await flushPromises()
+    await w.findAll('button').find(b => b.text()?.includes('Add resource'))!.trigger('click')
+
+    // Hidden while there is nothing to warn about.
+    expect(w.find('[data-testid="resource-description-count"]').exists()).toBe(false)
+
+    await w.find('textarea').setValue('d'.repeat(450))
+    expect(w.find('[data-testid="resource-description-count"]').text()).toContain('450 / 500')
+
+    await w.find('textarea').setValue('d'.repeat(500))
+    expect(w.find('[data-testid="resource-description-count"]').text()).toContain('limit reached')
+
+    // Category had no way back to empty once set.
+    const catInput = w.findAll('input').find(i => i.attributes('list') === 'resource-category-hints')!
+    await catInput.setValue('Local')
+    await w.find('[data-testid="resource-category-clear"]').trigger('click')
+    // Re-query: the wrapper captured before the re-render is stale.
+    const cleared = w.findAll('input').find(i => i.attributes('list') === 'resource-category-hints')!
+    expect((cleared.element as HTMLInputElement).value).toBe('')
+    expect(w.find('[data-testid="resource-category-clear"]').exists()).toBe(false)
+  })
+
   const resource = (over = {}) => ({ id: 'r1', title: 'Helpline', description: 'd', url: 'https://x.org/a', category: 'NHS', _etag: 'e1', ...over })
 
   it('renders resources grouped by category', async () => {

@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import { apiFetch, apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
+import FieldCounter from '@/components/common/FieldCounter.vue'
+import ClearFieldButton from '@/components/common/ClearFieldButton.vue'
 
 interface Resource {
   id: string
@@ -38,6 +40,10 @@ const categoryHints = computed(() => {
 // ── Add / edit dialog ────────────────────────────────────────────────────────
 const showForm  = ref(false)
 const editing   = ref<Resource | null>(null)
+// Field caps, mirroring ResourceInput server-side, so the counters and the maxlength
+// attributes cannot drift from it.
+const LIMITS = { title: 200, description: 500, url: 500, category: 60 } as const
+
 const form      = ref({ title: '', description: '', url: '', category: '' })
 const saving    = ref(false)
 const formError = ref<string | null>(null)
@@ -214,6 +220,7 @@ async function remove(r: Resource) {
               required
               class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
             />
+            <FieldCounter :used="form.title.length" :max="LIMITS.title" testid="resource-title-count" />
           </div>
           <div>
             <label for="resource-description" class="block text-sm font-medium text-slypn-800">Description</label>
@@ -225,6 +232,7 @@ async function remove(r: Resource) {
               required
               class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
             />
+            <FieldCounter :used="form.description.length" :max="LIMITS.description" testid="resource-description-count" />
           </div>
           <div>
             <label for="resource-url" class="block text-sm font-medium text-slypn-800">URL</label>
@@ -237,20 +245,30 @@ async function remove(r: Resource) {
               placeholder="https://…"
               class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
             />
+            <FieldCounter :used="form.url.length" :max="LIMITS.url" testid="resource-url-count" />
           </div>
           <div>
             <label for="resource-category" class="block text-sm font-medium text-slypn-800">Category</label>
+            <div class="relative">
             <input
-              id="resource-category"
-              v-model="form.category"
-              type="text"
-              maxlength="60"
-              list="resource-category-hints"
-              autocomplete="off"
-              required
-              placeholder="Pick an existing one or type a new category"
-              class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
-            />
+                id="resource-category"
+                v-model="form.category"
+                type="text"
+                maxlength="60"
+                list="resource-category-hints"
+                autocomplete="off"
+                required
+                placeholder="Pick an existing one or type a new category"
+                class="mt-1 w-full rounded-md border border-slypn-200 py-2 pl-3 pr-9 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
+              />
+              <ClearFieldButton
+                v-if="form.category"
+                field="category"
+                testid="resource-category-clear"
+                @clear="form.category = ''"
+              />
+            </div>
+            <FieldCounter :used="form.category.length" :max="LIMITS.category" testid="resource-category-count" />
             <datalist id="resource-category-hints">
               <option v-for="c in categoryHints" :key="c" :value="c" />
             </datalist>

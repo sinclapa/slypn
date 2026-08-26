@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import { apiFetch, apiJson, apiErrorMessage } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
+import FieldCounter from '@/components/common/FieldCounter.vue'
 
 interface Newsletter {
   id: string
@@ -24,6 +25,11 @@ const formatDate = (iso: string) =>
 // ── Add / edit dialog ────────────────────────────────────────────────────────
 const showForm  = ref(false)
 const editing   = ref<Newsletter | null>(null)
+// Field caps, mirroring NewsletterInput server-side, so the counters and the maxlength
+// attributes cannot drift from it. `topics` is the raw comma-separated input; the server
+// caps each topic it is split into.
+const LIMITS = { title: 200, summary: 1_000, topic: 60, topics: 600 } as const
+
 const form      = ref({ title: '', issueDate: '', summary: '', topics: '' })
 const file      = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -232,6 +238,7 @@ async function remove(n: Newsletter) {
               required
               class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
             />
+            <FieldCounter :used="form.title.length" :max="LIMITS.title" testid="newsletter-title-count" />
           </div>
           <div>
             <label for="newsletter-issue-date" class="block text-sm font-medium text-slypn-800">Issue date</label>
@@ -253,6 +260,7 @@ async function remove(n: Newsletter) {
               required
               class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
             />
+            <FieldCounter :used="form.summary.length" :max="LIMITS.summary" testid="newsletter-summary-count" />
           </div>
           <div>
             <label for="newsletter-topics" class="block text-sm font-medium text-slypn-800">Topics</label>
@@ -260,9 +268,11 @@ async function remove(n: Newsletter) {
               id="newsletter-topics"
               v-model="form.topics"
               type="text"
+              :maxlength="LIMITS.topics"
               placeholder="Comma-separated, e.g. Research, Events"
               class="mt-1 w-full rounded-md border border-slypn-200 px-3 py-2 text-sm shadow-sm focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
             />
+            <FieldCounter :used="form.topics.length" :max="LIMITS.topics" testid="newsletter-topics-count" />
           </div>
           <div>
             <label for="newsletter-file" class="block text-sm font-medium text-slypn-800">
