@@ -95,6 +95,27 @@ test.describe('revision workflow', () => {
     await context.close()
   })
 
+  test('an untouched revision cannot be submitted', async ({ api, adminApi, cleanup, uid }) => {
+    // POST /edit copies the published article into a draft, so submitting it without
+    // changing anything would put an identical item in the approvals queue.
+    const article = await publishAuthoredArticle(api, adminApi, cleanup, {
+      title: titleFor(uid, 'Nothing to review'),
+    })
+
+    const revision = await (await api.post(`/articles/${article.id}/edit`)).json() as { id: string }
+
+    // 409, not 400 — nothing is wrong with the request, there is just nothing to do,
+    // and the editor shows it as information rather than an error.
+    const refused = await api.post(`/drafts/${revision.id}/submit`)
+    expect(refused.status()).toBe(409)
+    expect(await refused.text()).toContain('identical to the published version')
+
+    // Change one thing and it goes through, so this is a no-op guard and not a block.
+    const draft = await (await api.get(`/drafts/${revision.id}`)).json() as Record<string, unknown>
+    expect((await api.put(`/drafts/${revision.id}`, { ...draft, summary: 'Genuinely revised.' })).ok()).toBeTruthy()
+    expect((await api.post(`/drafts/${revision.id}/submit`)).ok()).toBeTruthy()
+  })
+
   test('editing published content creates a revision, and approving it updates the live copy',
     async ({ page, browser, api, adminApi, cleanup, uid }) => {
       const original = await publishAuthoredArticle(api, adminApi, cleanup, {

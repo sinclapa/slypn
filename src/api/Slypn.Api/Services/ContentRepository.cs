@@ -538,6 +538,20 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
 
         var draftBody = await body.GetAsync(DraftBodyPrefix, draftId, ct);
 
+        // A revision draft starts as a copy of the article it replaces, so submitting one
+        // untouched would put an identical item in the approvals queue for an admin to
+        // review and approve for nothing. Checked here rather than by grey-ing out the
+        // button: the draft may be closed and reopened between the edit and the submit,
+        // by which point the client no longer knows what the published version looked like.
+        if (!string.IsNullOrEmpty(draft.ReplacesArticleId))
+        {
+            var target = await GetArticleAsync(draft.ReplacesArticleId, PublishedStatus, ct);
+            if (target is not null && IsSameContent(draft, draftBody, target))
+                throw new ContentUnchangedException(
+                    "This revision is identical to the published version, so there is nothing "
+                    + "to review. Make a change first, or close the editor to discard it.");
+        }
+
         var article = new Article(
             Id:             draft.Id,
             // Public URL is a {slug}-{shortId} hybrid: readable base from the title
@@ -579,7 +593,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         }
     }
 
-    public async Task<Draft> CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct)
+    public async Task<(Draft Draft, bool Resumed)> CreateRevisionDraftAsync(string articleId, string editorOid, string editorName, CancellationToken ct)
     {
         EnsureWrites();
 
@@ -592,9 +606,15 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         var existing = (await ListDraftsByAuthorAsync(editorOid, ct))
             .FirstOrDefault(d => d.ReplacesArticleId == articleId);
 
+        // Return it untouched. Rebuilding it from the published article would overwrite
+        // whatever the author had already written — the second click on Edit would throw
+        // their work away — and the caller wants to know it is resuming so it can send
+        // them to the editor rather than opening a fresh one.
+        if (existing is not null) return (existing, Resumed: true);
+
         var now = DateTime.UtcNow;
         var draft = new Draft(
-            Id:                existing?.Id ?? Guid.NewGuid().ToString("N"),
+            Id:                Guid.NewGuid().ToString("N"),
             AuthorId:          editorOid,
             AuthorName:        editorName,
             Type:              published.Type,
@@ -604,11 +624,11 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             Body:              published.Body,
             Category:          published.Category,
             ReadingMinutes:    published.ReadingMinutes,
-            CreatedAt:         existing?.CreatedAt ?? now,
+            CreatedAt:         now,
             UpdatedAt:         now,
             ReplacesArticleId: articleId);
 
-        return await UpsertDraftAsync(draft, existing?.Etag, ct);
+        return (await UpsertDraftAsync(draft, ifMatch: null, ct), Resumed: false);
     }
 
     public async Task<Article> PublishArticleAsync(string id, CancellationToken ct)
@@ -688,7 +708,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         return updated with { Etag = EncodeEtag(saved.Headers.ETag!.Value) };
     }
 
-    public async Task<Draft> ReviseArticleAsync(string id, string feedback, CancellationToken ct)
+    public async Task<Draft> ReviseArticleAsync(string id, string? feedback, CancellationToken ct)
     {
         EnsureWrites();
         Article source;
@@ -761,6 +781,16 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     }
 
     // ---- helpers --------------------------------------------------------------
+
+    /// <summary>Whether a revision draft still matches the article it would replace.
+    /// Compares what an author can actually change in the editor — slug and type are
+    /// carried over from the published row, not authored, so they cannot differ.</summary>
+    internal static bool IsSameContent(Draft draft, string draftBody, Article published) =>
+        string.Equals(draft.Title?.Trim(), published.Title?.Trim(), StringComparison.Ordinal)
+        && string.Equals(draft.Summary?.Trim(), published.Summary?.Trim(), StringComparison.Ordinal)
+        && string.Equals(draft.Category?.Trim(), published.Category?.Trim(), StringComparison.Ordinal)
+        && draft.ReadingMinutes == published.ReadingMinutes
+        && string.Equals(draftBody?.Trim(), published.Body?.Trim(), StringComparison.Ordinal);
 
     /// <summary>
     /// Builds the public URL slug as <c>{slug}-{shortId}</c> — a readable base

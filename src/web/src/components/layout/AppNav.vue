@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import logoUrl from '@/assets/logo.svg'
 import { useAuthStore } from '@/stores/auth'
 import { useApprovalsStore } from '@/stores/approvals'
+import { useEditorQueueStore } from '@/stores/editorQueue'
 
 const APP_ENV   = import.meta.env.VITE_FARO_ENV ?? 'dev'
 const envLabel  = APP_ENV !== 'prod' ? APP_ENV : null
@@ -23,24 +24,25 @@ const navItems = [
 
 const auth = useAuthStore()
 const approvalsStore = useApprovalsStore()
+const editorQueueStore = useEditorQueueStore()
 const router = useRouter()
 const mobileOpen = ref(false)
 const userMenuOpen = ref(false)
 
 // Account/admin links, defined once and reused by the desktop dropdown and the
-// mobile account panel. `dividerAfter` renders a separator; `badge` shows the
-// pending-approvals count.
+// mobile account panel. `dividerAfter` renders a separator; `badge` is the count
+// to show beside the label, hidden when zero.
 const accountLinks = computed(() => ([
   { to: '/dashboard',       label: 'Dashboard',          show: true, dividerAfter: true },
-  { to: '/admin/approvals', label: 'Approvals',          show: auth.isAdmin, badge: true },
+  { to: '/admin/approvals', label: 'Approvals',          show: auth.isAdmin, badge: approvalsStore.pendingCount },
   { to: '/admin/content',   label: 'Content management', show: auth.isContributor || auth.isAdmin },
-  { to: '/editor',          label: 'Editor',             show: auth.isContributor || auth.isAdmin },
+  { to: '/editor',          label: 'Editor',             show: auth.isContributor || auth.isAdmin, badge: editorQueueStore.openCount },
   { to: '/admin/events',    label: 'Event management',   show: auth.isContributor || auth.isAdmin },
   { to: '/admin/resources', label: 'Resources',          show: auth.isAdmin },
   { to: '/admin/newsletters', label: 'Newsletters',      show: auth.isAdmin, dividerAfter: true },
   { to: '/admin/members',   label: 'Members',            show: auth.isAdmin },
   { to: '/admin/subscribers', label: 'Newsletter subscribers', show: auth.isAdmin, dividerAfter: true },
-] as { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: boolean }[]).filter(l => l.show))
+] as { to: string; label: string; show: boolean; dividerAfter?: boolean; badge?: number }[]).filter(l => l.show))
 
 const envMenuOpen = ref(false)
 const swaggerUrl = APP_ENV === 'local'
@@ -61,12 +63,16 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') closeMobilePanels()
 }
 
+const canAuthor = computed(() => auth.isContributor || auth.isAdmin)
+
 onMounted(() => {
   if (auth.isAdmin) approvalsStore.refresh()
+  if (canAuthor.value) editorQueueStore.refresh()
   window.addEventListener('keydown', onKeydown)
 })
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 watch(() => auth.isAdmin, (isAdmin) => { if (isAdmin) approvalsStore.refresh() })
+watch(canAuthor, (yes) => { if (yes) editorQueueStore.refresh() })
 
 async function onSignIn() {
   if (!auth.isConfigured) {
@@ -190,10 +196,11 @@ async function onSignOut() {
                 >
                   {{ link.label }}
                   <span
-                    v-if="link.badge && approvalsStore.pendingCount > 0"
-                    data-testid="approvals-badge"
+                    v-if="link.badge"
+                    data-testid="nav-badge"
+                    :data-for="link.to"
                     class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
-                  >{{ approvalsStore.pendingCount }}</span>
+                  >{{ link.badge }}</span>
                 </RouterLink>
               </li>
               <li v-if="link.dividerAfter" aria-hidden="true"><hr class="my-1 border-t border-slypn-100" /></li>
@@ -288,9 +295,9 @@ async function onSignOut() {
           >
             {{ link.label }}
             <span
-              v-if="link.badge && approvalsStore.pendingCount > 0"
+              v-if="link.badge"
               class="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white"
-            >{{ approvalsStore.pendingCount }}</span>
+            >{{ link.badge }}</span>
           </RouterLink>
           <hr v-if="link.dividerAfter" class="my-1 border-t border-slypn-100" aria-hidden="true" />
         </template>

@@ -81,6 +81,11 @@ internal static class FunctionHelpers
     public static async Task<HttpResponseData> Forbidden(HttpRequestData req, string message = "Forbidden.")
         => await Reject(req, HttpStatusCode.Forbidden, message);
 
+    /// <summary>The request was understood but there is nothing to do — not an error the
+    /// caller needs to fix, so clients may present it as information rather than a failure.</summary>
+    public static async Task<HttpResponseData> Conflict(HttpRequestData req, string message)
+        => await Reject(req, HttpStatusCode.Conflict, message);
+
     public static async Task<HttpResponseData> BadRequest(HttpRequestData req, string message)
     {
         var resp = req.CreateResponse(HttpStatusCode.BadRequest);

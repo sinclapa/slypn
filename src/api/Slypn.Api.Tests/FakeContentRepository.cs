@@ -214,8 +214,11 @@ internal sealed class FakeContentRepository : IContentRepository
 
     public Task<Article> SubmitDraftAsync(string draftId, string authorId, CancellationToken ct)
         => Task.FromResult(Guard(MakeArticle(draftId, null)));
-    public Task<Draft> CreateRevisionDraftAsync(string articleId, string oid, string name, CancellationToken ct)
-        => Task.FromResult(Guard(MakeDraft(articleId, oid, name)));
+    /// <summary>Set to make the next revision request resume an existing draft (200) rather
+    /// than mint a new one (201).</summary>
+    public bool RevisionResumes;
+    public Task<(Draft Draft, bool Resumed)> CreateRevisionDraftAsync(string articleId, string oid, string name, CancellationToken ct)
+        => Task.FromResult((Guard(MakeDraft(articleId, oid, name)), RevisionResumes));
     public Task<Article> RequestArticleDeletionAsync(string id, string oid, CancellationToken ct)
         => Task.FromResult(Guard(MakeArticle(id, null)));
     public Task<Article> CancelArticleDeletionAsync(string id, CancellationToken ct)
@@ -234,7 +237,7 @@ internal sealed class FakeContentRepository : IContentRepository
         return Task.FromResult(ArticleByIdAndStatus);
     }
     public Task<Article> PublishArticleAsync(string id, CancellationToken ct) => Task.FromResult(Guard(MakeArticle(id, null)));
-    public Task<Draft> ReviseArticleAsync(string id, string feedback, CancellationToken ct)
+    public Task<Draft> ReviseArticleAsync(string id, string? feedback, CancellationToken ct)
         => Task.FromResult(Guard(MakeDraft(id, "oid", "name") with { RevisionFeedback = feedback }));
 
     private static Article MakeArticle(string id, ArticleInput? input) => new(

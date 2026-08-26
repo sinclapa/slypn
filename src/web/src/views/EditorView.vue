@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import HeroBanner from '@/components/common/HeroBanner.vue'
 import DraftEditor from '@/components/editor/DraftEditor.vue'
-import { apiFetch, apiJson } from '@/lib/api'
+import { apiErrorMessage, apiFetch, apiJson } from '@/lib/api'
 import { EMPTY_DRAFT, makeDraftId, type DraftPayload, type DraftSummary } from '@/lib/draft'
 import { useAuthStore } from '@/stores/auth'
+import { useEditorQueueStore } from '@/stores/editorQueue'
 
 const DRAFT_ID_KEY = 'slypn:editor:draft-id'
 
 const auth = useAuthStore()
+const route = useRoute()
+const editorQueue = useEditorQueueStore()
 
 // ── Draft list ──────────────────────────────────────────────────────────────
 const allDrafts   = ref<DraftSummary[]>([])
@@ -207,7 +211,44 @@ async function deleteDraft(id: string, etag?: string) {
   }
 }
 
-onMounted(() => { loadDraftList(); loadPending() })
+// ── Withdraw from review ─────────────────────────────────────────────────────
+// Pull a submission back out of the queue so it can be worked on again. The API
+// returns it to this author's drafts, keeping the body and, for a revision of
+// published content, the link to the article it replaces.
+const withdrawing    = ref<string | null>(null)
+const withdrawError  = ref<string | null>(null)
+
+async function withdraw(id: string) {
+  if (!confirm('Withdraw this submission from review? It goes back to your drafts and the admin queue no longer shows it.')) return
+  withdrawing.value = id
+  withdrawError.value = null
+  try {
+    const resp = await apiFetch(`/articles/${id}/withdraw`, { method: 'POST' })
+    if (!resp.ok) { withdrawError.value = await apiErrorMessage(resp); return }
+    const draft = await resp.json() as DraftSummary
+    // Leaves review, arrives in drafts. Close it if it was the item on screen —
+    // it was open read-only, and it is editable now.
+    pendingItems.value = pendingItems.value.filter(p => p.id !== id)
+    allDrafts.value = [draft, ...allDrafts.value.filter(d => d.id !== draft.id)]
+    if (draftId.value === id) { editorOpen.value = false; readonlyContent.value = null }
+    submitMessage.value = 'Withdrawn from review — it is back in your drafts.'
+    editorQueue.refresh()
+  } catch (err) {
+    withdrawError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    withdrawing.value = null
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([loadDraftList(), loadPending()])
+  // Arriving from the edit affordance on a published page with a revision already in
+  // progress: open it directly rather than making them find it in the list.
+  const requested = route.query.draft
+  if (typeof requested === 'string' && allDrafts.value.some(d => d.id === requested)) {
+    openDraft(requested)
+  }
+})
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -291,6 +332,15 @@ const fmtDate = (iso: string) =>
               title="Delete draft"
               @click="deleteDraft(e.id, e.etag)"
             >✕</button>
+            <button
+              v-else-if="e.state === 'in-review'"
+              type="button"
+              data-testid="draft-row-withdraw"
+              class="shrink-0 rounded px-2 py-1 text-xs font-semibold text-slypn-600 hover:bg-slypn-50 disabled:opacity-50"
+              title="Withdraw from review and edit again"
+              :disabled="withdrawing === e.id"
+              @click="withdraw(e.id)"
+            >Withdraw</button>
             <span v-else class="w-7 shrink-0" aria-hidden="true"></span>
           </div>
         </div>
@@ -305,6 +355,7 @@ const fmtDate = (iso: string) =>
             @click="openNewDraftDialog"
           >+ New draft</button>
           <p v-if="deleteError" class="text-xs text-rose-600">{{ deleteError }}</p>
+          <p v-if="withdrawError" data-testid="withdraw-error" class="text-xs text-rose-600">{{ withdrawError }}</p>
         </div>
       </div>
     </div>

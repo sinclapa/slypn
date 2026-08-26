@@ -465,8 +465,127 @@ public class ArticlesFunctionsTests
     // has to hold here. ThrowOnWrite proves the refusal happens BEFORE the repository
     // is touched — otherwise a 403 could be a storage error in disguise.
 
+    // ── Withdraw from review ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Withdraw_returns_the_authors_own_submission_to_drafts()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Withdraw(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/withdraw", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        // It is the in-review row we looked at, not the published one.
+        Assert.Equal("in-review", repo.LastArticleLookupStatus);
+        // A self-withdraw carries no feedback — there is no reviewer leaving a note.
+        Assert.Null(resp.ReadBodyAs<Draft>()!.RevisionFeedback);
+    }
+
+    [Fact]
+    public async Task Withdraw_forbids_another_contributor()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Contributor();
+
+        var resp = (TestHttpResponseData)await fn.Withdraw(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/withdraw", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Withdraw_forbids_an_admin_who_did_not_write_it()
+    {
+        // Deliberate: an Admin returning someone else's work uses /revise, which
+        // requires feedback. This endpoint has no admin bypass on purpose.
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Withdraw(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/withdraw", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Contains("/revise", resp.ReadBodyAsString());
+    }
+
+    [Fact]
+    public async Task Withdraw_404s_when_nothing_is_awaiting_review()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = null;
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Withdraw(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/withdraw", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Withdraw_forbids_legacy_content_with_no_recorded_author()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = null };
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Withdraw(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/withdraw", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public void Withdraw_requires_a_role()
+    {
+        var attr = typeof(ArticlesFunctions).GetMethod(nameof(ArticlesFunctions.Withdraw))!
+            .GetCustomAttributes(typeof(Slypn.Api.Infrastructure.RequireRoleAttribute), inherit: false)
+            .Cast<Slypn.Api.Infrastructure.RequireRoleAttribute>()
+            .SingleOrDefault();
+
+        Assert.NotNull(attr);
+        Assert.Equal(new[] { "Admin", "Contributor" }, attr!.Roles);
+    }
+
     private static TestFunctionContext Author() =>
         new TestFunctionContext().WithUser("oid-author", "Ann", "Contributor");
+
+    [Fact]
+    public async Task Edit_returns_201_when_it_mints_a_new_revision()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.RevisionResumes = false;
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Edit_returns_200_when_the_author_already_has_a_revision_on_the_go()
+    {
+        // The client branches on this to send them to the editor instead of opening a
+        // second window onto work already in progress.
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.RevisionResumes = true;
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
 
     [Fact]
     public async Task Edit_allows_the_author_of_the_published_article()

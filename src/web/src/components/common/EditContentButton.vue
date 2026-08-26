@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { apiFetch, apiErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import DraftEditor from '@/components/editor/DraftEditor.vue'
@@ -15,6 +16,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ (e: 'submitted'): void }>()
 
 const auth = useAuthStore()
+const router = useRouter()
 
 const editDraftId  = ref<string | null>(null)
 const editorRef    = ref<InstanceType<typeof DraftEditor> | null>(null)
@@ -30,6 +32,14 @@ async function startEdit() {
     const resp = await apiFetch(`/articles/${props.contentId}/edit`, { method: 'POST' })
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     const draft = await resp.json() as { id: string }
+
+    // 200 means the API handed back a revision this author already had on the go, rather
+    // than minting one. Opening it in a modal here would be a second window onto work in
+    // progress, so send them to the editor where it sits alongside the rest of their queue.
+    if (resp.status === 200) {
+      await router.push({ path: '/editor', query: { draft: draft.id } })
+      return
+    }
     editDraftId.value = draft.id
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)

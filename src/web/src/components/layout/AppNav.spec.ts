@@ -30,6 +30,36 @@ describe('AppNav', () => {
     push.mockClear()
   })
 
+  it('badges the Editor link with the number of documents on the go', async () => {
+    const adminOid = '11111111-1111-1111-1111-111111111111'
+    const { apiFetch } = await import('@/lib/api')
+    ;(apiFetch as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      const body = path === '/drafts' ? [{ id: 'd1' }, { id: 'd2' }]
+        : path === '/review/articles' ? [{ authorId: adminOid }]
+        : []
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) })
+    })
+    await useAuthStore().initialize() // dev-skip admin
+    const w = mountNav()
+    await flushPromises()
+    await w.find('[data-testid="user-menu-trigger"]').trigger('click')
+
+    const badge = w.findAll('[data-testid="nav-badge"]').find(b => b.attributes('data-for') === '/editor')
+    expect(badge?.text()).toBe('3') // two drafts + one submission
+  })
+
+  it('shows no Editor badge when there is nothing on the go', async () => {
+    const { apiFetch } = await import('@/lib/api')
+    ;(apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
+    await useAuthStore().initialize()
+    const w = mountNav()
+    await flushPromises()
+    await w.find('[data-testid="user-menu-trigger"]').trigger('click')
+
+    const badge = w.findAll('[data-testid="nav-badge"]').find(b => b.attributes('data-for') === '/editor')
+    expect(badge).toBeUndefined()
+  })
+
   it('renders the brand logo and primary nav links', () => {
     const w = mountNav()
     expect(w.find('img[alt="SLYPN"]').exists()).toBe(true)
