@@ -558,6 +558,73 @@ public class ArticlesFunctionsTests
         new TestFunctionContext().WithUser("oid-author", "Ann", "Contributor");
 
     [Fact]
+    public async Task Edit_hands_back_the_submission_when_a_revision_is_already_awaiting_review()
+    {
+        // Nothing to edit until an admin has dealt with it, and a second draft would put
+        // two competing revisions of one article in the queue. 200 tells the client to
+        // show the submission — read-only — rather than open a fresh editor.
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.Articles.Add(Sample("pending") with { AuthorId = "oid-author", ReplacesArticleId = "a1" });
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("pending", resp.ReadBodyAs<Article>()!.Id);
+    }
+
+    [Fact]
+    public async Task Edit_finds_an_in_review_revision_of_a_blog_post_too()
+    {
+        // ListArticlesAsync is filtered to articles, so checking it alone would miss a
+        // blog revision and mint a competing draft.
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author", Type = "blog" };
+        repo.Blogs.Add(Sample("pending-blog") with { AuthorId = "oid-author", Type = "blog", ReplacesArticleId = "a1" });
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("pending-blog", resp.ReadBodyAs<Article>()!.Id);
+    }
+
+    [Fact]
+    public async Task Edit_ignores_another_authors_in_review_revision()
+    {
+        // Someone else revising the same article must not block this author, and must
+        // not have their submission handed over either.
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.Articles.Add(Sample("theirs") with { AuthorId = "someone-else", ReplacesArticleId = "a1" });
+        repo.RevisionResumes = false;
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Edit_ignores_an_in_review_item_that_replaces_a_different_article()
+    {
+        var (fn, repo) = Make();
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-author" };
+        repo.Articles.Add(Sample("other") with { AuthorId = "oid-author", ReplacesArticleId = "a-different-one" });
+        repo.RevisionResumes = false;
+        var ctx = Author();
+
+        var resp = (TestHttpResponseData)await fn.Edit(
+            TestHttp.Raw(ctx, "POST", "http://localhost/api/articles/a1/edit", ""), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
     public async Task Edit_returns_201_when_it_mints_a_new_revision()
     {
         var (fn, repo) = Make();

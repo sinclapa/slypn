@@ -33,11 +33,12 @@ async function startEdit() {
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     const draft = await resp.json() as { id: string }
 
-    // 200 means the API handed back a revision this author already had on the go, rather
-    // than minting one. Opening it in a modal here would be a second window onto work in
-    // progress, so send them to the editor where it sits alongside the rest of their queue.
+    // 200 means this author already has something on the go for this article — either a
+    // revision draft, or one already submitted and awaiting review. Opening a modal here
+    // would be a second window onto that work, so send them to the editor, which shows a
+    // draft for editing and a submission read-only.
     if (resp.status === 200) {
-      await router.push({ path: '/editor', query: { draft: draft.id } })
+      await router.push({ path: '/editor', query: { item: draft.id } })
       return
     }
     editDraftId.value = draft.id
