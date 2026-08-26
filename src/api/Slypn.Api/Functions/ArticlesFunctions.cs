@@ -272,6 +272,13 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
             if (!ArticleVisibility.MayEdit(published, context))
                 return await Forbidden(req, EditOwnershipRefusal);
 
+            // Already submitted a revision of this item? There is nothing to edit until an
+            // admin has dealt with it, and minting a second draft would put two competing
+            // revisions of one article in the queue. Hand back the submission so the client
+            // can show it — read-only — rather than opening a fresh editor.
+            var awaitingReview = await FindOwnRevisionInReviewAsync(id, editorOid, ct);
+            if (awaitingReview is not null) return await Ok(req, awaitingReview.ForPublic(context));
+
             var (draft, resumed) = await repo.CreateRevisionDraftAsync(id, editorOid, editorName, ct);
             // 200 when we handed back a revision this author already had on the go, 201 when
             // one was minted. The client sends them to the editor in the first case rather
@@ -284,6 +291,17 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
+
+    /// <summary>The caller's own in-review revision of this article, if they have one.
+    /// Checks both content types: a blog post is an Article row with Type == "blog", and
+    /// ListArticlesAsync is filtered to articles, so it alone would miss blog revisions.</summary>
+    private async Task<Article?> FindOwnRevisionInReviewAsync(string articleId, string editorOid, CancellationToken ct)
+    {
+        var articles = await repo.ListArticlesAsync(InReviewStatus, ct);
+        var blogs    = await repo.ListBlogPostsAsync(InReviewStatus, ct);
+        return articles.Concat(blogs).FirstOrDefault(a =>
+            a.ReplacesArticleId == articleId && a.AuthorId == editorOid);
+    }
     /// <summary>
     /// Request deletion of a published article (pending admin approval). The article stays
     /// live until an admin approves the deletion via DELETE.
