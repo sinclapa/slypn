@@ -15,7 +15,11 @@ public sealed class DraftInput
     [StringLength(200)] public string Title { get; set; } = "";
     [StringLength(120)] public string Slug { get; set; } = "";
     [StringLength(500)] public string Summary { get; set; } = "";
-    [StringLength(50_000)] public string Body { get; set; } = "";
+    // The limit authors see is 50,000 characters of *text*, enforced in the editor.
+    // This is the transport backstop on the HTML that carries it: markup, links and
+    // image URLs all add weight, so it needs room above the text limit rather than
+    // matching it. Bodies live in blob storage, which does not care either way.
+    [StringLength(200_000)] public string Body { get; set; } = "";
     [StringLength(60)]  public string Category { get; set; } = "";
 
     [Range(0, 60)]

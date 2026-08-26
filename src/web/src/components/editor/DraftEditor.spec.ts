@@ -73,6 +73,28 @@ describe('DraftEditor', () => {
     expect(w.find('[data-testid="draft-summary-count"]').text()).toContain('limit reached')
   })
 
+
+  it('counts the body as text the reader sees, not as markup', async () => {
+    // 45,000 visible characters, but far more than that as HTML once every paragraph
+    // wrapper and link href is counted. Charging for markup the reader never sees would
+    // make the figure meaningless — and would stop an author well short of the limit.
+    const visible = 'x'.repeat(45_000)
+    const body = `<p><a href="https://example.com/a/fairly/long/url">${visible}</a></p>`
+    expect(body.length).toBeGreaterThan(45_050)
+
+    mockApi((url, method) => {
+      if (url.startsWith('/drafts/') && method === 'GET') return resp({ ...draftPayload, body })
+      return undefined
+    })
+    const w = mountEditor()
+    await flushPromises()
+
+    const counter = w.find('[data-testid="draft-body-count"]')
+    expect(counter.exists()).toBe(true)
+    expect(counter.text()).toContain('45000 / 50000')
+    expect(counter.text()).not.toContain('limit reached')
+  })
+
   it('counts the title and category too', async () => {
     const w = mountEditor()
     await flushPromises()
