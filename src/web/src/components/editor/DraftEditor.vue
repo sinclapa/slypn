@@ -87,11 +87,11 @@ async function save(value: DraftPayload) {
   // for content that arrived over it (an older draft, or a write through the API). Caught
   // here rather than letting the API answer, so the author gets a sentence they can act on
   // instead of "The field Body must be a string with a maximum length of 50000".
-  if (value.body.length > LIMITS.body) {
+  const bodyChars = htmlToText(value.body).length
+  if (bodyChars > LIMITS.body) {
     throw new Error(
-      `This piece is too long to save — ${value.body.length.toLocaleString()} characters of `
-      + `formatting and text, against a limit of ${LIMITS.body.toLocaleString()}. `
-      + 'Shorten it, or split it into two pieces.',
+      `This piece is too long to save — ${bodyChars.toLocaleString()} characters, against a `
+      + `limit of ${LIMITS.body.toLocaleString()}. Shorten it, or split it into two pieces.`,
     )
   }
 
@@ -216,7 +216,11 @@ function counterFor(used: number, max: number) {
 const titleCount    = computed(() => counterFor(draft.value.title.length, LIMITS.title))
 const summaryCount  = computed(() => counterFor(draft.value.summary.length, LIMITS.summary))
 const categoryCount = computed(() => counterFor(draft.value.category.length, LIMITS.category))
-const bodyCount     = computed(() => counterFor(draft.value.body.length, LIMITS.body))
+// Counted as an author reads it, not as it is stored: markup, link hrefs and image
+// URLs do not show on the page, so charging for them would make the number meaningless.
+// The editor blocks input against this same figure, so the count and the stop agree.
+const bodyTextLength = computed(() => htmlToText(draft.value.body).length)
+const bodyCount      = computed(() => counterFor(bodyTextLength.value, LIMITS.body))
 
 const missingToSubmit = computed(() => {
   const missing: string[] = []
@@ -413,6 +417,7 @@ watch(() => draft.value.body, (html) => {
       v-model="draft.body"
       :readonly="readonly"
       :max-length="LIMITS.body"
+      :current-length="bodyTextLength"
       @upload-error="(msg) => uploadError = msg"
     />
     <!-- Only once it starts to matter. Counts HTML, which is what the limit applies to,

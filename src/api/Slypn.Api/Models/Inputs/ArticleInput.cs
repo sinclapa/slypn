@@ -13,7 +13,8 @@ public sealed class ArticleInput
     [Required, StringLength(500, MinimumLength = 10)]
     public string Summary { get; set; } = "";
 
-    [Required, StringLength(50_000, MinimumLength = 10)]
+    // See DraftInput.Body — 200,000 is the HTML backstop, not the authoring limit.
+    [Required, StringLength(200_000, MinimumLength = 10)]
     public string Body { get; set; } = "";
 
     [Required, StringLength(120)]

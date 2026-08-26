@@ -11,8 +11,10 @@ const props = defineProps<{
   modelValue: string
   placeholder?: string
   readonly?: boolean
-  /** Hard stop, measured in characters of HTML — the same thing the API limits. */
+  /** Hard stop, in characters of visible text. */
   maxLength?: number
+  /** Current text length, computed by the parent so it is measured once per change. */
+  currentLength?: number
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
@@ -21,10 +23,19 @@ const emit = defineEmits<{
 
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// True once there is no room left. Returning true from a ProseMirror handler marks the
-// event handled, which swallows it — so the keystroke or paste simply does not land.
+// Characters still available. Returning true from a ProseMirror handler marks the event
+// handled, which swallows it — so the keystroke or paste simply does not land.
+function remaining(): number {
+  if (props.maxLength === undefined) return Number.POSITIVE_INFINITY
+  return props.maxLength - (props.currentLength ?? 0)
+}
 function atLimit(): boolean {
-  return props.maxLength !== undefined && props.modelValue.length >= props.maxLength
+  return remaining() <= 0
+}
+
+/** Text a paste would add, so an oversized one is refused rather than overshooting. */
+function pastedLength(slice: { content: { size: number, textBetween: (f: number, t: number, s: string) => string } }): number {
+  return slice.content.textBetween(0, slice.content.size, ' ').length
 }
 const uploading = ref(false)
 
@@ -53,8 +64,8 @@ const editor = new Editor({
     // blocked — these handlers never fire for a deletion — so the author can always get
     // back under the limit. Measured on the HTML, because that is what the API counts:
     // a paragraph of links costs more than the same words in plain text.
-    handleTextInput: () => atLimit(),
-    handlePaste:     () => atLimit(),
+    handleTextInput: (_view, _from, _to, text) => remaining() < text.length,
+    handlePaste:     (_view, _event, slice) => remaining() < pastedLength(slice),
     handleDrop:      () => atLimit(),
   },
   onUpdate: ({ editor }) => emit('update:modelValue', editor.getHTML()),
