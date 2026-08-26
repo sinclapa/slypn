@@ -15,6 +15,39 @@ const mountEditor = (props: Record<string, unknown> = {}) =>
 beforeEach(() => apiFetch.mockReset())
 
 describe('RichTextEditor', () => {
+  // ── Length limit ───────────────────────────────────────────────────────────
+  // Counted in visible text, not HTML, so the figure matches what the author sees.
+  // The parent measures it once per change and passes it down as currentLength.
+  // The handlers that consume this only fire on insertion, so a full document can
+  // always be edited back down.
+
+  const isFull = (w: ReturnType<typeof mountEditor>) =>
+    (w.vm as unknown as { isFull: () => boolean }).isFull()
+
+  it('is not full below the limit', () => {
+    expect(isFull(mountEditor({ maxLength: 40, currentLength: 39 }))).toBe(false)
+  })
+
+  it('is full at the limit and beyond', () => {
+    expect(isFull(mountEditor({ maxLength: 40, currentLength: 40 }))).toBe(true)
+    expect(isFull(mountEditor({ maxLength: 40, currentLength: 60 }))).toBe(true)
+  })
+
+  it('has no limit when maxLength is not given', () => {
+    expect(isFull(mountEditor({ currentLength: 100_000 }))).toBe(false)
+  })
+
+  it('counts text, so markup does not eat the allowance', () => {
+    // A short sentence wrapped in a link is long as HTML and short as text. The
+    // parent decides that; this asserts the editor trusts the figure it is given.
+    const w = mountEditor({
+      modelValue: '<p><a href="https://example.com/a/very/long/url">hi</a></p>',
+      maxLength: 40,
+      currentLength: 2,
+    })
+    expect(isFull(w)).toBe(false)
+  })
+
   it('renders the formatting toolbar', () => {
     const w = mountEditor()
     const labels = w.findAll('button').map(b => b.text())

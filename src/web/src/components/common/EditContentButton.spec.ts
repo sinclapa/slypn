@@ -50,7 +50,7 @@ beforeEach(async () => {
 })
 
 describe('EditContentButton', () => {
-  it('goes to the editor when a revision is already on the go', async () => {
+  it('goes to the editor when work is already on the go for this article', async () => {
     // 200 means the API handed back an existing revision rather than minting one, so
     // opening a modal here would be a second window onto work in progress.
     apiFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ id: 'draft-7' }), text: () => Promise.resolve('') } as unknown as Response)
@@ -58,7 +58,7 @@ describe('EditContentButton', () => {
     await w.find('[data-testid="edit-content"]').trigger('click')
     await flushPromises()
 
-    expect(push).toHaveBeenCalledWith({ path: '/editor', query: { draft: 'draft-7' } })
+    expect(push).toHaveBeenCalledWith({ path: '/editor', query: { item: 'draft-7' } })
     expect(w.find('.draft-editor-stub').exists()).toBe(false)
   })
 

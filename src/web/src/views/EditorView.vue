@@ -242,11 +242,14 @@ async function withdraw(id: string) {
 
 onMounted(async () => {
   await Promise.all([loadDraftList(), loadPending()])
-  // Arriving from the edit affordance on a published page with a revision already in
-  // progress: open it directly rather than making them find it in the list.
-  const requested = route.query.draft
-  if (typeof requested === 'string' && allDrafts.value.some(d => d.id === requested)) {
-    openDraft(requested)
+  // Arriving from the edit affordance on a published page that already has work in
+  // progress. Resolved against the merged list so it opens the right way round: a draft
+  // is editable, a submission awaiting review opens read-only. Only ever one of the
+  // caller's own, so a hand-typed id cannot open someone else's.
+  const requested = route.query.item
+  if (typeof requested === 'string') {
+    const entry = entries.value.find(e => e.id === requested)
+    if (entry) onRowClick(entry)
   }
 })
 
