@@ -47,6 +47,53 @@ const mountEditor = (props: Record<string, unknown> = {}) =>
 beforeEach(() => apiFetch.mockReset())
 
 describe('DraftEditor', () => {
+  // ── Field limits ───────────────────────────────────────────────────────────
+  // maxlength stops typing silently, which reads as the app breaking rather than a
+  // limit being reached. The counters appear once the limit is close enough to matter.
+
+  it('hides the summary counter until the limit is close', async () => {
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-testid="draft-summary-count"]').exists()).toBe(false)
+
+    await w.find('#draft-summary').setValue('x'.repeat(399)) // 79.8% of 500
+    expect(w.find('[data-testid="draft-summary-count"]').exists()).toBe(false)
+  })
+
+  it('shows the summary counter as it fills, and says so at the limit', async () => {
+    const w = mountEditor()
+    await flushPromises()
+
+    await w.find('#draft-summary').setValue('x'.repeat(450))
+    const counter = w.find('[data-testid="draft-summary-count"]')
+    expect(counter.text()).toContain('450 / 500')
+    expect(counter.text()).not.toContain('limit reached')
+
+    await w.find('#draft-summary').setValue('x'.repeat(500))
+    expect(w.find('[data-testid="draft-summary-count"]').text()).toContain('limit reached')
+  })
+
+  it('counts the title and category too', async () => {
+    const w = mountEditor()
+    await flushPromises()
+    await w.find('#draft-title').setValue('t'.repeat(180))
+    await w.find('#draft-category').setValue('c'.repeat(55))
+    expect(w.find('[data-testid="draft-title-count"]').text()).toContain('180 / 200')
+    expect(w.find('[data-testid="draft-category-count"]').text()).toContain('55 / 60')
+  })
+
+  it('clears the category', async () => {
+    const w = mountEditor()
+    await flushPromises()
+    await w.find('#draft-category').setValue('Community')
+    expect(w.find('[data-testid="draft-category-clear"]').exists()).toBe(true)
+
+    await w.find('[data-testid="draft-category-clear"]').trigger('click')
+    expect((w.find('#draft-category').element as HTMLInputElement).value).toBe('')
+    // The control goes away with nothing to clear.
+    expect(w.find('[data-testid="draft-category-clear"]').exists()).toBe(false)
+  })
+
   it('loads the draft and fills the form', async () => {
     mockApi()
     const w = mountEditor()

@@ -11,6 +11,8 @@ const props = defineProps<{
   modelValue: string
   placeholder?: string
   readonly?: boolean
+  /** Hard stop, measured in characters of HTML — the same thing the API limits. */
+  maxLength?: number
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
@@ -18,6 +20,12 @@ const emit = defineEmits<{
 }>()
 
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// True once there is no room left. Returning true from a ProseMirror handler marks the
+// event handled, which swallows it — so the keystroke or paste simply does not land.
+function atLimit(): boolean {
+  return props.maxLength !== undefined && props.modelValue.length >= props.maxLength
+}
 const uploading = ref(false)
 
 const editor = new Editor({
@@ -41,9 +49,19 @@ const editor = new Editor({
     attributes: {
       class: 'prose prose-slypn focus:outline-none max-w-none min-h-[20rem] px-4 py-3',
     },
+    // Refuse anything that would add to an already-full document. Only insertions are
+    // blocked — these handlers never fire for a deletion — so the author can always get
+    // back under the limit. Measured on the HTML, because that is what the API counts:
+    // a paragraph of links costs more than the same words in plain text.
+    handleTextInput: () => atLimit(),
+    handlePaste:     () => atLimit(),
+    handleDrop:      () => atLimit(),
   },
   onUpdate: ({ editor }) => emit('update:modelValue', editor.getHTML()),
 })
+
+/** Whether the document has hit maxLength. Exposed so it can be asserted directly. */
+defineExpose({ isFull: atLimit })
 
 // Sync external value changes back into TipTap (e.g. when loading a draft).
 watch(() => props.modelValue, (value) => {
