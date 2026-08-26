@@ -15,6 +15,29 @@ const mountEditor = (props: Record<string, unknown> = {}) =>
 beforeEach(() => apiFetch.mockReset())
 
 describe('RichTextEditor', () => {
+  // ── Length limit ───────────────────────────────────────────────────────────
+  // Measured in HTML, which is what the API caps. The handlers that consume this
+  // (handleTextInput / handlePaste / handleDrop) only fire on insertion, so a full
+  // document can always be edited back down.
+
+  it('is not full below the limit', () => {
+    const w = mountEditor({ modelValue: 'x'.repeat(39), maxLength: 40 })
+    expect((w.vm as unknown as { isFull: () => boolean }).isFull()).toBe(false)
+  })
+
+  it('is full at the limit and beyond', () => {
+    const at = mountEditor({ modelValue: 'x'.repeat(40), maxLength: 40 })
+    expect((at.vm as unknown as { isFull: () => boolean }).isFull()).toBe(true)
+
+    const over = mountEditor({ modelValue: 'x'.repeat(60), maxLength: 40 })
+    expect((over.vm as unknown as { isFull: () => boolean }).isFull()).toBe(true)
+  })
+
+  it('has no limit when maxLength is not given', () => {
+    const w = mountEditor({ modelValue: 'x'.repeat(100_000) })
+    expect((w.vm as unknown as { isFull: () => boolean }).isFull()).toBe(false)
+  })
+
   it('renders the formatting toolbar', () => {
     const w = mountEditor()
     const labels = w.findAll('button').map(b => b.text())
