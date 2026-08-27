@@ -90,7 +90,7 @@ async function publish(article: PendingArticle) {
   busy.value = { ...busy.value, [article.id]: 'publishing' }
   errors.value = { ...errors.value, [article.id]: null }
   try {
-    const resp = await apiFetch(`/articles/${article.id}/publish`, { method: 'POST' })
+    const resp = await apiFetch(`/content/${article.id}/publish`, { method: 'POST' })
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     articles.value = articles.value.filter(a => a.id !== article.id)
     syncPendingCount()
@@ -106,7 +106,7 @@ async function approveDeletion(item: PendingArticle) {
   busy.value = { ...busy.value, [item.id]: 'deleting' }
   errors.value = { ...errors.value, [item.id]: null }
   try {
-    const resp = await apiFetch(`/articles/${item.id}?status=published`, { method: 'DELETE' })
+    const resp = await apiFetch(`/content/${item.id}?status=published`, { method: 'DELETE' })
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     deletions.value = deletions.value.filter(d => d.id !== item.id)
     syncPendingCount()
@@ -121,7 +121,7 @@ async function keepArticle(item: PendingArticle) {
   busy.value = { ...busy.value, [item.id]: 'keeping' }
   errors.value = { ...errors.value, [item.id]: null }
   try {
-    const resp = await apiFetch(`/articles/${item.id}/cancel-deletion`, { method: 'POST' })
+    const resp = await apiFetch(`/content/${item.id}/cancel-deletion`, { method: 'POST' })
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     deletions.value = deletions.value.filter(d => d.id !== item.id)
     syncPendingCount()
@@ -148,7 +148,7 @@ async function confirmRevise() {
   busy.value = { ...busy.value, [article.id]: 'revising' }
   errors.value = { ...errors.value, [article.id]: null }
   try {
-    const resp = await apiFetch(`/articles/${article.id}/revise`, {
+    const resp = await apiFetch(`/content/${article.id}/revise`, {
       method: 'POST',
       body: JSON.stringify({ feedback: feedback.trim() }),
     })

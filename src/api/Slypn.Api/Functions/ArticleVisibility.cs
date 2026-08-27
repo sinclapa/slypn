@@ -9,7 +9,7 @@ namespace Slypn.Api.Functions;
 /// response that an anonymous caller can reach.
 ///
 /// Both the <c>canEdit</c> flag on read responses and the 403 on
-/// <c>POST /api/articles/{id}/edit</c> go through <see cref="MayEdit"/>. Keeping
+/// <c>POST /api/content/{id}/edit</c> go through <see cref="MayEdit"/>. Keeping
 /// them on one predicate is the point of this class: if they drift apart the UI
 /// offers a button that the API then refuses.
 /// </summary>
@@ -40,4 +40,12 @@ internal static class ArticleVisibility
     /// </summary>
     public static Article ForPublic(this Article article, FunctionContext context) =>
         article with { AuthorId = null, CanEdit = MayEdit(article, context) };
+
+    public static IReadOnlyList<Article> VisibleInReview(
+        IReadOnlyList<Article> items, FunctionContext context) =>
+        context.IsAdmin()
+            ? items
+            : context.GetUserOid() is { Length: > 0 } oid
+                ? items.Where(a => a.AuthorId == oid).ToList()
+                : [];
 }

@@ -67,7 +67,7 @@ test.describe('deletion requests', () => {
     const article = await publishAuthoredArticle(api, adminApi, cleanup, {
       title: titleFor(uid, 'Admin keeps this'),
     })
-    await api.post(`/articles/${article.id}/request-deletion`)
+    await api.post(`/content/${article.id}/request-deletion`)
 
     const context = await browser.newContext()
     const adminPage = await context.newPage()
@@ -93,7 +93,7 @@ test.describe('deletion requests', () => {
       const article = await publishAuthoredArticle(api, adminApi, cleanup, {
         title: titleFor(uid, 'Admin deletes this'),
       })
-      await api.post(`/articles/${article.id}/request-deletion`)
+      await api.post(`/content/${article.id}/request-deletion`)
 
       const context = await browser.newContext()
       const adminPage = await context.newPage()

@@ -105,7 +105,7 @@ describe('PublishedContent', () => {
     await flushPromises()
     await w.findAll('button').find(b => b.text() === 'Edit')!.trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/i1/edit', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/i1/edit', { method: 'POST' })
     expect(w.find('.draft-editor-stub').exists()).toBe(true)
   })
 
@@ -115,7 +115,7 @@ describe('PublishedContent', () => {
     await flushPromises()
     await w.findAll('button').find(b => b.text() === 'Delete')!.trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/i1?status=published', { method: 'DELETE' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/i1?status=published', { method: 'DELETE' })
     expect(w.text()).not.toContain('Live article')
   })
 
@@ -154,7 +154,7 @@ describe('PublishedContent', () => {
     expect(reqBtn).toBeTruthy()
     await reqBtn.trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/i1/request-deletion', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/i1/request-deletion', { method: 'POST' })
   })
 
   it('shows a load error', async () => {
@@ -290,7 +290,7 @@ describe('PublishedContent', () => {
     await flushPromises()
     await w.findAll('button').find(b => b.text() === 'Delete')!.trigger('click')
     await flushPromises()
-    expect(apiFetch).not.toHaveBeenCalledWith('/articles/i1?status=published', expect.objectContaining({ method: 'DELETE' }))
+    expect(apiFetch).not.toHaveBeenCalledWith('/content/i1?status=published', expect.objectContaining({ method: 'DELETE' }))
     expect(w.text()).toContain('Live article')
   })
 

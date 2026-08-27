@@ -22,7 +22,7 @@ test.describe('a member', () => {
       const resp = await api.get(path)
       expect(resp.status(), `GET ${path}`).toBe(403)
     }
-    expect((await api.post('/articles', {})).status()).toBe(403)
+    expect((await api.post('/content', {})).status()).toBe(403)
     expect((await api.post('/events', {})).status()).toBe(403)
     expect((await api.post('/resources', {})).status()).toBe(403)
   })
@@ -46,6 +46,31 @@ test.describe('a member', () => {
   })
 })
 
+test.describe('the old article-shaped mutation routes', () => {
+  test('are gone, not quietly still answering', async ({ adminApi, cleanup, uid }) => {
+    // Mutations moved to /api/content because they were never article-specific: a blog post
+    // is an Article row with Type == "blog", and these routes acted on both. Asserted
+    // positively so "the route silently vanished" cannot pass as "the caller stopped
+    // calling it" — a 404 here would otherwise look identical to success in any cleanup
+    // path that does not read its status.
+    const article = await createPublishedArticle(adminApi, cleanup, {
+      title: titleFor(uid, 'Old routes gone'),
+    })
+
+    for (const path of [
+      `/articles/${article.id}/publish`,
+      `/articles/${article.id}/edit`,
+      `/articles/${article.id}/request-deletion`,
+      `/articles/${article.id}/cancel-deletion`,
+      `/articles/${article.id}/withdraw`,
+      `/articles/${article.id}/revise`,
+    ]) {
+      expect((await adminApi.post(path, {})).status(), `POST ${path}`).toBe(404)
+    }
+    expect((await adminApi.post('/articles', {})).status()).toBe(404)
+  })
+})
+
 test.describe('a contributor', () => {
   test.use({ persona: 'contributor' })
 
@@ -54,10 +79,10 @@ test.describe('a contributor', () => {
       title: titleFor(uid, 'Admin-only actions'),
     })
 
-    expect((await api.post(`/articles/${article.id}/publish`)).status()).toBe(403)
-    expect((await api.post(`/articles/${article.id}/revise`, { feedback: 'nope' })).status()).toBe(403)
-    expect((await api.post(`/articles/${article.id}/cancel-deletion`)).status()).toBe(403)
-    expect((await api.del(`/articles/${article.id}?status=published`)).status()).toBe(403)
+    expect((await api.post(`/content/${article.id}/publish`)).status()).toBe(403)
+    expect((await api.post(`/content/${article.id}/revise`, { feedback: 'nope' })).status()).toBe(403)
+    expect((await api.post(`/content/${article.id}/cancel-deletion`)).status()).toBe(403)
+    expect((await api.del(`/content/${article.id}?status=published`)).status()).toBe(403)
 
     // ...and it really is still there.
     expect((await adminApi.get(`/articles/${article.slug}`)).ok()).toBeTruthy()
@@ -72,14 +97,14 @@ test.describe('a contributor', () => {
         title: titleFor(uid, 'Owned by contributor2'),
       })
 
-      expect((await api.post(`/articles/${theirs.id}/edit`)).status()).toBe(403)
-      expect((await api.post(`/articles/${theirs.id}/request-deletion`)).status()).toBe(403)
+      expect((await api.post(`/content/${theirs.id}/edit`)).status()).toBe(403)
+      expect((await api.post(`/content/${theirs.id}/request-deletion`)).status()).toBe(403)
 
       // ...and our own is still editable, so this is ownership and not a blanket refusal.
       const mine = await publishAuthoredArticle(api, adminApi, cleanup, {
         title: titleFor(uid, 'Owned by contributor'),
       })
-      expect((await api.post(`/articles/${mine.id}/edit`)).ok()).toBeTruthy()
+      expect((await api.post(`/content/${mine.id}/edit`)).ok()).toBeTruthy()
     } finally {
       await otherAuthor.dispose()
     }
@@ -92,8 +117,8 @@ test.describe('a contributor', () => {
       title: titleFor(uid, 'Legacy no author'),
     })
 
-    expect((await api.post(`/articles/${legacy.id}/edit`)).status()).toBe(403)
-    expect((await adminApi.post(`/articles/${legacy.id}/edit`)).ok()).toBeTruthy()
+    expect((await api.post(`/content/${legacy.id}/edit`)).status()).toBe(403)
+    expect((await adminApi.post(`/content/${legacy.id}/edit`)).ok()).toBeTruthy()
   })
 
   test('sees only their own submissions in the review queues', async ({ api, adminApi, cleanup, uid }) => {
@@ -135,7 +160,7 @@ test.describe('a contributor', () => {
       const draft = await createDraft(otherAuthor, cleanup, { title: titleFor(uid, 'Theirs in review') })
       await submitDraft(otherAuthor, cleanup, draft.id)
 
-      expect((await api.post(`/articles/${draft.id}/withdraw`)).status()).toBe(403)
+      expect((await api.post(`/content/${draft.id}/withdraw`)).status()).toBe(403)
 
       // ...and it is genuinely still in review for its author.
       const theirs = await (await otherAuthor.get('/review/articles')).json() as { id: string }[]
@@ -153,7 +178,7 @@ test.describe('a contributor', () => {
     expect(((await (await api.get('/drafts')).json()) as { id: string }[])
       .some(d => d.id === draft.id)).toBe(false)
 
-    expect((await api.post(`/articles/${draft.id}/withdraw`)).ok()).toBeTruthy()
+    expect((await api.post(`/content/${draft.id}/withdraw`)).ok()).toBeTruthy()
 
     // Back in drafts, out of the review queue.
     expect(((await (await api.get('/drafts')).json()) as { id: string }[])
@@ -168,8 +193,8 @@ test.describe('a contributor', () => {
     const draft = await createDraft(api, cleanup, { title: titleFor(uid, 'Admin cannot withdraw') })
     await submitDraft(api, cleanup, draft.id)
 
-    expect((await adminApi.post(`/articles/${draft.id}/withdraw`)).status()).toBe(403)
-    expect((await adminApi.post(`/articles/${draft.id}/revise`, { feedback: 'Needs another pass please.' })).ok()).toBeTruthy()
+    expect((await adminApi.post(`/content/${draft.id}/withdraw`)).status()).toBe(403)
+    expect((await adminApi.post(`/content/${draft.id}/revise`, { feedback: 'Needs another pass please.' })).ok()).toBeTruthy()
   })
 
   test('can still read the pending queues they work from', async ({ api }) => {

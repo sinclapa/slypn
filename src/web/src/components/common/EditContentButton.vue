@@ -29,7 +29,7 @@ async function startEdit() {
   busy.value = true
   error.value = null
   try {
-    const resp = await apiFetch(`/articles/${props.contentId}/edit`, { method: 'POST' })
+    const resp = await apiFetch(`/content/${props.contentId}/edit`, { method: 'POST' })
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     const draft = await resp.json() as { id: string }
 
@@ -75,7 +75,7 @@ function submittedEdit() {
     canEdit is paired with isAuthenticated because in dev-skip mode the API resolves a
     caller with no persona header to the admin persona, which would otherwise light this
     up for a signed-out visitor locally. The real boundary is the API's ownership check
-    on POST /articles/{id}/edit — this is only the affordance.
+    on POST /api/content/{id}/edit — this is only the affordance.
   -->
   <button
     v-if="canEdit && auth.isAuthenticated"

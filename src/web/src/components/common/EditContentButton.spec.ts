@@ -90,7 +90,7 @@ describe('EditContentButton', () => {
     const w = mountBtn()
     await w.find('[data-testid="edit-content"]').trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/a1/edit', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/a1/edit', { method: 'POST' })
   })
 
   it('surfaces the error when the API refuses', async () => {

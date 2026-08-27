@@ -102,7 +102,7 @@ test.describe('revision workflow', () => {
       title: titleFor(uid, 'Nothing to review'),
     })
 
-    const revision = await (await api.post(`/articles/${article.id}/edit`)).json() as { id: string }
+    const revision = await (await api.post(`/content/${article.id}/edit`)).json() as { id: string }
 
     // 409, not 400 — nothing is wrong with the request, there is just nothing to do,
     // and the editor shows it as information rather than an error.
@@ -130,7 +130,7 @@ test.describe('revision workflow', () => {
 
       const [editResponse] = await Promise.all([
         page.waitForResponse((r) =>
-          r.url().includes(`/api/articles/${original.id}/edit`) && r.request().method() === 'POST'),
+          r.url().includes(`/api/content/${original.id}/edit`) && r.request().method() === 'POST'),
         row.getByTestId('published-edit').click(),
       ])
       const revisionDraft = await editResponse.json() as { id: string; replacesArticleId: string }
