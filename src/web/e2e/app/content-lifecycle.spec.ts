@@ -1,7 +1,7 @@
 import { expect, primePage, test } from '../support/fixtures'
 import { createApiClient, type ApiClient } from '../support/api-client'
 import { gotoFresh, openDraftRow, typeInRichText } from '../helpers'
-import { expectDraftBodyToContain, expectDraftFieldToBe } from '../support/data'
+import { createPublishedArticle, expectDraftBodyToContain, expectDraftFieldToBe } from '../support/data'
 import { titleFor } from '../support/ids'
 
 /**
@@ -147,4 +147,31 @@ test.describe('content lifecycle', () => {
     await expect(page.getByRole('heading', { name: title })).toBeVisible()
     await expect(page.getByText(`Body paragraph for ${uid}.`)).toBeVisible()
   })
+
+  test('a slug another item already holds is refused, not silently shadowed', async ({ adminApi, cleanup, uid }) => {
+    // Two items on one slug do not error, they shadow: the by-slug lookups disagree about
+    // which wins, so the loser stays in every list while its URL serves the other.
+    const first = await createPublishedArticle(adminApi, cleanup, { title: titleFor(uid, 'Holds the slug') })
+
+    const clash = await adminApi.post('/content', {
+      slug: first.slug,
+      title: titleFor(uid, 'Wants the same slug'),
+      summary: 'A summary long enough to pass validation.',
+      body: '<p>Body content long enough.</p>',
+      author: 'E2E Author',
+      readingMinutes: 3,
+      category: 'Community',
+      status: 'published',
+      type: 'article',
+    })
+
+    expect(clash.status()).toBe(409)
+    expect(await clash.text()).toContain(first.id)
+
+    // ...and the original still owns its URL.
+    const live = await adminApi.get(`/articles/${first.slug}`)
+    expect(live.ok()).toBeTruthy()
+    expect(((await live.json()) as { id: string }).id).toBe(first.id)
+  })
+
 })

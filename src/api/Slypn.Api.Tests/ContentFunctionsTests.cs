@@ -797,4 +797,86 @@ public class ContentFunctionsTests
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
+
+    // ── Slug uniqueness ─────────────────────────────────────────────────────────
+    // A slug is the public URL. Two items holding one do not error, they shadow: the
+    // by-slug lookups disagree about which wins, so the loser stays visible in every
+    // list while its URL serves the other. BuildPublicSlug's {title}-{shortId} hybrid is
+    // collision-proof but is only reached from draft-submit; create and replace take the
+    // caller's slug verbatim.
+
+    [Fact]
+    public async Task Create_refuses_a_slug_another_item_already_holds()
+    {
+        var (fn, repo) = Make();
+        repo.SlugOwners["valid-slug"] = "someone-else";
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/content", ValidArticleInput()), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        // Names the offending item, so the caller can go and look at it.
+        Assert.Contains("someone-else", resp.ReadBodyAsString());
+    }
+
+    [Fact]
+    public async Task Create_allows_a_slug_nobody_holds()
+    {
+        var (fn, _) = Make();
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/content", ValidArticleInput()), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Replace_may_keep_its_own_slug()
+    {
+        // The obvious way to get this wrong: an item is not in conflict with itself, or no
+        // published article could ever be edited again.
+        var (fn, repo) = Make();
+        repo.SlugOwners["valid-slug"] = "a1";
+        repo.ArticleByIdAndStatus = Sample() with { AuthorId = "oid-admin" };
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/content/a1", ValidArticleInput()), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Replace_refuses_a_slug_belonging_to_a_different_item()
+    {
+        var (fn, repo) = Make();
+        repo.SlugOwners["valid-slug"] = "a-different-article";
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Replace(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/content/a1", ValidArticleInput()), ctx, "a1", Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Slug_conflicts_are_case_insensitive_where_the_lookup_is()
+    {
+        // Slugs are lower-cased by Slugify, but a caller can PUT anything, and Table
+        // Storage's Slug eq is case-sensitive while URLs are not. The fake mirrors the
+        // ordinal-ignore-case comparison the repository uses for the unconfigured path.
+        var (fn, repo) = Make();
+        repo.SlugOwners["Valid-Slug"] = "someone-else";
+        var ctx = Admin();
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/content", ValidArticleInput()), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+    }
+
 }

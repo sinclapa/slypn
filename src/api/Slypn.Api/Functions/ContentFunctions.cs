@@ -98,6 +98,26 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
+    /// <summary>
+    /// Refuses a slug another item already holds. Nothing else stops it: BuildPublicSlug's
+    /// {title}-{shortId} hybrid is collision-proof, but it is only reached from the draft-submit
+    /// path — create and replace take the caller's slug verbatim. Two items sharing one slug do
+    /// not error, they shadow: the by-slug lookups disagree about which one wins, so the loser
+    /// stays visible in every list while its URL serves the other.
+    ///
+    /// <paramref name="selfId"/> is the item being written, so a replace keeping its own slug is
+    /// not a conflict with itself.
+    /// </summary>
+    private async Task<HttpResponseData?> SlugConflict(
+        HttpRequestData req, string slug, string? selfId, CancellationToken ct)
+    {
+        var holder = await repo.FindIdBySlugAsync(slug, ct);
+        if (holder is null || holder == selfId) return null;
+        return await Conflict(req,
+            $"The slug '{slug}' already belongs to content id {holder}. Slugs are the public URL, "
+            + "so two items cannot share one — choose another.");
+    }
+
     [Function("CreateArticle")]
     [RequireRole("Admin", "Contributor")]
     [OpenApiOperation(operationId: "content.create", tags: new[] { "content" }, Summary = "Create article", Description = "Creates a new article.")]
@@ -123,6 +143,8 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
 
         if (StatusRefusal(context, input.Status) is { } refusal)
             return await Forbidden(req, refusal);
+
+        if (await SlugConflict(req, input.Slug, selfId: null, ct) is { } clash) return clash;
 
         input.Body = sanitizer.Sanitize(input.Body);
         try
@@ -152,6 +174,8 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
 
         if (StatusRefusal(context, input!.Status) is { } refusal)
             return await Forbidden(req, refusal);
+
+        if (await SlugConflict(req, input.Slug, selfId: id, ct) is { } clash) return clash;
 
         input.Body = sanitizer.Sanitize(input.Body);
         return await MapContentErrors(req, async () =>
