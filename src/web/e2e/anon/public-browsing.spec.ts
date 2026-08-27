@@ -157,7 +157,7 @@ test.describe('public browsing', () => {
     await page.getByLabel('Email address').fill(email)
 
     const [response] = await Promise.all([
-      page.waitForResponse((r) => r.url().includes('/api/newsletter/subscribe')),
+      page.waitForResponse((r) => r.url().includes('/api/subscribers')),
       page.getByTestId('subscribe-submit').click(),
     ])
     // 2xx, not 201: FunctionHelpers.Created() builds a 201 but the following

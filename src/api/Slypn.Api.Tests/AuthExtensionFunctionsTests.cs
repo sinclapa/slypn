@@ -229,7 +229,7 @@ public class AuthExtensionFunctionsTests
     // ── SEC-1: subscribing is not an invitation ─────────────────────────────
     // The members table used to double as the newsletter subscriber list, and the gate
     // allowed any address with a row. Anyone could POST to the anonymous
-    // /api/newsletter/subscribe and then sign up through CIAM. Subscribers have their own
+    // /api/subscribers and then sign up through CIAM. Subscribers have their own
     // table since SEC-5, so these rows are now legacy shapes — the gate must still reject
     // them, and anything else that learns to write a role-less member row.
 

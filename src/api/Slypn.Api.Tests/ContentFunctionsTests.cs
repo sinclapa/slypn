@@ -371,20 +371,20 @@ public class ContentFunctionsTests
     }
 
     [Fact]
-    public async Task Newsletters_subscribe_412_when_lookup_fails_and_412_when_upsert_fails()
+    public async Task Subscribers_create_412_when_lookup_fails_and_412_when_upsert_fails()
     {
         var ctx = new TestFunctionContext();
-        var payload = TestHttp.Json(ctx, "POST", "http://localhost/api/newsletter/subscribe", new { email = "me@example.com" });
+        var payload = TestHttp.Json(ctx, "POST", "http://localhost/api/subscribers", new { email = "me@example.com" });
 
         // GetSubscriberByEmailAsync throws
         var repo1 = new FakeContentRepository { ThrowOnSubscriberLookup = new RequestFailedException(500, "Lookup failed") };
-        var err1 = (TestHttpResponseData)await NewslettersFn(repo1).Subscribe(payload, Ct);
+        var err1 = (TestHttpResponseData)await SubscribersFn(repo1).Subscribe(payload, Ct);
         Assert.Equal(HttpStatusCode.InternalServerError, err1.StatusCode);
 
         // UpsertSubscriberAsync throws
         var repo2 = new FakeContentRepository { ThrowOnWrite = new RequestFailedException(412, "Precondition failed") };
-        var err2 = (TestHttpResponseData)await NewslettersFn(repo2).Subscribe(
-            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe", new { email = "me@example.com" }), Ct);
+        var err2 = (TestHttpResponseData)await SubscribersFn(repo2).Subscribe(
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/subscribers", new { email = "me@example.com" }), Ct);
         Assert.Equal(HttpStatusCode.PreconditionFailed, err2.StatusCode);
     }
 
@@ -402,7 +402,7 @@ public class ContentFunctionsTests
         var created = (TestHttpResponseData)await fn.Create(TestHttp.Json(ctx, "POST", "http://localhost/api/newsletters", valid), Ct);
         Assert.Contains((int)created.StatusCode, new[] { 200, 201 });
 
-        var sub = (TestHttpResponseData)await fn.Subscribe(TestHttp.Json(ctx, "POST", "http://localhost/api/newsletter/subscribe", new { email = "me@example.com" }), Ct);
+        var sub = (TestHttpResponseData)await SubscribersFn(repo).Subscribe(TestHttp.Json(ctx, "POST", "http://localhost/api/subscribers", new { email = "me@example.com" }), Ct);
         Assert.Contains((int)sub.StatusCode, new[] { 200, 201 });
     }
 
@@ -967,22 +967,22 @@ public class ContentFunctionsTests
     }
 
     [Fact]
-    public async Task Newsletters_subscribe_503_when_writes_disabled()
+    public async Task Subscribers_create_503_when_writes_disabled()
     {
-        var fn = NewslettersFn(new FakeContentRepository { Writes = false });
+        var fn = SubscribersFn(new FakeContentRepository { Writes = false });
         var resp = (TestHttpResponseData)await fn.Subscribe(
-            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/subscribers",
                 new { email = "me@example.com" }), Ct);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
     }
 
     [Fact]
-    public async Task Newsletters_subscribe_400_on_invalid_input()
+    public async Task Subscribers_create_400_on_invalid_input()
     {
-        var fn = NewslettersFn(new FakeContentRepository());
+        var fn = SubscribersFn(new FakeContentRepository());
         // Empty object → email field fails [Required, EmailAddress] validation
         var resp = (TestHttpResponseData)await fn.Subscribe(
-            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/subscribers",
                 new { }), Ct);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
@@ -990,13 +990,13 @@ public class ContentFunctionsTests
     // SEC-5: subscribing must never touch the members table. That conflation is what let an
     // anonymous subscribe buy its way past the CIAM sign-up gate (SEC-1).
     [Fact]
-    public async Task Newsletters_subscribe_writes_a_subscriber_and_never_a_member()
+    public async Task Subscribers_create_writes_a_subscriber_and_never_a_member()
     {
         var repo = new FakeContentRepository();
-        var fn = NewslettersFn(repo);
+        var fn = SubscribersFn(repo);
 
         var resp = (TestHttpResponseData)await fn.Subscribe(
-            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/subscribers",
                 new { email = "  New@Example.com  " }), Ct);
 
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
@@ -1010,16 +1010,16 @@ public class ContentFunctionsTests
     }
 
     [Fact]
-    public async Task Newsletters_subscribe_is_idempotent_and_keeps_the_original_date()
+    public async Task Subscribers_create_is_idempotent_and_keeps_the_original_date()
     {
         // The row key is derived from the address, so a repeat subscribe upserts the same row.
         var firstSeen = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         var existing = new Subscriber(Subscriber.KeyFor("sub@example.com"), "sub@example.com", "Old Display", firstSeen);
         var repo = new FakeContentRepository { SubscriberByEmail = existing };
-        var fn = NewslettersFn(repo);
+        var fn = SubscribersFn(repo);
 
         var resp = (TestHttpResponseData)await fn.Subscribe(
-            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/subscribers",
                 new { email = "sub@example.com" }), Ct);
 
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
@@ -1030,14 +1030,14 @@ public class ContentFunctionsTests
     }
 
     [Fact]
-    public async Task Newsletters_subscribe_applies_a_supplied_display_name()
+    public async Task Subscribers_create_applies_a_supplied_display_name()
     {
         var existing = new Subscriber(Subscriber.KeyFor("sub@example.com"), "sub@example.com", "Old Display", DateTime.UtcNow);
         var repo = new FakeContentRepository { SubscriberByEmail = existing };
-        var fn = NewslettersFn(repo);
+        var fn = SubscribersFn(repo);
 
         var resp = (TestHttpResponseData)await fn.Subscribe(
-            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/newsletter/subscribe",
+            TestHttp.Json(new TestFunctionContext(), "POST", "http://localhost/api/subscribers",
                 new { email = "sub@example.com", displayName = "  New Display  " }), Ct);
 
         Assert.Contains((int)resp.StatusCode, new[] { 200, 201 });
