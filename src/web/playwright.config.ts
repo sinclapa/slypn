@@ -21,8 +21,13 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // One Functions host serves every worker, so more workers mostly queue.
-  workers: process.env.CI ? 2 : 4,
+  // One Functions host serves every worker, so more workers mostly queue — and locally
+  // they also race a Vite dev server that compiles on demand, where CI navigates a warm
+  // one. At four workers the first navigations pile onto an uncompiled server and blow
+  // the 30s navigationTimeout, so a local run failed while CI passed on the same commit.
+  // Flat 2 rather than a local/CI split: the point of running it locally is to predict
+  // what CI will say, which it cannot do from a different concurrency.
+  workers: 2,
   timeout: 60_000,
   expect: { timeout: 10_000 },
 

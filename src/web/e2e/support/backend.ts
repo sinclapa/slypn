@@ -9,6 +9,7 @@
  * failure path here throws.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { createConnection } from 'node:net'
 import os from 'node:os'
@@ -132,6 +133,17 @@ async function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
 // ── azurite ──────────────────────────────────────────────────────────────────
 
 /**
+ * Absolute path to azurite's CLI entry. It is a direct devDependency, so this resolves
+ * from the web package rather than relying on PATH or on npx's resolution order.
+ */
+function azuriteEntryPoint(): string {
+  const require = createRequire(import.meta.url)
+  const pkgPath = require.resolve('azurite/package.json')
+  const bin = (require('azurite/package.json') as { bin: Record<string, string> }).bin.azurite
+  return path.resolve(path.dirname(pkgPath), bin)
+}
+
+/**
  * Start Azurite unless something is already listening — which covers the
  * `slypn-azurite` Docker container that scripts/startLocal.ps1 runs.
  *
@@ -147,9 +159,14 @@ export async function startAzurite(): Promise<ChildProcess | null> {
 
   const child = spawnLogged(
     'azurite',
-    isWindows() ? 'npx.cmd' : 'npx',
+    // Run azurite's own entry point under this Node rather than going through npx.
+    // Node refuses to spawn a .cmd without a shell (CVE-2024-27980's fix, 18.20.2+),
+    // so `npx.cmd` died with a bare EINVAL on Windows — before any test ran, and with
+    // nothing in the message to say which of the two spawns had failed. Resolving the
+    // bin directly sidesteps the shim on every platform, and skips npx's lookup.
+    process.execPath,
     [
-      'azurite',
+      azuriteEntryPoint(),
       '--silent',
       '--location', location,
       '--blobHost', '127.0.0.1', '--blobPort', String(AZURITE_BLOB_PORT),
