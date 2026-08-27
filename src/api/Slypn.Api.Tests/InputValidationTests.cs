@@ -111,4 +111,53 @@ public class InputValidationTests
         Assert.True(Validate(new SubscribeInput { Email = "a@b.com" }).Ok);
         Assert.False(Validate(new SubscribeInput { Email = "bad" }).Ok);
     }
+
+    // ── Newsletter topics ───────────────────────────────────────────────────────
+    // DataAnnotations validates the property, not its elements, so [StringLength] on a
+    // List<string> checks nothing. Topics were unbounded per item until ItemLength.
+
+    private static NewsletterInput NewsletterWith(params string[] topics) => new()
+    {
+        Title = "An issue",
+        IssueDate = new DateOnly(2026, 5, 1),
+        Summary = "A summary long enough to pass.",
+        Topics = topics.ToList(),
+    };
+
+    [Fact]
+    public void Newsletter_accepts_topics_within_the_per_item_limit()
+    {
+        Assert.True(Validate(NewsletterWith("Research", new string('x', 60))).Ok);
+    }
+
+    [Fact]
+    public void Newsletter_rejects_a_topic_that_is_too_long()
+    {
+        var (ok, errors) = Validate(NewsletterWith("Research", new string('x', 61)));
+        Assert.False(ok);
+        Assert.Contains(errors, e => e.ErrorMessage!.Contains("characters or fewer"));
+    }
+
+    [Fact]
+    public void Newsletter_rejects_too_many_topics()
+    {
+        var (ok, errors) = Validate(NewsletterWith(Enumerable.Range(0, 21).Select(i => $"t{i}").ToArray()));
+        Assert.False(ok);
+        Assert.Contains(errors, e => e.ErrorMessage!.Contains("at most 20 topics"));
+    }
+
+    [Fact]
+    public void ItemLength_ignores_a_collection_it_does_not_understand()
+    {
+        // Shape is another rule's problem; this one only has an opinion on string length.
+        Assert.True(new ItemLengthAttribute(5).IsValid(new List<int> { 1, 2, 3 }));
+        Assert.True(new ItemLengthAttribute(5).IsValid(null));
+    }
+
+    [Fact]
+    public void ItemLength_tolerates_a_null_entry()
+    {
+        Assert.True(new ItemLengthAttribute(5).IsValid(new List<string?> { null, "ok" }));
+    }
+
 }

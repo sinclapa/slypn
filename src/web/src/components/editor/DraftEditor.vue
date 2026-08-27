@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import RichTextEditor from '@/components/editor/RichTextEditor.vue'
+import FieldCounter from '@/components/common/FieldCounter.vue'
+import ClearFieldButton from '@/components/common/ClearFieldButton.vue'
 import SaveIndicator from '@/components/editor/SaveIndicator.vue'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { useBeforeUnload } from '@/composables/useBeforeUnload'
@@ -207,20 +209,10 @@ function hasBodyContent(html: string): boolean {
   return htmlToText(html).trim().length > 0
 }
 
-// Show a counter only once it starts to matter — a permanent "3 / 200" under every
-// field is noise. Below the threshold the field looks as it always did.
-function counterFor(used: number, max: number) {
-  if (used < max * 0.8) return null
-  return { text: `${used} / ${max}`, atLimit: used >= max }
-}
-const titleCount    = computed(() => counterFor(draft.value.title.length, LIMITS.title))
-const summaryCount  = computed(() => counterFor(draft.value.summary.length, LIMITS.summary))
-const categoryCount = computed(() => counterFor(draft.value.category.length, LIMITS.category))
 // Counted as an author reads it, not as it is stored: markup, link hrefs and image
 // URLs do not show on the page, so charging for them would make the number meaningless.
 // The editor blocks input against this same figure, so the count and the stop agree.
 const bodyTextLength = computed(() => htmlToText(draft.value.body).length)
-const bodyCount      = computed(() => counterFor(bodyTextLength.value, LIMITS.body))
 
 const missingToSubmit = computed(() => {
   const missing: string[] = []
@@ -340,12 +332,7 @@ watch(() => draft.value.body, (html) => {
           class="mt-1 w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm read-only:bg-slypn-50 read-only:text-slypn-600 focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
         />
         <p v-if="!readonly && !draft.title.trim()" class="mt-1 text-xs text-slypn-400">Add a title to start saving.</p>
-        <p
-          v-if="!readonly && titleCount"
-          data-testid="draft-title-count"
-          class="mt-1 text-right text-xs"
-          :class="titleCount!.atLimit ? 'font-semibold text-amber-600' : 'text-slypn-400'"
-        >{{ titleCount!.text }}{{ titleCount!.atLimit ? ' — limit reached' : '' }}</p>
+        <FieldCounter v-if="!readonly" :used="draft.title.length" :max="LIMITS.title" testid="draft-title-count" />
       </div>
 
       <div>
@@ -362,29 +349,17 @@ watch(() => draft.value.body, (html) => {
             placeholder="Pick an existing one or type a new category"
             class="mt-1 w-full rounded-md border border-slypn-200 bg-white py-2 pl-3 pr-9 text-sm shadow-sm read-only:bg-slypn-50 read-only:text-slypn-600 focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
           />
-          <button
+          <ClearFieldButton
             v-if="!readonly && draft.category"
-            type="button"
-            data-testid="draft-category-clear"
-            aria-label="Clear category"
-            title="Clear category"
-            class="absolute inset-y-0 right-0 mt-1 flex items-center rounded-r-md px-2.5 text-slypn-400 transition-colors hover:text-slypn-700"
-            @click="draft.category = ''"
-          >
-            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
+            field="category"
+            testid="draft-category-clear"
+            @clear="draft.category = ''"
+          />
         </div>
         <datalist id="draft-category-hints">
           <option v-for="c in categoryHints" :key="c" :value="c" />
         </datalist>
-        <p
-          v-if="!readonly && categoryCount"
-          data-testid="draft-category-count"
-          class="mt-1 text-right text-xs"
-          :class="categoryCount!.atLimit ? 'font-semibold text-amber-600' : 'text-slypn-400'"
-        >{{ categoryCount!.text }}{{ categoryCount!.atLimit ? ' — limit reached' : '' }}</p>
+        <FieldCounter v-if="!readonly" :used="draft.category.length" :max="LIMITS.category" testid="draft-category-count" />
       </div>
 
       <div>
@@ -397,12 +372,7 @@ watch(() => draft.value.body, (html) => {
           :readonly="readonly"
           class="mt-1 w-full rounded-md border border-slypn-200 bg-white px-3 py-2 text-sm shadow-sm read-only:bg-slypn-50 read-only:text-slypn-600 focus:border-slypn-600 focus:outline-none focus:ring-1 focus:ring-slypn-600"
         />
-        <p
-          v-if="!readonly && summaryCount"
-          data-testid="draft-summary-count"
-          class="mt-1 text-right text-xs"
-          :class="summaryCount!.atLimit ? 'font-semibold text-amber-600' : 'text-slypn-400'"
-        >{{ summaryCount!.text }}{{ summaryCount!.atLimit ? ' — limit reached' : '' }}</p>
+        <FieldCounter v-if="!readonly" :used="draft.summary.length" :max="LIMITS.summary" testid="draft-summary-count" />
       </div>
 
       <div>
@@ -422,14 +392,7 @@ watch(() => draft.value.body, (html) => {
     />
     <!-- Only once it starts to matter. Counts HTML, which is what the limit applies to,
          so it runs ahead of the visible word count on a heavily formatted piece. -->
-    <p
-      v-if="!readonly && bodyCount"
-      data-testid="draft-body-count"
-      class="text-right text-xs"
-      :class="bodyCount!.atLimit ? 'font-semibold text-amber-600' : 'text-slypn-400'"
-    >
-      {{ bodyCount!.text }} characters{{ bodyCount!.atLimit ? ' — limit reached' : '' }}
-    </p>
+    <FieldCounter v-if="!readonly" :used="bodyTextLength" :max="LIMITS.body" testid="draft-body-count" />
 
     <p v-if="!readonly && uploadError" data-testid="draft-upload-error" class="rounded-md bg-rose-50 px-4 py-2 text-sm text-rose-700">
       Image upload failed: {{ uploadError }}

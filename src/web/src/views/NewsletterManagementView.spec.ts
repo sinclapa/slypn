@@ -38,6 +38,33 @@ beforeEach(async () => {
 })
 
 describe('NewsletterManagementView', () => {
+  it('counts the fields as they fill', async () => {
+    apiJson.mockResolvedValue([])
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text()?.includes('Add newsletter'))!.trigger('click')
+
+    expect(w.find('[data-testid="newsletter-summary-count"]').exists()).toBe(false)
+
+    await w.find('textarea').setValue('s'.repeat(900))
+    expect(w.find('[data-testid="newsletter-summary-count"]').text()).toContain('900 / 1000')
+
+    await w.find('textarea').setValue('s'.repeat(1000))
+    expect(w.find('[data-testid="newsletter-summary-count"]').text()).toContain('limit reached')
+  })
+
+  it('caps the topics field, which had no limit at all', async () => {
+    apiJson.mockResolvedValue([])
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text()?.includes('Add newsletter'))!.trigger('click')
+
+    const topics = w.find('#newsletter-topics')
+    expect(topics.attributes('maxlength')).toBe('600')
+    await topics.setValue('t'.repeat(600))
+    expect(w.find('[data-testid="newsletter-topics-count"]').text()).toContain('limit reached')
+  })
+
   it('lists newsletters', async () => {
     apiJson.mockResolvedValue([newsletter()])
     const w = mountC()
