@@ -18,6 +18,9 @@ vi.mock('vue-router', async (orig) => {
 
 import EditorView from './EditorView.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useEditorQueueStore } from '@/stores/editorQueue'
+import { useApprovalsStore } from '@/stores/approvals'
+import { DEV_PERSONA_STORAGE_KEY } from '@/lib/devPersonas'
 
 const DraftEditorStub = {
   props: ['draftId', 'readonly', 'initialContent'],
@@ -394,5 +397,95 @@ describe('EditorView', () => {
     await w.findAll('button').find(b => b.text() === 'Save draft')!.trigger('click')
     // The DraftEditorStub emits the same id (d1) which IS in the list — splice replaces it
     expect(w.text()).toContain('Saved title')
+  })
+
+  // ── Nav badge freshness ────────────────────────────────────────────────────
+  // Both badges live in AppNav, which only refreshes them on mount. Every action
+  // here changes a count, so each has to say so or the number in the admin menu
+  // stays at whatever it was when the page loaded.
+
+  function spyOnBadges() {
+    const editorQueue = useEditorQueueStore(pinia)
+    const approvals   = useApprovalsStore(pinia)
+    const editorSpy    = vi.spyOn(editorQueue, 'refresh').mockResolvedValue(undefined)
+    const approvalsSpy = vi.spyOn(approvals, 'refresh').mockResolvedValue(undefined)
+    return { editorSpy, approvalsSpy }
+  }
+
+  it('refreshes the badges after deleting a draft', async () => {
+    mockLists([draftSummary()])
+    apiFetch.mockResolvedValue(ok({}))
+    const w = mountV()
+    await flushPromises()
+    const { editorSpy } = spyOnBadges()
+
+    await w.find('button[title="Delete draft"]').trigger('click')
+    await flushPromises()
+
+    expect(editorSpy).toHaveBeenCalled()
+  })
+
+  it('does not refresh the badges when a delete fails', async () => {
+    // A stale count is wrong; a count refreshed away from a document that is still
+    // there is worse, because it tells the user the delete worked.
+    mockLists([draftSummary()])
+    apiFetch.mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve('boom') } as unknown as Response)
+    const w = mountV()
+    await flushPromises()
+    const { editorSpy } = spyOnBadges()
+
+    await w.find('button[title="Delete draft"]').trigger('click')
+    await flushPromises()
+
+    expect(editorSpy).not.toHaveBeenCalled()
+  })
+
+  it('refreshes approvals after submitting, since an admin now has one more to review', async () => {
+    mockLists([draftSummary()])
+    const w = mountV()
+    await flushPromises()
+    const { editorSpy, approvalsSpy } = spyOnBadges()
+
+    await w.find('[data-testid="draft-row-open"]').trigger('click')
+    await w.findAll('button').find(b => b.text() === 'Submit draft')!.trigger('click')
+    await flushPromises()
+
+    expect(editorSpy).toHaveBeenCalled()
+    expect(approvalsSpy).toHaveBeenCalled()
+  })
+
+  it('refreshes approvals after withdrawing, since the item leaves the review queue', async () => {
+    // The reported bug: withdraw refreshed only the editor count, so an admin's
+    // Approvals badge kept counting a document that was no longer waiting on them.
+    mockWithPending([], [pendingItem({ id: 'r1' })])
+    apiFetch.mockResolvedValue(ok({}))
+    const w = mountV()
+    await flushPromises()
+    const { editorSpy, approvalsSpy } = spyOnBadges()
+
+    await w.find('[data-testid="draft-row-withdraw"]').trigger('click')
+    await flushPromises()
+
+    expect(editorSpy).toHaveBeenCalled()
+    expect(approvalsSpy).toHaveBeenCalled()
+  })
+
+  it('leaves approvals alone for a contributor, who has no such badge', async () => {
+    localStorage.setItem(DEV_PERSONA_STORAGE_KEY, 'contributor')
+    pinia = createPinia()
+    setActivePinia(pinia)
+    await useAuthStore().initialize()
+    mockLists([draftSummary()])
+    apiFetch.mockResolvedValue(ok({}))
+    const w = mountV()
+    await flushPromises()
+    const { editorSpy, approvalsSpy } = spyOnBadges()
+
+    await w.find('button[title="Delete draft"]').trigger('click')
+    await flushPromises()
+
+    expect(editorSpy).toHaveBeenCalled()
+    expect(approvalsSpy).not.toHaveBeenCalled()
+    localStorage.clear()
   })
 })
