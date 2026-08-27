@@ -439,7 +439,7 @@ describe('ArticleDetailView', () => {
   it('opens a revision draft in the editor when the edit button is clicked', async () => {
     route.params = { slug: 's' }
     apiFetch.mockImplementation((url: string, init?: { method?: string }) => {
-      if (url === '/articles/a1/edit' && init?.method === 'POST') return Promise.resolve(jsonResponse({ id: 'draft-9' }))
+      if (url === '/content/a1/edit' && init?.method === 'POST') return Promise.resolve(jsonResponse({ id: 'draft-9' }))
       return Promise.resolve(jsonResponse(art({ canEdit: true })))
     })
     await useAuthStore().initialize()
@@ -447,7 +447,7 @@ describe('ArticleDetailView', () => {
     await flushPromises()
     await w.find('[data-testid="edit-content"]').trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/a1/edit', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/a1/edit', { method: 'POST' })
   })
 })
 

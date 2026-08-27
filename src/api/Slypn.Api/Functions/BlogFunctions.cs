@@ -68,6 +68,6 @@ public sealed class BlogFunctions(IContentRepository repo)
         CancellationToken ct)
     {
         var posts = await repo.ListBlogPostsAsync(InReviewStatus, ct);
-        return await Ok(req, ArticlesFunctions.VisibleInReview(posts, context));
+        return await Ok(req, ArticleVisibility.VisibleInReview(posts, context));
     }
 }

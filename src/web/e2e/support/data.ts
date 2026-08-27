@@ -55,11 +55,11 @@ export function draftId(): string {
 export async function createPublishedArticle(
   api: ApiClient,
   cleanup: Cleanup,
-  fields: { title: string; category?: string; summary?: string; body?: string; author?: string },
+  fields: { title: string; category?: string; summary?: string; body?: string; author?: string; type?: 'article' | 'blog' },
 ): Promise<ArticleLike> {
   const slug = fields.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   const article = await expectOk<ArticleLike>(
-    await api.post('/articles', {
+    await api.post('/content', {
       slug,
       title: fields.title,
       summary: fields.summary ?? `${fields.title} — summary for the e2e suite.`,
@@ -68,10 +68,12 @@ export async function createPublishedArticle(
       readingMinutes: 3,
       category: fields.category ?? 'Community',
       status: 'published',
+      // Required: the create endpoint is type-agnostic, so the body says what it is making.
+      type: fields.type ?? 'article',
     }),
-    'POST /articles',
+    'POST /content',
   )
-  cleanup(async () => { await api.del(`/articles/${article.id}?status=published`) })
+  cleanup(async () => { await api.del(`/content/${article.id}?status=published`) })
   return article
 }
 
@@ -109,7 +111,7 @@ export async function submitDraft(
     await api.post(`/drafts/${id}/submit`),
     `POST /drafts/${id}/submit`,
   )
-  cleanup(async () => { await api.del(`/articles/${article.id}?status=in-review`) })
+  cleanup(async () => { await api.del(`/content/${article.id}?status=in-review`) })
   return article
 }
 
@@ -127,10 +129,10 @@ export async function publishAuthoredArticle(
   const draft = await createDraft(authorApi, cleanup, fields)
   const inReview = await submitDraft(authorApi, cleanup, draft.id)
   const published = await expectOk<ArticleLike>(
-    await adminApi.post(`/articles/${inReview.id}/publish`),
-    `POST /articles/${inReview.id}/publish`,
+    await adminApi.post(`/content/${inReview.id}/publish`),
+    `POST /content/${inReview.id}/publish`,
   )
-  cleanup(async () => { await adminApi.del(`/articles/${published.id}?status=published`) })
+  cleanup(async () => { await adminApi.del(`/content/${published.id}?status=published`) })
   return published
 }
 

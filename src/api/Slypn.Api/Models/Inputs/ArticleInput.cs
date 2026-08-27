@@ -26,6 +26,15 @@ public sealed class ArticleInput
     [Required, StringLength(60)]
     public string Category { get; set; } = "";
 
+    /// <summary>"article" or "blog". Required on create — the endpoint is type-agnostic, so the
+    /// body has to say what it is making. Optional on replace, where the stored type is preserved;
+    /// sending one that disagrees is refused rather than silently converting the item.
+    ///
+    /// Nullable and not [Required] precisely so "omitted" stays distinguishable from "article".
+    /// A default here would reintroduce the bug this was added to fix.</summary>
+    [RegularExpression("^(article|blog)$", ErrorMessage = "Type must be one of: article, blog.")]
+    public string? Type { get; set; }
+
     [Required, RegularExpression("^(draft|in-review|published|rejected)$",
         ErrorMessage = "Status must be one of: draft, in-review, published, rejected.")]
     public string Status { get; set; } = "draft";

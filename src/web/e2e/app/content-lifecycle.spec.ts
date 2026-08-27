@@ -37,7 +37,7 @@ test.describe('content lifecycle', () => {
     // Belt and braces: the run may have failed part-way, so clear whichever
     // partition the item ended up in.
     for (const status of ['in-review', 'published', 'draft']) {
-      await admin.del(`/articles/${draftId}?status=${status}`)
+      await admin.del(`/content/${draftId}?status=${status}`)
     }
     await admin.dispose()
   })

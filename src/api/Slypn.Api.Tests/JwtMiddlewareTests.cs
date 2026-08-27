@@ -122,7 +122,7 @@ public class JwtMiddlewareTests
     [Fact]
     public async Task Throws_when_RequireRole_on_non_http_context()
     {
-        var ctx = new TestMiddlewareContext("Slypn.Api.Functions.ArticlesFunctions.Create");
+        var ctx = new TestMiddlewareContext("Slypn.Api.Functions.ContentFunctions.Create");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             Make().Invoke(ctx, _ => Task.CompletedTask));
@@ -132,7 +132,7 @@ public class JwtMiddlewareTests
     [Fact]
     public async Task SkipAuth_still_throws_without_http_context()
     {
-        var ctx = new TestMiddlewareContext("Slypn.Api.Functions.ArticlesFunctions.Publish");
+        var ctx = new TestMiddlewareContext("Slypn.Api.Functions.ContentFunctions.Publish");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             Make(skipAuth: true).Invoke(ctx, _ => Task.CompletedTask));

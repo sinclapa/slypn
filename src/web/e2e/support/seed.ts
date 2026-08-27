@@ -83,7 +83,7 @@ export async function sweepLeftovers(admin: ApiClient, authors: ApiClient[]): Pr
   for (const [status, path] of sweepSources) {
     const items = await safeJson<SeedableArticle>(admin, path)
     for (const item of items.filter((i) => isOurs(i.title))) {
-      await admin.del(`/articles/${item.id}?status=${status}`)
+      await admin.del(`/content/${item.id}?status=${status}`)
       removed += 1
     }
   }

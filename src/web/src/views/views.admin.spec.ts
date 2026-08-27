@@ -72,7 +72,7 @@ describe('ApprovalsQueue', () => {
     await flushPromises()
     await w.findAll('button').find(b => b.text() === 'Approve')!.trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/p1/publish', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/p1/publish', { method: 'POST' })
     expect(w.text()).not.toContain('Pending piece')
   })
 
@@ -93,7 +93,7 @@ describe('ApprovalsQueue', () => {
     await textarea.setValue('Please tighten the intro')
     await w.findAll('button').find(b => b.text() === 'Send back for revision')!.trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/p1/revise', expect.objectContaining({ method: 'POST' }))
+    expect(apiFetch).toHaveBeenCalledWith('/content/p1/revise', expect.objectContaining({ method: 'POST' }))
     expect(w.text()).not.toContain('Pending piece')
   })
 
@@ -105,7 +105,7 @@ describe('ApprovalsQueue', () => {
     expect(w.text()).toContain('Old post')
     await w.findAll('button').find(b => b.text() === 'Approve deletion')!.trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/d1?status=published', { method: 'DELETE' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/d1?status=published', { method: 'DELETE' })
   })
 
   it('shows a load error', async () => {
@@ -154,7 +154,7 @@ describe('ApprovalsQueue', () => {
     apiFetch.mockResolvedValue(ok({}))
     await w.findAll('button').find(b => b.text() === 'Keep')!.trigger('click')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/articles/d1/cancel-deletion', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/d1/cancel-deletion', { method: 'POST' })
     expect(w.text()).not.toContain('Keep me')
   })
 

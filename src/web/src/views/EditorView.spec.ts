@@ -122,7 +122,7 @@ describe('EditorView', () => {
     await w.find('[data-testid="draft-row-withdraw"]').trigger('click')
     await flushPromises()
 
-    expect(apiFetch).toHaveBeenCalledWith('/articles/r1/withdraw', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('/content/r1/withdraw', { method: 'POST' })
     // It leaves review and arrives in drafts, so the row is editable rather than in-review.
     const rows = w.findAll('[data-testid="draft-row"]')
     expect(rows).toHaveLength(1)

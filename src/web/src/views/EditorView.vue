@@ -223,7 +223,7 @@ async function withdraw(id: string) {
   withdrawing.value = id
   withdrawError.value = null
   try {
-    const resp = await apiFetch(`/articles/${id}/withdraw`, { method: 'POST' })
+    const resp = await apiFetch(`/content/${id}/withdraw`, { method: 'POST' })
     if (!resp.ok) { withdrawError.value = await apiErrorMessage(resp); return }
     const draft = await resp.json() as DraftSummary
     // Leaves review, arrives in drafts. Close it if it was the item on screen —

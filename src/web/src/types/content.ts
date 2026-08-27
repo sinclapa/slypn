@@ -24,7 +24,7 @@ export interface Article {
    * Server-computed: may the signed-in caller open this in the editor (Admin, or the
    * Contributor who wrote it)? Deliberately a flag rather than an authorId to compare
    * against — the author's Entra OID has no business in a public payload. Presentation
-   * only; the API re-checks on POST /articles/{id}/edit.
+   * only; the API re-checks on POST /api/content/{id}/edit.
    */
   canEdit?: boolean
   prev?: ArticleNeighbour

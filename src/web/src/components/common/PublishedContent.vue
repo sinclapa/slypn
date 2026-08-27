@@ -109,7 +109,7 @@ async function edit(item: PublishedItem) {
   busy.value = { ...busy.value, [item.id]: true }
   errors.value = { ...errors.value, [item.id]: null }
   try {
-    const resp = await apiFetch(`/articles/${item.id}/edit`, { method: 'POST' })
+    const resp = await apiFetch(`/content/${item.id}/edit`, { method: 'POST' })
     if (!resp.ok) {
       throw new Error(await apiErrorMessage(resp))
     }
@@ -158,8 +158,8 @@ async function remove(item: PublishedItem) {
   errors.value = { ...errors.value, [item.id]: null }
   try {
     const resp = auth.isAdmin
-      ? await apiFetch(`/articles/${item.id}?status=published`, { method: 'DELETE' })
-      : await apiFetch(`/articles/${item.id}/request-deletion`, { method: 'POST' })
+      ? await apiFetch(`/content/${item.id}?status=published`, { method: 'DELETE' })
+      : await apiFetch(`/content/${item.id}/request-deletion`, { method: 'POST' })
     if (!resp.ok) {
       throw new Error(await apiErrorMessage(resp))
     }
