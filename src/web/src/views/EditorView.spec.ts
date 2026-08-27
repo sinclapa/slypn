@@ -56,7 +56,11 @@ function mockLists(drafts: unknown[]) {
 function mockWithPending(drafts: unknown[], pending: unknown[]) {
   apiJson.mockImplementation((path: string) => {
     if (path === '/drafts') return Promise.resolve(drafts)
-    return Promise.resolve(pending)
+    // Only the articles queue: returning `pending` for both review endpoints served
+    // every item twice, so a one-item fixture produced two rows and any assertion
+    // about how many rows there are was measuring the mock.
+    if (path === '/review/articles') return Promise.resolve(pending)
+    return Promise.resolve([])
   })
 }
 
@@ -70,6 +74,35 @@ beforeEach(async () => {
 })
 
 describe('EditorView', () => {
+  // ── The interrupted-submit window ──────────────────────────────────────────
+  // Submitting crosses a table and a partition boundary, so it cannot be atomic.
+  // The article is written before the draft is deleted, so an interruption leaves
+  // the same id in both lists rather than losing the work.
+
+  it('shows a half-submitted item once, as in-review', async () => {
+    // Same id in both lists: the article reuses the draft's id on submit.
+    mockWithPending([draftSummary({ id: 'x1', title: 'Caught mid-submit' })],
+                    [pendingItem({ id: 'x1', title: 'Caught mid-submit' })])
+    const w = mountV()
+    await flushPromises()
+
+    const rows = w.findAll('[data-testid="draft-row"]')
+    expect(rows).toHaveLength(1)
+    // The in-review side wins: it is the one that is true.
+    expect(rows[0].attributes('data-state')).toBe('in-review')
+  })
+
+  it('still lists a draft that has not been submitted', async () => {
+    mockWithPending([draftSummary({ id: 'd1' })], [pendingItem({ id: 'r1' })])
+    const w = mountV()
+    await flushPromises()
+
+    const states = w.findAll('[data-testid="draft-row"]').map(r => r.attributes('data-state'))
+    expect(states).toHaveLength(2)
+    expect(states).toContain('draft')
+    expect(states).toContain('in-review')
+  })
+
   it('opens the draft named by ?item= on arrival', async () => {
     // Arriving from the edit affordance with a revision already in progress.
     route.query = { item: 'd1' }

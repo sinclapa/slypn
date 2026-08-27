@@ -32,14 +32,20 @@ export const useEditorQueueStore = defineStore('editorQueue', () => {
       if (!dr.ok || !ar.ok || !br.ok) return
 
       const [drafts, articles, blogs] = await Promise.all([
-        dr.json() as Promise<unknown[]>,
-        ar.json() as Promise<{ authorId?: string | null }[]>,
-        br.json() as Promise<{ authorId?: string | null }[]>,
+        dr.json() as Promise<{ id: string }[]>,
+        ar.json() as Promise<{ id: string; authorId?: string | null }[]>,
+        br.json() as Promise<{ id: string; authorId?: string | null }[]>,
       ])
 
-      draftCount.value = drafts.length
-      inReviewCount.value = [...articles, ...blogs]
-        .filter(x => auth.oid && x.authorId === auth.oid).length
+      const mine = [...articles, ...blogs].filter(x => auth.oid && x.authorId === auth.oid)
+
+      // An interrupted submit leaves the item in both lists for a moment — see the note in
+      // EditorView's `entries`. The submitted article reuses the draft's id, so counting
+      // both would report one document as two.
+      const submitted = new Set(mine.map(x => x.id))
+
+      draftCount.value = drafts.filter(d => !submitted.has(d.id)).length
+      inReviewCount.value = mine.length
       openCount.value = draftCount.value + inReviewCount.value
     } catch {
       // non-fatal — the badge just stays at its last known value

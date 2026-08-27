@@ -34,6 +34,20 @@ beforeEach(() => {
 })
 
 describe('editorQueue store', () => {
+  it('counts a half-submitted item once', async () => {
+    // Submitting is not atomic, so an interruption leaves the same id in both lists.
+    // Counting both would badge one document as two.
+    await useAuthStore().initialize()
+    mockQueues([{ id: 'x1' }, { id: 'd2' }], [{ id: 'x1', authorId: adminOid }], [])
+
+    const store = useEditorQueueStore()
+    await store.refresh()
+
+    expect(store.draftCount).toBe(1)      // d2 only; x1 is already in review
+    expect(store.inReviewCount).toBe(1)
+    expect(store.openCount).toBe(2)       // not 3
+  })
+
   it('counts open drafts plus the caller’s own submissions', async () => {
     await useAuthStore().initialize() // dev-skip admin
     mockQueues([{ id: 'd1' }, { id: 'd2' }], [{ authorId: adminOid }], [{ authorId: adminOid }])

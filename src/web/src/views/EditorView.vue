@@ -87,13 +87,28 @@ interface DraftEntry {
 }
 
 const entries = computed<DraftEntry[]>(() => {
-  const drafts: DraftEntry[] = allDrafts.value.map(d => ({
-    id: d.id, title: d.title, type: d.type, date: d.updatedAt, state: 'draft', etag: d._etag,
-  }))
   const pending: DraftEntry[] = pendingItems.value.map(p => ({
     id: p.id, title: p.title, type: p.type, date: p.publishedAt,
     state: 'in-review', isRevision: !!p.replacesArticleId,
   }))
+
+  // Submitting cannot be atomic: it crosses both a table and a partition boundary
+  // (drafts are keyed by author, articles by status), and Table Storage transactions
+  // are single-table, single-partition. The repository writes the article before
+  // deleting the draft, so an interrupted submit leaves a duplicate rather than losing
+  // the work — but until it is retried the same item is in both lists.
+  //
+  // The submitted article reuses the draft's id, so an id in both lists means exactly
+  // one thing: it is already submitted. The in-review entry wins, which makes the only
+  // visible symptom of that window impossible, and it resolves itself when the draft
+  // row finally goes.
+  const submitted = new Set(pending.map(p => p.id))
+  const drafts: DraftEntry[] = allDrafts.value
+    .filter(d => !submitted.has(d.id))
+    .map(d => ({
+      id: d.id, title: d.title, type: d.type, date: d.updatedAt, state: 'draft', etag: d._etag,
+    }))
+
   return [...drafts, ...pending].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 })
