@@ -12,6 +12,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
 import PublishedContent from './PublishedContent.vue'
 import { useAuthStore } from '@/stores/auth'
 import { DEV_PERSONA_STORAGE_KEY } from '@/lib/devPersonas'
+import { useApprovalsStore } from '@/stores/approvals'
 
 const isDirtyMock = vi.fn(() => false)
 const flushMock = vi.fn().mockResolvedValue(undefined)
@@ -379,5 +380,34 @@ describe('PublishedContent', () => {
     const w = mountC()
     await flushPromises()
     expect(w.text()).toContain('Your published articles')
+  })
+
+  it('refreshes the approvals badge after an admin deletes a published item', async () => {
+    // Deleting clears any pending deletion request with it, so the badge in the
+    // admin menu is wrong until it is asked again.
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    mockLoad([item()])
+    const w = mountC()
+    await flushPromises()
+    const spy = vi.spyOn(useApprovalsStore(pinia), 'refresh').mockResolvedValue(undefined)
+
+    await w.findAll('button').find(b => b.text() === 'Delete')!.trigger('click')
+    await flushPromises()
+
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('does not refresh the approvals badge when the delete fails', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    mockLoad([item()])
+    const w = mountC()
+    await flushPromises()
+    const spy = vi.spyOn(useApprovalsStore(pinia), 'refresh').mockResolvedValue(undefined)
+    apiFetch.mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve('boom') } as unknown as Response)
+
+    await w.findAll('button').find(b => b.text() === 'Delete')!.trigger('click')
+    await flushPromises()
+
+    expect(spy).not.toHaveBeenCalled()
   })
 })

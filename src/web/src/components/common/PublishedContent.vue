@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
+import { useApprovalsStore } from '@/stores/approvals'
 import DraftEditor from '@/components/editor/DraftEditor.vue'
 
 interface PublishedItem {
@@ -19,6 +20,7 @@ interface PublishedItem {
 }
 
 const auth = useAuthStore()
+const approvals = useApprovalsStore()
 
 const items     = ref<PublishedItem[]>([])
 const loading   = ref(false)
@@ -170,6 +172,9 @@ async function remove(item: PublishedItem) {
       const idx = items.value.findIndex(x => x.id === item.id)
       if (idx >= 0) items.value.splice(idx, 1, { ...items.value[idx], ...updated })
     }
+    // Either branch moves the approvals count: an admin deleting clears any pending
+    // request, a contributor requesting one adds to it.
+    if (auth.isAdmin) approvals.refresh()
   } catch (err) {
     errors.value = { ...errors.value, [item.id]: err instanceof Error ? err.message : String(err) }
   } finally {
