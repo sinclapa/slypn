@@ -55,7 +55,7 @@ export function draftId(): string {
 export async function createPublishedArticle(
   api: ApiClient,
   cleanup: Cleanup,
-  fields: { title: string; category?: string; summary?: string; body?: string; author?: string },
+  fields: { title: string; category?: string; summary?: string; body?: string; author?: string; type?: 'article' | 'blog' },
 ): Promise<ArticleLike> {
   const slug = fields.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   const article = await expectOk<ArticleLike>(
@@ -68,6 +68,8 @@ export async function createPublishedArticle(
       readingMinutes: 3,
       category: fields.category ?? 'Community',
       status: 'published',
+      // Required: the create endpoint is type-agnostic, so the body says what it is making.
+      type: fields.type ?? 'article',
     }),
     'POST /articles',
   )

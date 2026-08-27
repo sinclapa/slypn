@@ -135,7 +135,7 @@ public class ArticlesFunctionsTests
         {
             slug = "valid-slug", title = "A valid title", summary = "A long enough summary.",
             body = "Body content long enough.", author = "Jane", readingMinutes = 5,
-            category = "Community", status = "draft",
+            category = "Community", status = "draft", type = "article",
         };
         var req = TestHttp.Json(ctx, "POST", "http://localhost/api/articles", input);
         var resp = (TestHttpResponseData)await fn.Create(req, ctx, Ct);
@@ -284,7 +284,7 @@ public class ArticlesFunctionsTests
     {
         slug = "valid-slug", title = "A valid title", summary = "A long enough summary.",
         body = "Body content long enough.", author = "Jane", readingMinutes = 5,
-        category = "Community", status = "draft",
+        category = "Community", status = "draft", type = "article",
     };
 
     [Fact]
@@ -457,7 +457,7 @@ public class ArticlesFunctionsTests
     {
         slug = "valid-slug", title = "A valid title", summary = "A long enough summary.",
         body = "Body content long enough.", author = "Jane", readingMinutes = 5,
-        category = "Community", status,
+        category = "Community", status, type = "article",
     };
 
     // ── Ownership on the revision + deletion endpoints ──────────────────────────
@@ -821,6 +821,52 @@ public class ArticlesFunctionsTests
         var all = (TestHttpResponseData)await fn.GetPendingArticles(
             TestHttp.Get(admin, "http://localhost/api/review/articles"), admin, Ct);
         Assert.Equal(2, all.ReadBodyAs<List<Article>>()!.Count);
+    }
+
+
+    // ── Content type on create/replace ──────────────────────────────────────────
+
+    [Fact]
+    public async Task Create_refuses_content_with_no_type()
+    {
+        // The route is type-agnostic, so the body has to say what it is making. Defaulting
+        // to "article" is the bug this exists to prevent, not a convenience.
+        var (fn, repo) = Make();
+        repo.ThrowOnWrite = new RequestFailedException(500, "should not be reached");
+        var ctx = Admin();
+
+        var noType = new
+        {
+            slug = "valid-slug", title = "A valid title", summary = "A long enough summary.",
+            body = "Body content long enough.", author = "Jane", readingMinutes = 5,
+            category = "Community", status = "draft",
+        };
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/articles", noType), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Contains("type", resp.ReadBodyAsString());
+    }
+
+    [Theory]
+    [InlineData("article")]
+    [InlineData("blog")]
+    public async Task Create_accepts_either_content_type(string type)
+    {
+        var (fn, _) = Make();
+        var ctx = Admin();
+        var payload = new
+        {
+            slug = "valid-slug", title = "A valid title", summary = "A long enough summary.",
+            body = "Body content long enough.", author = "Jane", readingMinutes = 5,
+            category = "Community", status = "draft", type,
+        };
+
+        var resp = (TestHttpResponseData)await fn.Create(
+            TestHttp.Json(ctx, "POST", "http://localhost/api/articles", payload), ctx, Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
     }
 
     private static TestFunctionContext Contributor() =>

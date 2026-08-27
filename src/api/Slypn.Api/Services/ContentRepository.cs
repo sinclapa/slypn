@@ -127,6 +127,49 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     }
 
     // ---- Articles writes ------------------------------------------------------
+    /// <summary>
+    /// Fold a caller's input onto the stored row. Three buckets, and the split is the whole
+    /// point of this method:
+    ///
+    /// <list type="bullet">
+    /// <item>Caller controls: Slug, Title, Summary, Body, Author, ReadingMinutes, Category, Status.</item>
+    /// <item>Stored row always wins: Type, AuthorId, ReplacesArticleId, DeletionRequestedBy,
+    ///   DeletionRequestedAt, RejectionReason, and PublishedAt — the ordering key for every list,
+    ///   and on an in-review row the submission time, with nothing sensible to reset it to.</item>
+    /// <item>Never persisted: Etag, CanEdit, Prev, Next.</item>
+    /// </list>
+    ///
+    /// Written as <c>existing with</c> rather than a fresh constructor call deliberately: <c>with</c>
+    /// preserves by default, so a property added to <see cref="Article"/> next year is carried over
+    /// automatically. Rebuilding positionally is exactly how Type, AuthorId and PublishedAt came to
+    /// be silently dropped here in the first place.
+    ///
+    /// Note Slug is caller-controlled, so a replace can change a published article's public URL —
+    /// which the revision path deliberately does not do. That inconsistency predates this method
+    /// and is left alone rather than fixed in passing.
+    /// </summary>
+    internal static Article ApplyInput(Article existing, ArticleInput input) =>
+        existing with
+        {
+            Slug           = input.Slug,
+            Title          = input.Title,
+            Summary        = input.Summary,
+            Body           = input.Body,
+            Author         = input.Author,
+            ReadingMinutes = input.ReadingMinutes,
+            Category       = input.Category,
+            Status         = input.Status,
+            Etag           = null,
+            CanEdit        = null,
+            Prev           = null,
+            Next           = null,
+        };
+
+    /// <summary>"blog" only when explicitly asked for; anything else is an article.
+    /// Mirrors the normalisation SubmitDraftAsync applies to a draft's type.</summary>
+    private static string NormalizeType(string? type) =>
+        string.Equals(type, "blog", StringComparison.OrdinalIgnoreCase) ? "blog" : ArticleType;
+
     public async Task<Article> CreateArticleAsync(ArticleInput input, CancellationToken ct)
     {
         EnsureWrites();
@@ -140,7 +183,10 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
             PublishedAt:    DateTime.UtcNow,
             ReadingMinutes: input.ReadingMinutes,
             Category:       input.Category,
-            Status:         input.Status);
+            Status:         input.Status)
+        {
+            Type = NormalizeType(input.Type),
+        };
 
         await body.PutAsync(ArticleBodyPrefix, article.Id, article.Body, ct);
         var resp = await store.Articles.AddEntityAsync(ArticleEntity(article), ct);
@@ -150,21 +196,49 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     public async Task<Article> ReplaceArticleAsync(string id, ArticleInput input, string? ifMatch, CancellationToken ct)
     {
         EnsureWrites();
-        var article = new Article(
-            Id:             id,
-            Slug:           input.Slug,
-            Title:          input.Title,
-            Summary:        input.Summary,
-            Body:           input.Body,
-            Author:         input.Author,
-            PublishedAt:    DateTime.UtcNow,
-            ReadingMinutes: input.ReadingMinutes,
-            Category:       input.Category,
-            Status:         input.Status);
 
-        await body.PutAsync(ArticleBodyPrefix, article.Id, article.Body, ct);
+        // Read the row we are about to overwrite so the fields the caller does not send survive.
+        // Read at input.Status, not at published: ArticleEntity partitions on Status, so that is
+        // the only partition UpdateEntityAsync can hit — merging from anywhere else would fold in
+        // a row we are not writing. Metadata only; the body is about to be replaced anyway.
+        Article? existing = null;
+        try
+        {
+            var read = await store.Articles.GetEntityAsync<TableEntity>(input.Status, id, cancellationToken: ct);
+            existing = Deserialize<Article>(read.Value);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // Left null: the update below 404s and MapStorageException renders it, which is the
+            // behaviour callers already depend on. Answering early here would be a second change.
+        }
+
+        if (existing is not null && !string.IsNullOrWhiteSpace(input.Type)
+            && !string.Equals(NormalizeType(input.Type), existing.Type, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"This is a {existing.Type}, not a {NormalizeType(input.Type)}. A replace cannot change "
+                + "the content type.");
+
+        var article = existing is null
+            ? new Article(
+                Id:             id,
+                Slug:           input.Slug,
+                Title:          input.Title,
+                Summary:        input.Summary,
+                Body:           input.Body,
+                Author:         input.Author,
+                PublishedAt:    DateTime.UtcNow,
+                ReadingMinutes: input.ReadingMinutes,
+                Category:       input.Category,
+                Status:         input.Status) { Type = NormalizeType(input.Type) }
+            : ApplyInput(existing, input);
+
+        // Table first, blob second. The other way round, a refused write — a 412 on a stale ETag,
+        // or a 404 against the wrong partition — had already overwritten the live body, leaving
+        // the stored metadata and the published text disagreeing on a request that failed.
         var resp = await store.Articles.UpdateEntityAsync(
             ArticleEntity(article), DecodeEtag(ifMatch), TableUpdateMode.Replace, ct);
+        await body.PutAsync(ArticleBodyPrefix, article.Id, article.Body, ct);
         return article with { Etag = EncodeEtag(resp.Headers.ETag!.Value) };
     }
 

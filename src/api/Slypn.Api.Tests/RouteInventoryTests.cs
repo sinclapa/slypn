@@ -52,7 +52,7 @@ public class RouteInventoryTests
                 yield return new Endpoint(
                     fn.Name,
                     $"{type.FullName}.{m.Name}",
-                    string.Join('|', trigger.Methods.Select(x => x.ToUpperInvariant()).OrderBy(x => x)),
+                    string.Join('|', (trigger.Methods ?? []).Select(x => x.ToUpperInvariant()).OrderBy(x => x)),
                     trigger.Route ?? "",
                     gate);
             }

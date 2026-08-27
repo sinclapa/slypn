@@ -160,4 +160,39 @@ public class InputValidationTests
         Assert.True(new ItemLengthAttribute(5).IsValid(new List<string?> { null, "ok" }));
     }
 
+
+    // ── Content type ────────────────────────────────────────────────────────────
+
+    private static ArticleInput ArticleWithType(string? type)
+    {
+        var a = ValidArticle();
+        a.Type = type;
+        return a;
+    }
+
+    [Theory]
+    [InlineData("article")]
+    [InlineData("blog")]
+    public void ArticleInput_accepts_the_two_content_types(string type)
+        => Assert.True(Validate(ArticleWithType(type)).Ok);
+
+    [Fact]
+    public void ArticleInput_allows_no_type()
+    {
+        // Optional on the model because it is required on create and optional on replace;
+        // the create handler enforces it, so the shape stays honest for both verbs.
+        Assert.True(Validate(ArticleWithType(null)).Ok);
+    }
+
+    [Theory]
+    [InlineData("post")]
+    [InlineData("BLOG")]     // anchored and case-sensitive, deliberately
+    [InlineData("article ")]
+    public void ArticleInput_rejects_anything_else(string type)
+    {
+        var (ok, errors) = Validate(ArticleWithType(type));
+        Assert.False(ok);
+        Assert.Contains(errors, e => e.ErrorMessage!.Contains("article, blog"));
+    }
+
 }

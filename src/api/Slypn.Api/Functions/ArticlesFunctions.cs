@@ -33,6 +33,9 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         "You can only withdraw your own submissions. An Admin returns someone else's work "
         + "with POST /api/articles/{id}/revise, which carries feedback.";
 
+    private const string MissingTypeRefusal =
+        "Creating content requires \"type\": \"article\" or \"blog\".";
+
     private const string DeletionOwnershipRefusal =
         "You can only request deletion of your own published content.";
 
@@ -147,7 +150,14 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
         var (input, err) = await ReadValidatedAsync<ArticleInput>(req, ct);
         if (err is not null) return err;
 
-        if (StatusRefusal(context, input!.Status) is { } refusal)
+        // Required here rather than on the model, because it is required on create and
+        // optional on replace — the same shape as Delete's ?status= check below. Refusing
+        // beats defaulting: an implicit "article" is precisely how a blog post used to get
+        // converted without anyone asking.
+        if (string.IsNullOrWhiteSpace(input!.Type))
+            return await BadRequest(req, MissingTypeRefusal);
+
+        if (StatusRefusal(context, input.Status) is { } refusal)
             return await Forbidden(req, refusal);
 
         input.Body = sanitizer.Sanitize(input.Body);
@@ -190,6 +200,7 @@ public sealed class ArticlesFunctions(IContentRepository repo, IHtmlSanitizer sa
             var article = await repo.ReplaceArticleAsync(id, input, IfMatch(req), ct);
             return await Ok(req, article, article.Etag);
         }
+        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
     }
 
