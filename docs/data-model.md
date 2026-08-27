@@ -35,6 +35,16 @@ Optimistic concurrency uses the **native Table entity ETag**. `ContentRepository
 
 - **`articles` partition on `status`** creates a hot `published` partition (the vast majority of reads). Fine at our scale (hundreds of articles, light traffic).
 - **List endpoints fetch bodies.** Article/draft list responses include the body (the approvals queue renders it), so those lists fetch the body blobs in parallel. Cheap at our volumes; could be trimmed to summaries later.
+- **Mutations are type-agnostic; reads are not.** A blog post is an `articles` row with
+  `Type == "blog"`, so create, replace, delete and every workflow transition are the same operation
+  either way — they live on `/api/content`. Reads stay split (`/articles`, `/articles/{slug}`,
+  `/review/articles` and their `/blog` counterparts) because a reader is asking for one or the other.
+  `ArticlesFunctions` and `BlogFunctions` hold the reads; `ContentFunctions` holds the mutations.
+- **A replace merges onto the stored row rather than rebuilding it** (`ContentRepository.ApplyInput`).
+  The caller owns slug/title/summary/body/author/reading-time/category/status; the stored row keeps
+  `Type`, `AuthorId`, the revision and deletion fields, and `PublishedAt` — the ordering key for every
+  list. Written as `existing with { … }` so a property added to `Article` later is preserved by
+  default; rebuilding positionally is how those fields were once silently dropped.
 - **`authorId` never leaves the API on a public read.** It is an Entra OID, so anonymous-reachable responses (`/articles`, `/articles/{slug}`, `/blog`, `/blog/{slug}`) are projected through `ArticleVisibility.ForPublic`, which strips it and adds a computed `canEdit` — Admin, or the Contributor who wrote it — for the caller to gate the edit affordance on. `canEdit` is per-request and never persisted; `/review/*` and `/drafts/*` are gated, so they still carry `authorId`. Content published before `AuthorId` existed has none, which makes it admin-only by construction.
 - **Workflow transitions are not atomic.** Submit/publish/revise and an event partition-key change are read→write→delete sequences. Admin actions are rare and re-runs are idempotent (the source is gone, surfacing a clean error). The body blob is keyed by id, so it never moves during a status change.
 
