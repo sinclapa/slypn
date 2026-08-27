@@ -60,6 +60,11 @@ internal sealed class FakeContentRepository : IContentRepository
     }
     public Task<Article?> GetArticleBySlugAsync(string slug, CancellationToken ct)
         => Task.FromResult(ArticleBySlug);
+    /// <summary>Id of the item holding a given slug, keyed by slug. Empty means no clash.</summary>
+    public Dictionary<string, string> SlugOwners = new(StringComparer.OrdinalIgnoreCase);
+    public Task<string?> FindIdBySlugAsync(string slug, CancellationToken ct)
+        => Task.FromResult(SlugOwners.TryGetValue(slug, out var id) ? id : null);
+
     public Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)
         => Task.FromResult(ArticleBySlug);
     public Article? BlogPostBySlug;

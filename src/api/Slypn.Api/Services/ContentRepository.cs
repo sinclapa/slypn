@@ -95,6 +95,28 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         return await GetArticleAsync(slugOrId, PublishedStatus, ct);
     }
 
+    /// <summary>
+    /// The id of whatever already holds this slug, or null if nothing does. Searches every
+    /// status partition: a slug clashing with an in-review or draft row becomes a live clash
+    /// the moment that row publishes.
+    ///
+    /// Table Storage can only enforce uniqueness on partition + row key, and a slug is neither,
+    /// so this is a check and not a constraint — two simultaneous creates could still both pass
+    /// it. Far narrower than the open door it replaces, but calling it a guarantee would be
+    /// overselling it.
+    /// </summary>
+    public async Task<string?> FindIdBySlugAsync(string slug, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(slug)) return null;
+        if (!store.IsConfigured)
+            return mock.Articles.FirstOrDefault(a =>
+                string.Equals(a.Slug, slug, StringComparison.OrdinalIgnoreCase))?.Id;
+
+        var filter = TableClient.CreateQueryFilter($"Slug eq {slug}");
+        var entities = await QueryAsync(store.Articles, filter, ct);
+        return entities.Count > 0 ? entities[0].RowKey : null;
+    }
+
     public Task<Article?> GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct)
         => WithNeighboursAsync(slugOrId, ArticleType, ct);
 

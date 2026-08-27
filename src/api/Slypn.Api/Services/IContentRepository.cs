@@ -20,6 +20,7 @@ public interface IContentRepository
     Task<IReadOnlyList<Article>>        ListArticlesAsync(string? status, CancellationToken ct);
     Task<IReadOnlyList<Article>>        ListBlogPostsAsync(string? status, CancellationToken ct);
     Task<Article?>                      GetArticleBySlugAsync(string slugOrId, CancellationToken ct);
+    Task<string?>                       FindIdBySlugAsync(string slug, CancellationToken ct);
     Task<Article?>                      GetArticleWithNeighboursAsync(string slugOrId, CancellationToken ct);
     Task<Article?>                      GetBlogPostWithNeighboursAsync(string slugOrId, CancellationToken ct);
     Task<IReadOnlyList<CommunityEvent>> ListEventsAsync(bool upcomingOnly, CancellationToken ct);
