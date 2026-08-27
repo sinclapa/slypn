@@ -42,10 +42,13 @@ internal static class ArticleVisibility
         article with { AuthorId = null, CanEdit = MayEdit(article, context) };
 
     public static IReadOnlyList<Article> VisibleInReview(
-        IReadOnlyList<Article> items, FunctionContext context) =>
-        context.IsAdmin()
-            ? items
-            : context.GetUserOid() is { Length: > 0 } oid
-                ? items.Where(a => a.AuthorId == oid).ToList()
-                : [];
+        IReadOnlyList<Article> items, FunctionContext context)
+    {
+        if (context.IsAdmin()) return items;
+
+        // No oid means no way to say which items are theirs, so show none rather than all.
+        return context.GetUserOid() is { Length: > 0 } oid
+            ? items.Where(a => a.AuthorId == oid).ToList()
+            : [];
+    }
 }

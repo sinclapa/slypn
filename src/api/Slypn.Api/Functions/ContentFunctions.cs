@@ -81,6 +81,23 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
     /// live until an admin approves the deletion via DELETE.
     /// </summary>
 
+    /// <summary>
+    /// The two failures every mutation here shares. The repository throws
+    /// InvalidOperationException when the request does not make sense for the item's current
+    /// state — not published, not in review, nothing to change — which is the caller's problem
+    /// to fix, so a 400 rather than a 500. Storage failures map to the status they deserve.
+    ///
+    /// The SupportsWrites guard deliberately stays at each call site, so it keeps running
+    /// before anything else the handler does.
+    /// </summary>
+    private async Task<HttpResponseData> MapContentErrors(
+        HttpRequestData req, Func<Task<HttpResponseData>> operation)
+    {
+        try { return await operation(); }
+        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
+        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+    }
+
     [Function("CreateArticle")]
     [RequireRole("Admin", "Contributor")]
     [OpenApiOperation(operationId: "content.create", tags: new[] { "content" }, Summary = "Create article", Description = "Creates a new article.")]
@@ -137,7 +154,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
             return await Forbidden(req, refusal);
 
         input.Body = sanitizer.Sanitize(input.Body);
-        try
+        return await MapContentErrors(req, async () =>
         {
             // Live content is Admin-only. Contributors revise a published article through
             // POST /api/content/{id}/edit, which drafts the change instead of overwriting it.
@@ -146,9 +163,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
 
             var article = await repo.ReplaceArticleAsync(id, input, IfMatch(req), ct);
             return await Ok(req, article, article.Etag);
-        }
-        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
-        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+        });
     }
 
     [Function("DeleteArticle")]
@@ -223,7 +238,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
         var editorOid = context.GetUserOid();
         if (editorOid is null) return await BadRequest(req, "Token missing oid claim.");
         var editorName = context.GetUserName() ?? "Member";
-        try
+        return await MapContentErrors(req, async () =>
         {
             // Admins may revise anything; a Contributor only their own work. Checked
             // here rather than in the UI alone — the endpoint is reachable directly.
@@ -246,9 +261,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
             return resumed
                 ? await Ok(req, draft, draft.Etag)
                 : await Created(req, draft, draft.Etag);
-        }
-        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
-        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+        });
     }
 
 
@@ -270,7 +283,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
         if (!repo.SupportsWrites) return await WritesDisabled(req);
         var requesterOid = context.GetUserOid();
         if (requesterOid is null) return await BadRequest(req, "Token missing oid claim.");
-        try
+        return await MapContentErrors(req, async () =>
         {
             var published = await repo.GetArticleAsync(id, PublishedStatus, ct);
             if (published is null) return await NotFound(req, "Published article not found.");
@@ -279,9 +292,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
 
             var article = await repo.RequestArticleDeletionAsync(id, requesterOid, ct);
             return await Ok(req, article, article.Etag);
-        }
-        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
-        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+        });
     }
 
     /// <summary>Admin clears a pending deletion request, keeping the article published.</summary>
@@ -297,13 +308,11 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
         string id, CancellationToken ct)
     {
         if (!repo.SupportsWrites) return await WritesDisabled(req);
-        try
+        return await MapContentErrors(req, async () =>
         {
             var article = await repo.CancelArticleDeletionAsync(id, ct);
             return await Ok(req, article, article.Etag);
-        }
-        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
-        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+        });
     }
 
     /// <summary>
@@ -335,7 +344,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
         var callerOid = context.GetUserOid();
         if (callerOid is null) return await BadRequest(req, "Token missing oid claim.");
 
-        try
+        return await MapContentErrors(req, async () =>
         {
             var inReview = await repo.GetArticleAsync(id, InReviewStatus, ct);
             if (inReview is null) return await NotFound(req, "No submission awaiting review with that id.");
@@ -346,9 +355,7 @@ public sealed class ContentFunctions(IContentRepository repo, IHtmlSanitizer san
 
             var draft = await repo.ReviseArticleAsync(id, feedback: null, ct);
             return await Ok(req, draft, draft.Etag);
-        }
-        catch (InvalidOperationException ex) { return await BadRequest(req, ex.Message); }
-        catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
+        });
     }
 
     /// <summary>
