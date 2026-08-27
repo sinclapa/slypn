@@ -25,7 +25,7 @@ async function subscribe() {
   submitting.value = true
   submitError.value = null
   try {
-    const resp = await apiFetch('/newsletter/subscribe', {
+    const resp = await apiFetch('/subscribers', {
       method: 'POST',
       body: JSON.stringify({ email: email.value.trim() }),
     })

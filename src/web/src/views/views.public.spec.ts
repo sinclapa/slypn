@@ -256,7 +256,7 @@ describe('NewsletterView', () => {
     await w.find('input[type="email"]').setValue('me@example.com')
     await w.find('form').trigger('submit')
     await flushPromises()
-    expect(apiFetch).toHaveBeenCalledWith('/newsletter/subscribe', expect.objectContaining({ method: 'POST' }))
+    expect(apiFetch).toHaveBeenCalledWith('/subscribers', expect.objectContaining({ method: 'POST' }))
     expect(w.text()).toContain('you’re on the list')
   })
 

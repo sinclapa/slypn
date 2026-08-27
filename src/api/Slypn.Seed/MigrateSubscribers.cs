@@ -10,9 +10,10 @@ namespace Slypn.Seed;
 /// One-off SEC-5 migration: moves legacy newsletter subscribers out of the <c>members</c> table
 /// into <c>subscribers</c>.
 ///
-/// Before SEC-5, POST /api/newsletter/subscribe stored each address as a members row with
-/// Status="subscribed", so subscribers and invited members shared one table. Subscribers have
-/// their own table now; these rows have to follow.
+/// Before SEC-5, the subscribe endpoint — then POST /api/newsletter/subscribe, now POST
+/// /api/subscribers — stored each address as a members row with Status="subscribed", so
+/// subscribers and invited members shared one table. Subscribers have their own table now;
+/// these rows have to follow.
 ///
 /// Idempotent and re-runnable: the destination row key is derived from the address, so a repeat
 /// run rewrites the same rows, and rows already migrated no longer match the source filter.
