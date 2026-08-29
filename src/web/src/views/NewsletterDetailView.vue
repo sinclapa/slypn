@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { renderAsync } from 'docx-preview'
 import { apiFetch, apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
+import { useContentView } from '@/composables/useContentView'
 import type { Newsletter } from '@/types/content'
 
 const route = useRoute()
@@ -40,6 +41,9 @@ const { data: newsletter, loading, error, refresh: refreshMeta } = useAsyncData(
   const list = await apiJson<Newsletter[]>('/newsletters')
   return list.find(n => n.id === route.params.id) ?? null
 }, { lazy: true })
+
+// Which piece of content, not just that a detail page was opened.
+useContentView(newsletter, 'newsletter')
 
 type FileKind = 'pdf' | 'docx' | 'unsupported'
 

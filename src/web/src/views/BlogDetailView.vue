@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
+import { useContentView } from '@/composables/useContentView'
 import type { Article } from '@/types/content'
 import EditContentButton from '@/components/common/EditContentButton.vue'
 
@@ -24,6 +25,9 @@ const { data: post, loading, error, refresh } = useAsyncData(async () => {
   if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`)
   return resp.json() as Promise<Article>
 })
+
+// Which piece of content, not just that a detail page was opened.
+useContentView(post, 'blog')
 
 watch(slug, refresh)
 
