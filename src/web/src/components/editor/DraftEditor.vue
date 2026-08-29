@@ -87,8 +87,22 @@ async function loadDraft(id: string) {
   }
 }
 
-async function save(value: DraftPayload) {
+/// `force` writes even when nothing changed. Submitting uses it: the PUT is also the ETag
+/// check, and it is how a draft edited in another tab surfaces as a 412 rather than being
+/// submitted over silently. The autosave and the flush-before-close have no such need.
+async function save(value: DraftPayload, { force = false } = {}) {
   if (props.readonly || switching.value || !value.title.trim()) return
+
+  // Nothing to write. The autosave watcher fires on any change to the draft object, which is
+  // not the same as the content differing from what is stored: loadDraft replaces the object
+  // wholesale, so opening a second draft used to PUT the freshly loaded content straight back
+  // a second and a half later, and a keystroke undone inside one debounce window wrote a copy
+  // of what was already there.
+  //
+  // Compared against the last thing loaded *or written*, not just loaded — the snapshot moves
+  // on every successful save below. Without that, typing, saving, then undoing would look
+  // clean and quietly leave the server holding the edit the author had just taken back.
+  if (!force && snapshot(value) === loadedSnapshot.value) return
 
   // A backstop: the editor refuses input at the limit, so this should only be reachable
   // for content that arrived over it (an older draft, or a write through the API). Caught
@@ -121,6 +135,10 @@ async function save(value: DraftPayload) {
   }
   if (!resp.ok) throw new Error(await apiErrorMessage(resp))
   currentEtag.value = resp.headers.get('ETag') ?? currentEtag.value
+  // What the server now holds. Taken from the payload that was sent rather than draft.value,
+  // which may have moved on during the request — if it did, the watcher has already scheduled
+  // the next save, and it will compare against this and find itself dirty.
+  loadedSnapshot.value = snapshot(value)
   emit('saved', {
     id: props.draftId,
     title: value.title,
@@ -142,7 +160,7 @@ async function submitForReview() {
   submitNotice.value = null
   submitting.value  = true
   try {
-    await save(draft.value)
+    await save(draft.value, { force: true })
     const resp = await apiFetch(`/drafts/${props.draftId}/submit`, { method: 'POST' })
     if (resp.status === 409) {
       submitNotice.value = await resp.text()
