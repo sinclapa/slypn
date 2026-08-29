@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { useApprovalsStore } from '@/stores/approvals'
+import { useEditorQueueStore } from '@/stores/editorQueue'
 
 interface PendingArticle {
   id: string
@@ -21,6 +22,7 @@ interface PendingArticle {
 }
 
 const approvalsStore = useApprovalsStore()
+const editorQueue    = useEditorQueueStore()
 
 const articles  = ref<PendingArticle[]>([])
 const deletions = ref<PendingArticle[]>([])
@@ -32,6 +34,36 @@ const errors    = ref<Record<string, string | null>>({})
 
 function syncPendingCount() {
   approvalsStore.pendingCount = articles.value.length + deletions.value.length
+}
+
+/// Approving and sending back differ only in the call they make: both then drop the item from
+/// the queue, resync the badges, and report a failure against that row. Shared so the two
+/// cannot drift, and so the editor-count refresh is stated once.
+///
+/// Acting on a submission also moves it out of its author's editor queue, and when the admin
+/// reviewing it is the author — the usual case on a small site — that is this same session's
+/// Editor badge, which used to go on counting an item that was already published. The count is
+/// the caller's own drafts plus their own submissions, which this component does not track, so
+/// it is refetched rather than adjusted here. Revise only nets to zero because the draft goes
+/// back to the same author; that is a coincidence, not something to depend on.
+async function resolveSubmission(
+  article: PendingArticle,
+  state: 'publishing' | 'revising',
+  call: () => Promise<Response>,
+) {
+  busy.value = { ...busy.value, [article.id]: state }
+  errors.value = { ...errors.value, [article.id]: null }
+  try {
+    const resp = await call()
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
+    articles.value = articles.value.filter(a => a.id !== article.id)
+    syncPendingCount()
+    editorQueue.refresh()
+  } catch (err) {
+    errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
+  } finally {
+    busy.value = { ...busy.value, [article.id]: null }
+  }
 }
 
 const reviseDialog = ref<{ show: boolean; article: PendingArticle | null; feedback: string }>({
@@ -86,19 +118,9 @@ async function load() {
   }
 }
 
-async function publish(article: PendingArticle) {
-  busy.value = { ...busy.value, [article.id]: 'publishing' }
-  errors.value = { ...errors.value, [article.id]: null }
-  try {
-    const resp = await apiFetch(`/content/${article.id}/publish`, { method: 'POST' })
-    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
-    articles.value = articles.value.filter(a => a.id !== article.id)
-    syncPendingCount()
-  } catch (err) {
-    errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
-  } finally {
-    busy.value = { ...busy.value, [article.id]: null }
-  }
+function publish(article: PendingArticle) {
+  return resolveSubmission(article, 'publishing',
+    () => apiFetch(`/content/${article.id}/publish`, { method: 'POST' }))
 }
 
 // ── Deletion requests ────────────────────────────────────────────────────────
@@ -145,21 +167,11 @@ async function confirmRevise() {
     return
   }
   reviseDialog.value.show = false
-  busy.value = { ...busy.value, [article.id]: 'revising' }
-  errors.value = { ...errors.value, [article.id]: null }
-  try {
-    const resp = await apiFetch(`/content/${article.id}/revise`, {
+  await resolveSubmission(article, 'revising',
+    () => apiFetch(`/content/${article.id}/revise`, {
       method: 'POST',
       body: JSON.stringify({ feedback: feedback.trim() }),
-    })
-    if (!resp.ok) throw new Error(await apiErrorMessage(resp))
-    articles.value = articles.value.filter(a => a.id !== article.id)
-    syncPendingCount()
-  } catch (err) {
-    errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
-  } finally {
-    busy.value = { ...busy.value, [article.id]: null }
-  }
+    }))
 }
 
 function toggle(id: string) {
