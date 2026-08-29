@@ -82,31 +82,31 @@ describe('ApprovalsQueue', () => {
   // the author — the usual case here — that is this same session's badge, which used to go
   // on counting an item that was already published.
 
-  it('refreshes the editor count after approving', async () => {
+  /// Approve one pending item and report whether the editor count was asked to refresh.
+  /// Both cases mount and click the same way; only the API's answer to the publish differs.
+  async function approveAndWatchEditorCount(publishSucceeds: boolean) {
     mockLoad([pending()])
     const w = mountC(ApprovalsQueue)
     await flushPromises()
     const spy = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
+    if (!publishSucceeds) {
+      apiFetch.mockResolvedValue(
+        { ok: false, status: 500, text: () => Promise.resolve('boom') } as unknown as Response)
+    }
 
     await w.findAll('button').find(b => b.text() === 'Approve')!.trigger('click')
     await flushPromises()
+    return spy
+  }
 
-    expect(spy).toHaveBeenCalled()
+  it('refreshes the editor count after approving', async () => {
+    expect(await approveAndWatchEditorCount(true)).toHaveBeenCalled()
   })
 
   it('does not refresh the editor count when approving fails', async () => {
     // A count refreshed away from an item still sitting in review would say the approval
     // worked.
-    mockLoad([pending()])
-    const w = mountC(ApprovalsQueue)
-    await flushPromises()
-    const spy = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
-    apiFetch.mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve('boom') } as unknown as Response)
-
-    await w.findAll('button').find(b => b.text() === 'Approve')!.trigger('click')
-    await flushPromises()
-
-    expect(spy).not.toHaveBeenCalled()
+    expect(await approveAndWatchEditorCount(false)).not.toHaveBeenCalled()
   })
 
   it('toggles the article body open', async () => {
