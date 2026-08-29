@@ -13,6 +13,7 @@ import PublishedContent from './PublishedContent.vue'
 import { useAuthStore } from '@/stores/auth'
 import { DEV_PERSONA_STORAGE_KEY } from '@/lib/devPersonas'
 import { useApprovalsStore } from '@/stores/approvals'
+import { useEditorQueueStore } from '@/stores/editorQueue'
 
 const isDirtyMock = vi.fn(() => false)
 const flushMock = vi.fn().mockResolvedValue(undefined)
@@ -409,5 +410,65 @@ describe('PublishedContent', () => {
     await flushPromises()
 
     expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ── The Editor badge after editing published content ───────────────────────
+  // Opening the editor mints a revision draft. Closing it either keeps that draft (there
+  // were changes to flush) or deletes it (there were not) — both move the editor count,
+  // and neither used to say so.
+
+  /// Open the edit dialog on one published item, close it, and report whether the badge
+  /// was asked to refresh. `dirty` picks which of the two close paths runs.
+  async function editThenClose(dirty: boolean) {
+    apiFetch.mockImplementation((url: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/edit') && method === 'POST') return Promise.resolve(ok({ id: 'draft-2' }))
+      if (method === 'GET') return Promise.resolve(ok([item()]))
+      return Promise.resolve(ok({}))
+    })
+    isDirtyMock.mockReturnValue(dirty)
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Edit')!.trigger('click')
+    await flushPromises()
+    const spy = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
+
+    await w.findComponent(DraftEditorStub).vm.$emit('close')
+    await flushPromises()
+    return spy
+  }
+
+  it('refreshes the editor count when a changed edit is closed', async () => {
+    // The reported case: the flushed draft stays in the queue, so the count went up and
+    // the badge did not.
+    expect(await editThenClose(true)).toHaveBeenCalled()
+  })
+
+  it('refreshes the editor count when an untouched edit is closed', async () => {
+    // The other branch deletes the draft that opening the editor minted, which moves the
+    // count back down.
+    expect(await editThenClose(false)).toHaveBeenCalled()
+  })
+
+  it('refreshes the badges when a revision is submitted from the content manager', async () => {
+    apiFetch.mockImplementation((url: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/edit') && method === 'POST') return Promise.resolve(ok({ id: 'draft-2' }))
+      if (method === 'GET') return Promise.resolve(ok([item()]))
+      return Promise.resolve(ok({}))
+    })
+    const w = mountC()
+    await flushPromises()
+    await w.findAll('button').find(b => b.text() === 'Edit')!.trigger('click')
+    await flushPromises()
+    const editorSpy    = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
+    const approvalsSpy = vi.spyOn(useApprovalsStore(pinia), 'refresh').mockResolvedValue(undefined)
+
+    await w.findComponent(DraftEditorStub).vm.$emit('submitted')
+    await flushPromises()
+
+    // The draft became an in-review revision: out of one queue, into the other.
+    expect(editorSpy).toHaveBeenCalled()
+    expect(approvalsSpy).toHaveBeenCalled()
   })
 })
