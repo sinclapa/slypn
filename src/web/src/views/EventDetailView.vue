@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { apiJson } from '@/lib/api'
 import { useAsyncData } from '@/composables/useAsyncData'
+import { useContentView } from '@/composables/useContentView'
 import type { CommunityEvent } from '@/types/content'
 
 const route  = useRoute()
@@ -23,6 +24,9 @@ function backToEvents() {
 const { data: event, loading, error, refresh } = useAsyncData(
   () => apiJson<CommunityEvent>(`/events/${route.params.id}`),
 )
+
+// Which piece of content, not just that a detail page was opened.
+useContentView(event, 'event')
 
 watch(() => route.params.id, refresh)
 
