@@ -151,6 +151,87 @@ public class AdminFunctionsTests
         Assert.Contains((int)submit.StatusCode, new[] { 200, 201 });
     }
 
+
+    // ── Content type is fixed once an Article row exists ────────────────────
+    // A revision draft is a copy of a published article, and that article's type picks the
+    // public URL prefix. Letting the type change here moved the live item from /articles to
+    // /blog on approval and 404'd the original URL.
+
+    private static Draft RevisionDraft(string type) => new(
+        Id: "d1", AuthorId: "oid-1", AuthorName: "Author", Type: type,
+        Title: "T", Slug: "s", Summary: "Sum", Body: "<p>hi</p>", Category: "Community",
+        ReadingMinutes: 3, CreatedAt: DateTime.UtcNow, UpdatedAt: DateTime.UtcNow,
+        ReplacesArticleId: "a1");
+
+    private static object DraftBody(string type) => new
+    {
+        type, title = "T", slug = "s", summary = "Sum",
+        body = "<p>hi</p>", category = "Community", readingMinutes = 3,
+    };
+
+    [Theory]
+    [InlineData("article", "blog")]
+    [InlineData("blog", "article")]
+    public async Task Revision_draft_refuses_a_type_change(string stored, string attempted)
+    {
+        // Both directions: a check written one way round passes for the wrong reason.
+        var repo = new FakeContentRepository { DraftById = RevisionDraft(stored) };
+        var fn = DraftsFn(repo);
+        var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
+
+        var resp = (TestHttpResponseData)await fn.Upsert(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", DraftBody(attempted)), ctx, "d1", Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        var text = resp.ReadBodyAsString();
+        Assert.Contains(stored, text);      // says what it is
+        Assert.Contains(attempted, text);   // and what was asked for
+    }
+
+    [Fact]
+    public async Task Revision_draft_allows_a_save_that_keeps_its_type()
+    {
+        // The guard must not block ordinary editing of a revision.
+        var repo = new FakeContentRepository { DraftById = RevisionDraft("blog") };
+        var fn = DraftsFn(repo);
+        var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
+
+        var resp = (TestHttpResponseData)await fn.Upsert(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", DraftBody("blog")), ctx, "d1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Plain_draft_may_still_change_its_type()
+    {
+        // Nothing is published yet, so there is no URL to break. Miscategorisation stays
+        // fixable right up to submission, which is the whole reason the lock starts later.
+        var repo = new FakeContentRepository { DraftById = RevisionDraft("article") with { ReplacesArticleId = null } };
+        var fn = DraftsFn(repo);
+        var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
+
+        var resp = (TestHttpResponseData)await fn.Upsert(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/d1", DraftBody("blog")), ctx, "d1", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_brand_new_draft_may_pick_either_type()
+    {
+        // No stored row at all: the guard reads existing?.ReplacesArticleId, so a null
+        // existing must not trip it.
+        var repo = new FakeContentRepository { DraftById = null };
+        var fn = DraftsFn(repo);
+        var ctx = new TestFunctionContext().WithUser("oid-1", "Author", "Contributor");
+
+        var resp = (TestHttpResponseData)await fn.Upsert(
+            TestHttp.Json(ctx, "PUT", "http://localhost/api/drafts/dnew", DraftBody("blog")), ctx, "dnew", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
     // ── Media ──────────────────────────────────────────────────────────────
     [Fact]
     public async Task Media_503_when_unconfigured()

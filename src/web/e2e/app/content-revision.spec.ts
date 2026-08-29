@@ -116,6 +116,34 @@ test.describe('revision workflow', () => {
     expect((await api.post(`/drafts/${revision.id}/submit`)).ok()).toBeTruthy()
   })
 
+  test('a revision cannot change the content type', async ({ api, adminApi, cleanup, uid }) => {
+    // A revision keeps the published article's id and slug so its URL survives. The type
+    // picks the URL prefix, so changing it would move the live item from /articles/{slug}
+    // to /blog/{slug} and 404 the address it was published under.
+    const article = await publishAuthoredArticle(api, adminApi, cleanup, {
+      title: titleFor(uid, 'Type is fixed'),
+    })
+
+    const revision = await (await api.post(`/content/${article.id}/edit`)).json() as { id: string }
+    const draft = await (await api.get(`/drafts/${revision.id}`)).json() as Record<string, unknown>
+    expect(draft.replacesArticleId).toBe(article.id)
+    expect(draft.type).toBe('article')
+
+    const refused = await api.put(`/drafts/${revision.id}`, { ...draft, type: 'blog' })
+    expect(refused.status()).toBe(400)
+    const message = await refused.text()
+    expect(message).toContain('article')
+    expect(message).toContain('blog')
+
+    // Not a blanket block: the same revision still saves when the type is left alone.
+    const saved = await api.put(`/drafts/${revision.id}`, { ...draft, summary: 'Genuinely revised.' })
+    expect(saved.ok()).toBeTruthy()
+
+    // And the published article is untouched by the refused attempt.
+    const live = await (await api.get(`/articles/${article.slug}`)).json() as { type?: string }
+    expect(live.type ?? 'article').toBe('article')
+  })
+
   test('editing published content creates a revision, and approving it updates the live copy',
     async ({ page, browser, api, adminApi, cleanup, uid }) => {
       const original = await publishAuthoredArticle(api, adminApi, cleanup, {

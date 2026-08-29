@@ -9,6 +9,11 @@ export interface DraftPayload {
   category: string
   readingMinutes: number
   revisionFeedback?: string | null
+  /// Set when this draft revises a published article. Server-owned: it is not a DraftInput
+  /// field, and the API takes it from the stored row, so sending it back on save is inert.
+  /// Present here because the type is fixed once an item is published — the published URL
+  /// prefix depends on it — and the editor needs to know not to offer the choice.
+  replacesArticleId?: string | null
 }
 
 export interface DraftSummary {

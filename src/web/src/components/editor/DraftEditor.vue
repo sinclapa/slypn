@@ -23,6 +23,11 @@ const emit = defineEmits<{
 }>()
 
 const draft       = ref<DraftPayload>({ ...EMPTY_DRAFT })
+
+// A revision draft may not change type: the article it replaces is already published under a
+// type-specific URL. Enforced by the API on save and again on submit; this keeps the control
+// from offering a choice that would be refused.
+const typeLocked  = computed(() => !!draft.value.replacesArticleId)
 const currentEtag = ref<string | null>(null)
 const switching   = ref(false)
 const uploadError = ref<string | null>(null)
@@ -304,7 +309,21 @@ watch(() => draft.value.body, (html) => {
     <div class="space-y-4 rounded-xl border border-slypn-100 bg-white p-6 shadow-sm">
       <fieldset>
         <legend class="text-sm font-medium text-slypn-800">Type</legend>
-        <div class="mt-2 inline-flex rounded-md border border-slypn-200 bg-white p-1">
+
+        <!-- A revision keeps the published item's id and slug so its URL survives, but the
+             type picks the URL prefix — flipping it would move the item to the other prefix
+             and 404 the address it was published under. Shown as a fact rather than hidden,
+             so the type is still visible while editing. -->
+        <p
+          v-if="typeLocked"
+          data-testid="draft-type-locked"
+          class="mt-2 text-sm text-slypn-700"
+        >
+          {{ draft.type === 'blog' ? 'Blog post' : 'Article' }}
+          <span class="text-slypn-900/60">— fixed once published</span>
+        </p>
+
+        <div v-else class="mt-2 inline-flex rounded-md border border-slypn-200 bg-white p-1">
           <button
             v-for="t in (['article', 'blog'] as const)"
             :key="t"
