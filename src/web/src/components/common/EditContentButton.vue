@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch, apiErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
+import { useContentBadges } from '@/composables/useContentBadges'
 import DraftEditor from '@/components/editor/DraftEditor.vue'
 
 const props = withDefaults(defineProps<{
@@ -16,6 +17,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ (e: 'submitted'): void }>()
 
 const auth = useAuthStore()
+const { refreshContentBadges } = useContentBadges()
 const router = useRouter()
 
 const editDraftId  = ref<string | null>(null)
@@ -60,12 +62,17 @@ async function closeEdit() {
     else try { await apiFetch(`/drafts/${id}`, { method: 'DELETE' }) } catch { /* best-effort */ }
   }
   editDraftId.value = null
+  // A flushed edit leaves a revision draft in the author's queue; the untouched case
+  // removes the one that opening this minted. Either way the Editor badge has moved.
+  refreshContentBadges()
 }
 
 // Submit consumes the draft server-side (it becomes an in-review revision), so
 // there is nothing to clean up.
 function submittedEdit() {
   editDraftId.value = null
+  // Consumed server-side into an in-review revision: out of the editor queue, into approvals.
+  refreshContentBadges()
   emit('submitted')
 }
 </script>

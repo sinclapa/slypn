@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
-import { useApprovalsStore } from '@/stores/approvals'
+import { useContentBadges } from '@/composables/useContentBadges'
 import DraftEditor from '@/components/editor/DraftEditor.vue'
 
 interface PublishedItem {
@@ -20,7 +20,7 @@ interface PublishedItem {
 }
 
 const auth = useAuthStore()
-const approvals = useApprovalsStore()
+const { refreshContentBadges } = useContentBadges()
 
 const items     = ref<PublishedItem[]>([])
 const loading   = ref(false)
@@ -138,6 +138,9 @@ async function closeEdit() {
     }
   }
   editDraftId.value = null
+  // Either branch moved the editor queue: a flushed edit leaves a revision draft behind,
+  // and the untouched case deletes the one that opening the editor minted.
+  refreshContentBadges()
   await load()
 }
 
@@ -145,6 +148,9 @@ async function closeEdit() {
 // just close and refresh — no draft to clean up.
 async function submittedEdit() {
   editDraftId.value = null
+  // The draft became an in-review revision, so it left the editor queue and joined the
+  // approvals one.
+  refreshContentBadges()
   await load()
 }
 
@@ -174,7 +180,7 @@ async function remove(item: PublishedItem) {
     }
     // Either branch moves the approvals count: an admin deleting clears any pending
     // request, a contributor requesting one adds to it.
-    if (auth.isAdmin) approvals.refresh()
+    refreshContentBadges()
   } catch (err) {
     errors.value = { ...errors.value, [item.id]: err instanceof Error ? err.message : String(err) }
   } finally {

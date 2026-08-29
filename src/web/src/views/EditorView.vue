@@ -6,15 +6,13 @@ import DraftEditor from '@/components/editor/DraftEditor.vue'
 import { apiErrorMessage, apiFetch, apiJson } from '@/lib/api'
 import { EMPTY_DRAFT, makeDraftId, type DraftPayload, type DraftSummary } from '@/lib/draft'
 import { useAuthStore } from '@/stores/auth'
-import { useEditorQueueStore } from '@/stores/editorQueue'
-import { useApprovalsStore } from '@/stores/approvals'
+import { useContentBadges } from '@/composables/useContentBadges'
 
 const DRAFT_ID_KEY = 'slypn:editor:draft-id'
 
 const auth = useAuthStore()
 const route = useRoute()
-const editorQueue = useEditorQueueStore()
-const approvals   = useApprovalsStore()
+const { refreshContentBadges } = useContentBadges()
 
 // ── Draft list ──────────────────────────────────────────────────────────────
 const allDrafts   = ref<DraftSummary[]>([])
@@ -115,16 +113,6 @@ const entries = computed<DraftEntry[]>(() => {
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 })
 
-// Both nav badges are derived from server state, so anything that moves a document
-// between drafts and review invalidates them. Refreshed together rather than at each
-// call site guessing which one it affected: submitting and withdrawing leave the editor
-// count unchanged while moving the approvals count, which is exactly the pairing that
-// gets missed. Approvals only for an Admin — nobody else has that badge.
-function refreshBadges() {
-  editorQueue.refresh()
-  if (auth.isAdmin) approvals.refresh()
-}
-
 // ── Open draft (DraftEditor owns the editing surface) ────────────────────────
 const draftId         = ref<string>('')
 const editorOpen      = ref(false)
@@ -187,7 +175,7 @@ function onSubmitted(id: string) {
   editorOpen.value = false
   submitMessage.value = 'Submitted for admin review.'
   loadPending()
-  refreshBadges()
+  refreshContentBadges()
 }
 
 // ── New draft dialog ─────────────────────────────────────────────────────────
@@ -215,7 +203,7 @@ async function createDraft() {
   } catch { /* DraftEditor autosave will retry */ }
 
   allDrafts.value.unshift({ id, title, type: newType.value, updatedAt: new Date().toISOString() })
-  refreshBadges()
+  refreshContentBadges()
   showNewDraft.value  = false
   submitMessage.value = null
   draftId.value       = id
@@ -235,7 +223,7 @@ async function deleteDraft(id: string, etag?: string) {
     if (!resp.ok) { deleteError.value = `${resp.status} ${await resp.text().catch(() => '')}`; return }
     allDrafts.value = allDrafts.value.filter(d => d.id !== id)
     if (draftId.value === id) { editorOpen.value = false; localStorage.removeItem(DRAFT_ID_KEY) }
-    refreshBadges()
+    refreshContentBadges()
   } catch (err) {
     deleteError.value = err instanceof Error ? err.message : String(err)
   }
@@ -262,7 +250,7 @@ async function withdraw(id: string) {
     allDrafts.value = [draft, ...allDrafts.value.filter(d => d.id !== draft.id)]
     if (draftId.value === id) { editorOpen.value = false; readonlyContent.value = null }
     submitMessage.value = 'Withdrawn from review — it is back in your drafts.'
-    refreshBadges()
+    refreshContentBadges()
   } catch (err) {
     withdrawError.value = err instanceof Error ? err.message : String(err)
   } finally {

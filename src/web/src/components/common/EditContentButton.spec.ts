@@ -16,6 +16,8 @@ vi.mock('vue-router', async (orig) => {
 
 import EditContentButton from './EditContentButton.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useEditorQueueStore } from '@/stores/editorQueue'
+import { useApprovalsStore } from '@/stores/approvals'
 
 let pinia: Pinia
 
@@ -125,5 +127,45 @@ describe('EditContentButton', () => {
     await w.findComponent({ name: 'DraftEditor' }).vm.$emit('close')
     await flushPromises()
     expect(apiFetch).not.toHaveBeenCalledWith('/drafts/draft-9', { method: 'DELETE' })
+  })
+
+  // ── The Editor badge after editing from the page itself ────────────────────
+  // Same modal as the content manager: opening mints a revision draft, and both ways of
+  // closing move the editor count.
+
+  /// Open the modal on a published page, close it, and report whether the badge refreshed.
+  async function editThenClose(dirty: boolean) {
+    apiFetch.mockResolvedValue(created({ id: 'draft-9' }))
+    const w = mountBtn({}, { DraftEditor: dirtyEditor(dirty) })
+    await w.find('button').trigger('click')
+    await flushPromises()
+    const spy = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
+
+    await w.findComponent({ name: 'DraftEditor' }).vm.$emit('close')
+    await flushPromises()
+    return spy
+  }
+
+  it('refreshes the editor count when a changed edit is closed', async () => {
+    expect(await editThenClose(true)).toHaveBeenCalled()
+  })
+
+  it('refreshes the editor count when an untouched edit is closed', async () => {
+    expect(await editThenClose(false)).toHaveBeenCalled()
+  })
+
+  it('refreshes the badges when the revision is submitted', async () => {
+    apiFetch.mockResolvedValue(created({ id: 'draft-9' }))
+    const w = mountBtn({}, { DraftEditor: dirtyEditor(true) })
+    await w.find('button').trigger('click')
+    await flushPromises()
+    const editorSpy    = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
+    const approvalsSpy = vi.spyOn(useApprovalsStore(pinia), 'refresh').mockResolvedValue(undefined)
+
+    await w.findComponent({ name: 'DraftEditor' }).vm.$emit('submitted')
+    await flushPromises()
+
+    expect(editorSpy).toHaveBeenCalled()
+    expect(approvalsSpy).toHaveBeenCalled()
   })
 })
