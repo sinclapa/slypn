@@ -268,4 +268,82 @@ describe('DraftEditor', () => {
     await w.find('[data-testid="draft-type-blog"]').trigger('click')
     expect(w.find('[data-testid="draft-type-blog"]').classes().join(' ')).toContain('bg-slypn-600')
   })
+
+  // ── Autosave writes only what changed ──────────────────────────────────────
+  // The debounce watcher fires on any change to the draft object, which is not the same as
+  // the content differing from what is stored. Loading a draft replaces the object wholesale,
+  // so opening a second draft used to PUT the freshly loaded content straight back.
+
+  const puts = () => apiFetch.mock.calls.filter(c => c[1]?.method === 'PUT')
+
+  it('does not save after switching drafts with no typing', async () => {
+    vi.useFakeTimers()
+    mockApi()
+    const w = mountEditor()
+    await flushPromises()
+    await w.setProps({ draftId: 'd2' })
+    await flushPromises()
+    apiFetch.mockClear()
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(puts()).toHaveLength(0)
+    vi.useRealTimers()
+  })
+
+  it('does not save a change that was undone inside the debounce window', async () => {
+    vi.useFakeTimers()
+    mockApi()
+    const w = mountEditor()
+    await flushPromises()
+    apiFetch.mockClear()
+
+    await w.find('#draft-title').setValue('My draft edited')
+    await vi.advanceTimersByTimeAsync(500)      // still within the 1.5s
+    await w.find('#draft-title').setValue('My draft')  // back to what was loaded
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(puts()).toHaveLength(0)
+    vi.useRealTimers()
+  })
+
+  it('still saves a real change', async () => {
+    vi.useFakeTimers()
+    mockApi()
+    const w = mountEditor()
+    await flushPromises()
+    apiFetch.mockClear()
+
+    await w.find('#draft-title').setValue('Genuinely different')
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(puts()).toHaveLength(1)
+    vi.useRealTimers()
+  })
+
+  it('saves an undo that comes after a save, rather than leaving the server ahead', async () => {
+    // The trap in comparing against what was loaded: once an edit is written, going back to
+    // the original is itself a change the server has not seen. The snapshot moves on every
+    // successful save so this stays dirty.
+    vi.useFakeTimers()
+    mockApi()
+    const w = mountEditor()
+    await flushPromises()
+    apiFetch.mockClear()
+
+    await w.find('#draft-title').setValue('Edited')
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+    expect(puts()).toHaveLength(1)
+
+    await w.find('#draft-title').setValue('My draft')  // back to the originally loaded title
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(puts()).toHaveLength(2)   // the undo is persisted too
+    vi.useRealTimers()
+  })
 })
