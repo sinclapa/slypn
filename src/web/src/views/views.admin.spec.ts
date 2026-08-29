@@ -13,6 +13,7 @@ vi.mock('vue-router', async (orig) => {
 })
 
 import ApprovalsQueue from '@/components/common/ApprovalsQueue.vue'
+import { useEditorQueueStore } from '@/stores/editorQueue'
 import ResourceManagementView from './ResourceManagementView.vue'
 import ApprovalsView from './ApprovalsView.vue'
 import ManageContentView from './ManageContentView.vue'
@@ -74,6 +75,38 @@ describe('ApprovalsQueue', () => {
     await flushPromises()
     expect(apiFetch).toHaveBeenCalledWith('/content/p1/publish', { method: 'POST' })
     expect(w.text()).not.toContain('Pending piece')
+  })
+
+// ── The Editor badge after acting on a submission ──────────────────────────
+  // Approving moves the item out of its author's editor queue. When the reviewing admin is
+  // the author — the usual case here — that is this same session's badge, which used to go
+  // on counting an item that was already published.
+
+  it('refreshes the editor count after approving', async () => {
+    mockLoad([pending()])
+    const w = mountC(ApprovalsQueue)
+    await flushPromises()
+    const spy = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
+
+    await w.findAll('button').find(b => b.text() === 'Approve')!.trigger('click')
+    await flushPromises()
+
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('does not refresh the editor count when approving fails', async () => {
+    // A count refreshed away from an item still sitting in review would say the approval
+    // worked.
+    mockLoad([pending()])
+    const w = mountC(ApprovalsQueue)
+    await flushPromises()
+    const spy = vi.spyOn(useEditorQueueStore(pinia), 'refresh').mockResolvedValue(undefined)
+    apiFetch.mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve('boom') } as unknown as Response)
+
+    await w.findAll('button').find(b => b.text() === 'Approve')!.trigger('click')
+    await flushPromises()
+
+    expect(spy).not.toHaveBeenCalled()
   })
 
   it('toggles the article body open', async () => {

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { apiErrorMessage, apiFetch } from '@/lib/api'
 import { useApprovalsStore } from '@/stores/approvals'
+import { useEditorQueueStore } from '@/stores/editorQueue'
 
 interface PendingArticle {
   id: string
@@ -21,6 +22,7 @@ interface PendingArticle {
 }
 
 const approvalsStore = useApprovalsStore()
+const editorQueue    = useEditorQueueStore()
 
 const articles  = ref<PendingArticle[]>([])
 const deletions = ref<PendingArticle[]>([])
@@ -32,6 +34,16 @@ const errors    = ref<Record<string, string | null>>({})
 
 function syncPendingCount() {
   approvalsStore.pendingCount = articles.value.length + deletions.value.length
+}
+
+// Acting on a submission also moves it out of its author's editor queue, and when the admin
+// reviewing it is the author — the usual case on a small site — that is this same session's
+// Editor badge. Approving used to leave it counting an item that was already published.
+// Refreshed rather than adjusted locally: the count is the caller's own drafts plus their own
+// submissions, which this component does not track. Called for revise too, which only nets to
+// zero because the draft goes back to the same author; the call site should not depend on that.
+function refreshEditorQueue() {
+  editorQueue.refresh()
 }
 
 const reviseDialog = ref<{ show: boolean; article: PendingArticle | null; feedback: string }>({
@@ -94,6 +106,7 @@ async function publish(article: PendingArticle) {
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     articles.value = articles.value.filter(a => a.id !== article.id)
     syncPendingCount()
+    refreshEditorQueue()
   } catch (err) {
     errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
   } finally {
@@ -155,6 +168,7 @@ async function confirmRevise() {
     if (!resp.ok) throw new Error(await apiErrorMessage(resp))
     articles.value = articles.value.filter(a => a.id !== article.id)
     syncPendingCount()
+    refreshEditorQueue()
   } catch (err) {
     errors.value = { ...errors.value, [article.id]: err instanceof Error ? err.message : String(err) }
   } finally {
