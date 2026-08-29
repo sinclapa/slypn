@@ -105,4 +105,67 @@ public class ContentRepositoryWriteTests
         Assert.Equal("some future field's worth of state",
             ContentRepository.ApplyInput(stored, Hostile()).RejectionReason);
     }
+
+    // ── Approving a revision ───────────────────────────────────────────────────
+    // ApplyRevision lays a reviewed item over the published article it replaces. The type is
+    // deliberately not among the fields it carries across: a revision that disagreed used to
+    // flip the live item between /articles and /blog, keeping the slug but changing the URL
+    // prefix, so the address it was published under started 404ing.
+
+    /// <summary>An in-review revision whose every field differs from its target, including type.</summary>
+    private static Article Review(string type) => new(
+        "r1", "review-slug", "Reviewed title", "Reviewed summary", "<p>Reviewed body</p>",
+        "Bob", new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc), 2, "Treatment", "in-review")
+    {
+        Type = type,
+        AuthorId = "oid-bob",
+        ReplacesArticleId = "a1",
+    };
+
+    [Theory]
+    [InlineData("blog", "article")]
+    [InlineData("article", "blog")]
+    public async Task Approving_a_revision_keeps_the_published_type(string published, string reviewed)
+    {
+        // Both directions, and the mismatch is built directly rather than through the editor:
+        // with the save-time guard in place nothing normally reaches here, which is exactly
+        // why this needs testing on its own.
+        await Task.CompletedTask;
+        var target = Stored() with { Type = published };
+
+        var result = ContentRepository.ApplyRevision(target, Review(reviewed));
+
+        Assert.Equal(published, result.Type);
+    }
+
+    [Fact]
+    public async Task Approving_a_revision_keeps_the_public_URL_and_takes_the_new_content()
+    {
+        // The reason the type matters: id, slug and publish date are preserved precisely so the
+        // URL survives a revision. A type change would move the item to the other prefix and
+        // undo that, which is why it is excluded rather than merely discouraged.
+        await Task.CompletedTask;
+        var target = Stored() with { Type = "blog" };
+
+        var result = ContentRepository.ApplyRevision(target, Review("article"));
+
+        Assert.Equal(target.Id, result.Id);
+        Assert.Equal(target.Slug, result.Slug);
+        Assert.Equal(target.PublishedAt, result.PublishedAt);
+        Assert.Equal(target.AuthorId, result.AuthorId);
+        Assert.Equal("blog", result.Type);
+
+        // The content itself must still come from the review, or the revision did nothing.
+        Assert.Equal("Reviewed title", result.Title);
+        Assert.Equal("Reviewed summary", result.Summary);
+        Assert.Equal("Treatment", result.Category);
+        Assert.Equal(2, result.ReadingMinutes);
+
+        // And the workflow state is cleared, so the item lands clean.
+        Assert.Equal("published", result.Status);
+        Assert.Null(result.ReplacesArticleId);
+        Assert.Null(result.RejectionReason);
+        Assert.Null(result.DeletionRequestedBy);
+        Assert.Null(result.DeletionRequestedAt);
+    }
 }

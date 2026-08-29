@@ -97,6 +97,18 @@ public sealed class DraftsFunctions(IContentRepository repo, IHtmlSanitizer sani
         try { existing = await repo.GetDraftAsync(id, authorId, ct); }
         catch (RequestFailedException ex) { return await MapStorageException(req, ex, log); }
 
+        // A revision draft is a copy of a published article, and that article's type decides
+        // which public URL prefix serves it. Changing the type here would move the live item
+        // from /articles/{slug} to /blog/{slug} on approval, leaving the original URL a 404.
+        // Refused rather than quietly pinned to the stored type: silently discarding a stated
+        // type is how blog posts became articles in the first place (#192).
+        if (existing?.ReplacesArticleId is not null
+            && !string.Equals(input!.Type, existing.Type, StringComparison.OrdinalIgnoreCase))
+            return await BadRequest(req,
+                $"This revision is for a {existing.Type}, so it cannot be saved as a "
+                + $"{input.Type}. The type is fixed once an item is published, because its "
+                + "public URL depends on it.");
+
         var draft = new Draft(
             Id:               id,
             AuthorId:         authorId,

@@ -170,6 +170,35 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
     /// which the revision path deliberately does not do. That inconsistency predates this method
     /// and is left alone rather than fixed in passing.
     /// </summary>
+    /// <summary>
+    /// The merge behind approving a revision: the reviewed content is laid over the published
+    /// article it replaces, which keeps its id, slug and original publish date so the public
+    /// URL never changes.
+    ///
+    /// <para><b>Type is not in the list.</b> `target with` preserves it, matching the "stored
+    /// row always wins" rule on <see cref="ApplyInput"/>. Carrying the review's type across was
+    /// how a revision could flip a published item between /articles and /blog: the item keeps
+    /// its slug but changes URL prefix, so the address it was published under starts 404ing.
+    /// Structural rather than a guard, so it holds however the in-review row got its type.</para>
+    ///
+    /// Pure and static for the same reason ApplyInput is: the repository's write path has no
+    /// test seam, so the merge is tested directly.
+    /// </summary>
+    internal static Article ApplyRevision(Article target, Article review) =>
+        target with
+        {
+            Title          = review.Title,
+            Summary        = review.Summary,
+            Category       = review.Category,
+            ReadingMinutes = review.ReadingMinutes,
+            Status         = PublishedStatus,
+            RejectionReason     = null,
+            ReplacesArticleId   = null,
+            DeletionRequestedBy = null,
+            DeletionRequestedAt = null,
+            Etag           = null,
+        };
+
     internal static Article ApplyInput(Article existing, ArticleInput input) =>
         existing with
         {
@@ -646,6 +675,16 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
                 throw new ContentUnchangedException(
                     "This revision is identical to the published version, so there is nothing "
                     + "to review. Make a change first, or close the editor to discard it.");
+
+            // Saving the draft refuses a type change, so this only catches one stored before
+            // that guard existed. Approval would preserve the target's type regardless — this
+            // says so plainly instead of accepting a submission that quietly would not apply.
+            if (target is not null
+                && !string.Equals(NormalizeType(draft.Type), target.Type, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"This revision is for a {target.Type}, so it cannot be submitted as a "
+                    + $"{NormalizeType(draft.Type)}. The type is fixed once an item is published, "
+                    + "because its public URL depends on it.");
         }
 
         var article = new Article(
@@ -745,20 +784,7 @@ public sealed class ContentRepository(ITableStore store, IContentBodyStore body,
         var target = await GetArticleAsync(review.ReplacesArticleId, PublishedStatus, ct)
             ?? throw new InvalidOperationException($"Target published article {review.ReplacesArticleId} not found.");
 
-        var replacement = target with
-        {
-            Title          = review.Title,
-            Summary        = review.Summary,
-            Category       = review.Category,
-            ReadingMinutes = review.ReadingMinutes,
-            Type           = review.Type,
-            Status         = PublishedStatus,
-            RejectionReason     = null,
-            ReplacesArticleId   = null,
-            DeletionRequestedBy = null,
-            DeletionRequestedAt = null,
-            Etag           = null,
-        };
+        var replacement = ApplyRevision(target, review);
 
         await body.PutAsync(ArticleBodyPrefix, target.Id, review.Body, ct);
         var saved = await store.Articles.UpsertEntityAsync(ArticleEntity(replacement), TableUpdateMode.Replace, ct);

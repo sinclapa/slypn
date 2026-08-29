@@ -230,4 +230,42 @@ describe('DraftEditor', () => {
     expect(w.find('[data-testid="draft-submit-notice"]').exists()).toBe(false)
   })
 
+  // ── Content type is fixed once an item is published ────────────────────────
+  // A revision keeps the article's id and slug so the URL survives, but the type picks the
+  // URL prefix. Offering the toggle invited a change the API refuses on save and on submit.
+
+  it('shows the type as fixed on a revision draft, with no toggle', async () => {
+    mockApi((url, method) =>
+      url.startsWith('/drafts/') && method === 'GET'
+        ? resp({ ...draftPayload, type: 'blog', replacesArticleId: 'a1' })
+        : undefined)
+    const w = mountEditor()
+    await flushPromises()
+
+    expect(w.find('[data-testid="draft-type-article"]').exists()).toBe(false)
+    expect(w.find('[data-testid="draft-type-blog"]').exists()).toBe(false)
+    // Still legible: the author can see what the item is, just not change it.
+    expect(w.find('[data-testid="draft-type-locked"]').text()).toContain('Blog post')
+  })
+
+  it('still offers the toggle on a draft that replaces nothing', async () => {
+    mockApi()
+    const w = mountEditor()
+    await flushPromises()
+
+    expect(w.find('[data-testid="draft-type-article"]').exists()).toBe(true)
+    expect(w.find('[data-testid="draft-type-blog"]').exists()).toBe(true)
+    expect(w.find('[data-testid="draft-type-locked"]').exists()).toBe(false)
+  })
+
+  it('lets a plain draft still switch type', async () => {
+    // The lock must not leak into ordinary drafts — miscategorisation stays fixable until
+    // the item is published.
+    mockApi()
+    const w = mountEditor()
+    await flushPromises()
+
+    await w.find('[data-testid="draft-type-blog"]').trigger('click')
+    expect(w.find('[data-testid="draft-type-blog"]').classes().join(' ')).toContain('bg-slypn-600')
+  })
 })
