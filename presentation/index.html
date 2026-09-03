@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SLYPN Technical Review</title>
+<meta name="description" content="How the South London Younger Parkinson's Network website is built, deployed, observed and paid for.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  /* Palette lifted from src/web/tailwind.config.ts — the real SLYPN brand,
+     derived from the logo's sky-to-navy gradient. */
+  --navy-900:#0C1929;
+  --navy-800:#152844;
+  --navy-700:#1E3A5F;
+  --sky:#1E90FF;
+  --sky-soft:rgba(30,144,255,.14);
+  --ink:#EAF4FF;
+  --muted:#8FA9C4;          /* navy-biased grey, chosen not inherited */
+  --rule:rgba(143,169,196,.22);
+  --ok:#3DD68C;
+  --warn:#FFB454;
+  --over:#FF6B6B;
+  --font-display:'Montserrat','Segoe UI',system-ui,sans-serif;
+  --font-body:'Inter','Segoe UI',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--navy-900);
+  color:var(--ink);
+  font-family:var(--font-body);
+  font-size:16px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- tulip stem: the progress rail ------------------------------
+   The tulip is the Parkinson's symbol and the mark in the SLYPN logo, so
+   the deck's one ornament is the stem growing as the talk advances. */
+.stem{position:fixed;left:26px;top:0;bottom:0;width:34px;z-index:40;pointer-events:none}
+.stem-line{position:absolute;left:16px;top:96px;bottom:44px;width:2px;background:var(--rule)}
+.stem-fill{position:absolute;left:16px;top:96px;width:2px;background:var(--sky);height:0;transition:height .35s cubic-bezier(.4,0,.2,1)}
+.stem-bud{position:absolute;left:8px;top:56px;width:18px;height:26px;color:var(--sky)}
+.stem-node{position:absolute;left:12px;width:10px;height:10px;border-radius:50%;background:var(--navy-900);border:2px solid var(--sky);transition:top .35s cubic-bezier(.4,0,.2,1)}
+
+/* ---------- slide stage ---------------------------------------------- */
+.deck{position:relative}
+.slide{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:64px 64px 88px 108px;
+  max-width:1240px;
+  margin:0 auto;
+}
+.slide[hidden]{display:none}
+
+.eyebrow{
+  font-family:var(--font-mono);
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--sky);
+  margin:0 0 18px;
+}
+h1{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:clamp(2.6rem,6vw,4.4rem);
+  line-height:1.02;
+  letter-spacing:-.028em;
+  margin:0 0 20px;
+  text-wrap:balance;
+}
+h2{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:clamp(1.7rem,3.4vw,2.5rem);
+  line-height:1.1;
+  letter-spacing:-.02em;
+  margin:0 0 8px;
+  text-wrap:balance;
+}
+h3{
+  font-family:var(--font-display);
+  font-weight:600;
+  font-size:1rem;
+  letter-spacing:.01em;
+  margin:0 0 8px;
+}
+.standfirst{
+  font-size:clamp(1rem,1.6vw,1.2rem);
+  color:var(--muted);
+  max-width:64ch;
+  margin:0 0 32px;
+}
+.slide > p{max-width:70ch}
+.note{
+  font-size:.8rem;
+  color:var(--muted);
+  max-width:78ch;
+  margin-top:22px;
+  padding-top:14px;
+  border-top:1px solid var(--rule);
+}
+.note strong{color:var(--ink);font-weight:600}
+
+/* ---------- grids and cards ------------------------------------------ */
+.grid{display:grid;gap:16px;margin:0}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+
+.card{
+  background:var(--navy-800);
+  border:1px solid var(--rule);
+  border-radius:10px;
+  padding:18px 20px;
+}
+.card p{margin:0;color:var(--muted);font-size:.9rem}
+.card .k{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--sky);
+  display:block;
+  margin-bottom:6px;
+}
+
+/* stat tiles */
+.stat{background:var(--navy-800);border:1px solid var(--rule);border-radius:10px;padding:18px 20px}
+.stat .n{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:clamp(1.6rem,3vw,2.3rem);
+  letter-spacing:-.02em;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+  display:block;
+}
+.stat .l{font-size:.78rem;color:var(--muted);display:block;margin-top:8px;line-height:1.35}
+.stat.accent .n{color:var(--sky)}
+
+/* feature lists */
+.flist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.flist li{padding-left:20px;position:relative;font-size:.92rem;color:var(--muted)}
+.flist li::before{
+  content:"";position:absolute;left:0;top:.55em;
+  width:7px;height:7px;border-radius:50%;
+  background:var(--sky);opacity:.75;
+}
+.flist li b{color:var(--ink);font-weight:600}
+
+/* ---------- tables ---------------------------------------------------- */
+.twrap{overflow-x:auto;margin:0;border:1px solid var(--rule);border-radius:10px;background:var(--navy-800)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.85rem}
+caption{text-align:left;color:var(--muted);font-size:.8rem;padding:0 0 10px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:var(--sky);
+  font-weight:500;
+  white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+code,.mono{font-family:var(--font-mono);font-size:.86em}
+code{color:var(--ink);background:rgba(143,169,196,.13);padding:1px 5px;border-radius:4px}
+
+/* status pills — semantic, deliberately not the accent hue */
+.pill{
+  display:inline-block;font-family:var(--font-mono);font-size:10.5px;
+  letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 8px;border-radius:999px;white-space:nowrap;
+}
+.pill-ok{background:rgba(61,214,140,.15);color:var(--ok);border:1px solid rgba(61,214,140,.35)}
+.pill-warn{background:rgba(255,180,84,.15);color:var(--warn);border:1px solid rgba(255,180,84,.35)}
+.pill-over{background:rgba(255,107,107,.15);color:var(--over);border:1px solid rgba(255,107,107,.4)}
+
+/* headroom meters */
+.meter{display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:14px}
+.meter-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:.85rem}
+.meter-top .cap{color:var(--muted);font-family:var(--font-mono);font-size:.75rem;font-variant-numeric:tabular-nums}
+.meter-track{height:7px;border-radius:999px;background:rgba(143,169,196,.16);overflow:hidden}
+.meter-bar{height:100%;border-radius:999px;background:var(--ok)}
+.meter-bar.warn{background:var(--warn)}
+.meter-bar.over{background:var(--over)}
+
+/* ---------- diagrams -------------------------------------------------- */
+figure{margin:0}
+.dg{width:100%;height:auto;max-height:62vh;color:var(--ink);display:block}
+.dg .box{fill:var(--navy-800);stroke:var(--muted);stroke-opacity:.4;stroke-width:1.2}
+.dg .box-a{fill:var(--sky-soft);stroke:var(--sky);stroke-width:1.4}
+.dg .box-d{fill:none;stroke:var(--muted);stroke-opacity:.4;stroke-width:1.2;stroke-dasharray:5 4}
+.dg .t{font-family:var(--font-body);font-size:13px;font-weight:600;fill:var(--ink)}
+.dg .s{font-family:var(--font-mono);font-size:10.5px;fill:var(--muted)}
+.dg .l{font-family:var(--font-body);font-size:11.5px;fill:var(--muted)}
+.dg .l-a{font-family:var(--font-body);font-size:11.5px;fill:var(--sky);font-weight:600}
+.dg .band{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.12em;fill:var(--sky)}
+.dg .ln{stroke:var(--muted);stroke-opacity:.55;stroke-width:1.4;fill:none}
+.dg .ln-a{stroke:var(--sky);stroke-width:1.7;fill:none}
+.dg .ln-d{stroke:var(--muted);stroke-opacity:.5;stroke-width:1.3;fill:none;stroke-dasharray:5 4}
+figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
+
+/* ---------- chrome ---------------------------------------------------- */
+.chrome{
+  position:fixed;right:24px;bottom:18px;z-index:50;
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);font-size:12px;color:var(--muted);
+}
+.chrome button{
+  font:inherit;color:var(--ink);
+  background:var(--navy-800);border:1px solid var(--rule);
+  border-radius:7px;width:32px;height:30px;cursor:pointer;line-height:1;
+}
+.chrome button:hover{border-color:var(--sky);color:var(--sky)}
+.chrome button:focus-visible,.stem a:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+.counter{font-variant-numeric:tabular-nums;min-width:56px;text-align:right}
+.hint{
+  position:fixed;left:108px;bottom:22px;z-index:50;
+  font-family:var(--font-mono);font-size:11px;color:var(--muted);opacity:.62;
+}
+
+/* ---------- responsive ------------------------------------------------ */
+@media (max-width:860px){
+  .slide{padding:52px 24px 92px 62px}
+  .stem{left:12px}
+  .hint{display:none}
+  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g3,.g2{grid-template-columns:1fr}
+  .dg{max-height:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .stem-fill,.stem-node{transition:none}
+  *{scroll-behavior:auto}
+}
+
+/* ---------- print / PDF export ---------------------------------------- */
+@media print{
+  :root{--navy-900:#fff;--navy-800:#f6f8fb;--ink:#0C1929;--muted:#4a5f75;--rule:#c9d6e4}
+  body{background:#fff;color:#0C1929}
+  .stem,.chrome,.hint{display:none !important}
+  .slide{display:flex !important;min-height:auto;page-break-after:always;padding:28px 32px;max-width:none}
+  .slide:last-child{page-break-after:auto}
+  .dg{max-height:none}
+  h1{font-size:2.2rem}h2{font-size:1.5rem}
+}
+</style>
+</head>
+<body>
+
+<div class="stem" aria-hidden="true">
+  <svg class="stem-bud" viewBox="0 0 18 26" fill="none">
+    <path d="M9 25V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M9 13c-4 0-6.5-3-6.5-7C2.5 3 5 1.5 9 1.5S15.5 3 15.5 6c0 4-2.5 7-6.5 7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M9 13V4M5.4 12c0-4 .7-6.6 1.5-8M12.6 12c0-4-.7-6.6-1.5-8" stroke="currentColor" stroke-width="1.1" stroke-opacity=".55"/>
+  </svg>
+  <div class="stem-line"></div>
+  <div class="stem-fill" id="stemFill"></div>
+  <div class="stem-node" id="stemNode"></div>
+</div>
+
+<main class="deck" id="deck">
+
+<!-- ============================== 1. TITLE ============================ -->
+<section class="slide">
+  <p class="eyebrow">Technical review · September 2026</p>
+  <h1>SLYPN</h1>
+  <p class="standfirst" style="font-size:clamp(1.05rem,2vw,1.4rem);color:var(--ink);max-width:56ch;margin-bottom:14px">
+    The South London Younger Parkinson's Network website — a community site
+    for working-age people living with Parkinson's.
+  </p>
+  <p class="standfirst">
+    Built as a full production system on Azure: a Vue single-page app, a .NET&nbsp;8
+    serverless API, invite-only identity, an in-house editorial workflow, and
+    end-to-end observability. Running cost to date: <strong style="color:var(--ok)">£0.00</strong>.
+  </p>
+  <div class="grid g4" style="margin-top:12px;max-width:860px">
+    <div class="stat"><span class="n">3</span><span class="l">months, May–Aug 2026</span></div>
+    <div class="stat"><span class="n">104</span><span class="l">pull requests merged</span></div>
+    <div class="stat"><span class="n">881</span><span class="l">automated tests</span></div>
+    <div class="stat accent"><span class="n">2</span><span class="l">Azure resources in production</span></div>
+  </div>
+</section>
+
+<!-- ============================== 2. VISITORS ========================= -->
+<section class="slide">
+  <p class="eyebrow">Key features · 01</p>
+  <h2>What a visitor can do</h2>
+  <p class="standfirst">Everything public is reachable without an account, and without JavaScript-gated content.</p>
+  <div class="grid g3">
+    <div class="card">
+      <span class="k">Read</span>
+      <h3>Articles &amp; blog</h3>
+      <p>Category filters, automatic reading-time estimates, previous/next navigation, and deep-linkable blog posts that render in full on the index.</p>
+    </div>
+    <div class="card">
+      <span class="k">Attend</span>
+      <h3>Events</h3>
+      <p>List or calendar view of coffee mornings, drinks and activities. Reveals the next three months, then loads more on scroll. Past events keep their own archive.</p>
+    </div>
+    <div class="card">
+      <span class="k">Find</span>
+      <h3>Resources</h3>
+      <p>Curated links grouped by category — support services, exercise, research — filterable in one click.</p>
+    </div>
+    <div class="card">
+      <span class="k">Subscribe</span>
+      <h3>Newsletter</h3>
+      <p>Anonymous email sign-up plus a browsable archive of 54 back issues, each with its original document attached.</p>
+    </div>
+    <div class="card">
+      <span class="k">Trust</span>
+      <h3>Consent-first telemetry</h3>
+      <p>The cookie banner genuinely gates analytics. Decline or ignore it and the monitoring SDK is never initialised at all.</p>
+    </div>
+    <div class="card">
+      <span class="k">Access</span>
+      <h3>Built to be usable</h3>
+      <p>Keyboard-navigable menus, ARIA labelling throughout, explicit image dimensions to stop layout shift, and a retry action on every failure state.</p>
+    </div>
+  </div>
+  <p class="note">Live content today: <strong>10 articles</strong>, <strong>10 blog posts</strong>, <strong>60 events</strong>, <strong>7 resources</strong> and <strong>54 newsletters</strong> — 141 items, measured from the public API.</p>
+</section>
+
+<!-- ============================== 3. MEMBERS ========================== -->
+<section class="slide">
+  <p class="eyebrow">Key features · 02</p>
+  <h2>What members and admins can do</h2>
+  <p class="standfirst">Three roles, each unlocking a different part of the same interface. Membership is invite-only — you cannot self-register.</p>
+  <div class="grid g3" style="margin-bottom:18px">
+    <div class="card"><span class="k">Role</span><h3>Member</h3><p>Signs in and sees the dashboard. No authoring rights.</p></div>
+    <div class="card"><span class="k">Role</span><h3>Contributor</h3><p>Writes and edits <em>their own</em> articles, blog posts and events. Everything they submit needs approval.</p></div>
+    <div class="card"><span class="k">Role</span><h3>Admin</h3><p>Approves or returns submissions, manages members, subscribers, resources, newsletters and all content.</p></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <span class="k">Authoring</span>
+      <h3>A real editor, in the browser</h3>
+      <ul class="flist" style="margin-top:10px">
+        <li><b>Autosaves 1.5 s</b> after you stop typing — and skips the write entirely when nothing actually changed.</li>
+        <li><b>Reading time calculates itself</b> from the word count.</li>
+        <li><b>Conflict-safe.</b> Two people editing the same draft get a clear "keep mine / take theirs" choice rather than silent data loss.</li>
+        <li><b>Warns before you navigate away</b> from unsaved work.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="k">Review</span>
+      <h3>An approvals queue that explains itself</h3>
+      <ul class="flist" style="margin-top:10px">
+        <li>Submissions <b>grouped by author</b>, each expandable to read in place.</li>
+        <li>Returning work for revision <b>requires written feedback</b> — no silent rejections.</li>
+        <li>Deletion is a <b>request, not an action</b>, for contributors; the item stays live until an admin agrees.</li>
+        <li>Live badge counts in the nav so nothing sits unnoticed.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== 4. WORKFLOW DIAGRAM ================= -->
+<section class="slide">
+  <p class="eyebrow">Key features · 03</p>
+  <h2>The editorial workflow</h2>
+  <p class="standfirst">Publishing is a state machine, and each transition names who is allowed to trigger it.</p>
+  <figure>
+    <svg class="dg" viewBox="0 0 900 420" role="img" aria-label="State machine: a draft is submitted for review, an admin publishes it or returns it with feedback, the author may withdraw it, and published items can be edited into a new revision or flagged for deletion pending admin approval.">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+        </marker>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        </marker>
+      </defs>
+
+      <!-- states -->
+      <rect class="box" x="40" y="140" width="176" height="70" rx="8"/>
+      <text class="t" x="128" y="168" text-anchor="middle">Draft</text>
+      <text class="s" x="128" y="187" text-anchor="middle">drafts table</text>
+      <text class="s" x="128" y="200" text-anchor="middle">PK = authorId</text>
+
+      <rect class="box" x="352" y="140" width="176" height="70" rx="8"/>
+      <text class="t" x="440" y="168" text-anchor="middle">In review</text>
+      <text class="s" x="440" y="187" text-anchor="middle">articles table</text>
+      <text class="s" x="440" y="200" text-anchor="middle">PK = in-review</text>
+
+      <rect class="box-a" x="664" y="140" width="176" height="70" rx="8"/>
+      <text class="t" x="752" y="168" text-anchor="middle">Published</text>
+      <text class="s" x="752" y="187" text-anchor="middle">articles table</text>
+      <text class="s" x="752" y="200" text-anchor="middle">PK = published</text>
+
+      <rect class="box-d" x="652" y="290" width="200" height="56" rx="8"/>
+      <text class="t" x="752" y="313" text-anchor="middle">Flagged for deletion</text>
+      <text class="s" x="752" y="331" text-anchor="middle">still publicly visible</text>
+
+      <!-- draft -> in review -->
+      <line class="ln" x1="216" y1="163" x2="346" y2="163" marker-end="url(#a1)"/>
+      <text class="l" x="281" y="154" text-anchor="middle">submit</text>
+      <!-- in review -> draft -->
+      <line class="ln" x1="352" y1="190" x2="222" y2="190" marker-end="url(#a1)"/>
+      <text class="l" x="281" y="208" text-anchor="middle">revise · withdraw</text>
+      <text class="s" x="281" y="223" text-anchor="middle">admin needs feedback</text>
+
+      <!-- in review -> published -->
+      <line class="ln-a" x1="528" y1="175" x2="658" y2="175" marker-end="url(#a2)"/>
+      <text class="l-a" x="593" y="166" text-anchor="middle">publish</text>
+      <text class="s" x="593" y="192" text-anchor="middle">admin only</text>
+
+      <!-- published -> draft (edit) -->
+      <path class="ln" d="M752 140 V72 H128 V136" marker-end="url(#a1)"/>
+      <text class="l" x="440" y="63" text-anchor="middle">edit — creates a revision draft, id and public URL preserved</text>
+
+      <!-- published <-> flagged -->
+      <line class="ln" x1="716" y1="210" x2="716" y2="286" marker-end="url(#a1)"/>
+      <text class="l" x="706" y="252" text-anchor="end">request deletion</text>
+      <line class="ln" x1="792" y1="290" x2="792" y2="214" marker-end="url(#a1)"/>
+      <text class="l" x="802" y="252" text-anchor="start">keep (admin)</text>
+
+      <!-- flagged -> gone -->
+      <line class="ln-d" x1="752" y1="346" x2="752" y2="386" marker-end="url(#a1)"/>
+      <text class="l" x="752" y="404" text-anchor="middle">approve deletion — admin only</text>
+
+      <!-- author note -->
+      <text class="s" x="40" y="404">A withdrawal can only be made by the author — an admin who</text>
+      <text class="s" x="40" y="418">did not write it must return it with feedback instead.</text>
+    </svg>
+    <figcaption>Status is the storage partition key, so publishing physically moves the row between partitions. Drafts live in a separate table partitioned by author, which is what makes "my drafts" a single cheap lookup.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================== 5. TECHNOLOGIES ===================== -->
+<section class="slide">
+  <p class="eyebrow">Technologies</p>
+  <h2>What it's built from, and why</h2>
+  <div class="twrap">
+    <table>
+      <thead><tr><th>Layer</th><th>Choice</th><th>Why this one</th></tr></thead>
+      <tbody>
+        <tr><td>Frontend</td><td>Vue 3 · TypeScript · Vite · Pinia · Tailwind</td><td>Small, fast, and typed end to end. Auth-only screens are code-split so anonymous visitors never download the editor.</td></tr>
+        <tr><td>Editor</td><td>TipTap</td><td>Structured rich text rather than raw HTML, so what an author can produce is bounded by the toolbar.</td></tr>
+        <tr><td>API</td><td>.NET 8 isolated-worker Azure Functions</td><td>Serverless, scales to zero, and ships inside the Static Web App as managed functions — one deployment, not two.</td></tr>
+        <tr><td>Data</td><td>Azure Table Storage + Blob Storage</td><td>Pennies per gigabyte. A provisioned database would have cost more per month than the entire rest of the system.</td></tr>
+        <tr><td>Identity</td><td>Entra External ID (CIAM) · MSAL.js</td><td>Email, Google and Facebook sign-in without hand-rolling auth. Public client with PKCE — no secret in the browser.</td></tr>
+        <tr><td>Hosting</td><td>Azure Static Web Apps (Free)</td><td>Global CDN, free TLS, managed custom domains, and per-pull-request preview environments out of the box.</td></tr>
+        <tr><td>Observability</td><td>Grafana Cloud · Faro + OpenTelemetry</td><td>Vendor-neutral OTLP throughout. Moving off Grafana means changing one endpoint URL.</td></tr>
+        <tr><td>Infrastructure</td><td>Bicep</td><td>The whole resource group is one declarative file that can be re-deployed from scratch.</td></tr>
+        <tr><td>CI/CD</td><td>GitHub Actions · SonarCloud</td><td>Free for public repositories, with preview deploys and static analysis on every pull request.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Roughly <strong>21,700 lines</strong> of application code — 9,200 in the web app, 12,500 in the API — across <strong>24 screens</strong>, <strong>32 shared components</strong> and <strong>47 API functions</strong> on 34 routes.</p>
+</section>
+
+<!-- ============================== 6. L1 CONTEXT ======================= -->
+<section class="slide">
+  <p class="eyebrow">Architecture · Level 1 — context</p>
+  <h2>The system and everything around it</h2>
+  <figure>
+    <svg class="dg" viewBox="0 0 940 420" role="img" aria-label="Context diagram: visitors and members use the SLYPN site, which delegates sign-in to Entra External ID, sends telemetry to Grafana Cloud, and is built and deployed by GitHub Actions.">
+      <defs>
+        <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+        </marker>
+      </defs>
+
+      <rect class="box" x="30" y="62" width="186" height="62" rx="8"/>
+      <text class="t" x="123" y="88" text-anchor="middle">Visitor</text>
+      <text class="s" x="123" y="106" text-anchor="middle">no account</text>
+
+      <rect class="box" x="30" y="266" width="186" height="72" rx="8"/>
+      <text class="t" x="123" y="292" text-anchor="middle">Member</text>
+      <text class="s" x="123" y="310" text-anchor="middle">contributor</text>
+      <text class="s" x="123" y="324" text-anchor="middle">or admin</text>
+
+      <rect class="box-a" x="378" y="158" width="204" height="94" rx="10"/>
+      <text class="t" x="480" y="190" text-anchor="middle">SLYPN website</text>
+      <text class="s" x="480" y="210" text-anchor="middle">slypn.cookingcode.com</text>
+      <text class="s" x="480" y="228" text-anchor="middle">SPA + serverless API</text>
+
+      <rect class="box" x="378" y="24" width="204" height="62" rx="8"/>
+      <text class="t" x="480" y="50" text-anchor="middle">GitHub Actions</text>
+      <text class="s" x="480" y="68" text-anchor="middle">build · test · deploy</text>
+
+      <rect class="box" x="742" y="62" width="188" height="62" rx="8"/>
+      <text class="t" x="836" y="88" text-anchor="middle">Entra External ID</text>
+      <text class="s" x="836" y="106" text-anchor="middle">identity provider</text>
+
+      <rect class="box" x="742" y="266" width="188" height="72" rx="8"/>
+      <text class="t" x="836" y="292" text-anchor="middle">Grafana Cloud</text>
+      <text class="s" x="836" y="310" text-anchor="middle">metrics · logs</text>
+      <text class="s" x="836" y="324" text-anchor="middle">traces · web vitals</text>
+
+      <line class="ln" x1="216" y1="104" x2="374" y2="176" marker-end="url(#b1)"/>
+      <text class="l" x="286" y="130" text-anchor="middle">reads</text>
+
+      <line class="ln" x1="216" y1="292" x2="374" y2="230" marker-end="url(#b1)"/>
+      <text class="l" x="286" y="284" text-anchor="middle">signs in, writes,</text>
+      <text class="l" x="286" y="298" text-anchor="middle">approves</text>
+
+      <line class="ln" x1="480" y1="86" x2="480" y2="154" marker-end="url(#b1)"/>
+      <text class="l" x="492" y="126" text-anchor="start">deploys on merge</text>
+
+      <line class="ln" x1="582" y1="176" x2="738" y2="106" marker-end="url(#b1)"/>
+      <text class="l" x="662" y="130" text-anchor="middle">verifies tokens,</text>
+      <text class="l" x="662" y="144" text-anchor="middle">sends invitations</text>
+
+      <line class="ln" x1="582" y1="232" x2="738" y2="290" marker-end="url(#b1)"/>
+      <text class="l" x="662" y="264" text-anchor="middle">telemetry</text>
+
+      <text class="s" x="30" y="392">The site holds no passwords and issues no tokens of its own —</text>
+      <text class="s" x="30" y="408">identity is delegated entirely to Entra External ID.</text>
+    </svg>
+    <figcaption>Four external dependencies, all on free tiers. Nothing else has to exist for the site to run.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================== 7. L2 CONTAINERS ==================== -->
+<section class="slide">
+  <p class="eyebrow">Architecture · Level 2 — containers</p>
+  <h2>What actually runs</h2>
+  <figure>
+    <svg class="dg" viewBox="0 0 960 410" role="img" aria-label="Container diagram: the Vue single-page app is served by Azure Static Web Apps, which routes API calls to managed .NET 8 Functions; those read metadata from Table Storage and bodies and media from Blob Storage. The browser signs in against Entra External ID; browser and API both send telemetry to Grafana Cloud.">
+      <defs>
+        <marker id="c1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+        </marker>
+        <marker id="c2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        </marker>
+      </defs>
+
+      <rect class="box" x="26" y="58" width="196" height="92" rx="9"/>
+      <text class="t" x="124" y="88" text-anchor="middle">Browser</text>
+      <text class="s" x="124" y="108" text-anchor="middle">Vue 3 SPA</text>
+      <text class="s" x="124" y="124" text-anchor="middle">354 KB first load</text>
+
+      <rect class="box-a" x="266" y="58" width="196" height="92" rx="9"/>
+      <text class="t" x="364" y="88" text-anchor="middle">Static Web Apps</text>
+      <text class="s" x="364" y="108" text-anchor="middle">CDN · TLS · routing</text>
+      <text class="s" x="364" y="124" text-anchor="middle">Free tier</text>
+
+      <rect class="box" x="506" y="58" width="196" height="92" rx="9"/>
+      <text class="t" x="604" y="88" text-anchor="middle">Managed Functions</text>
+      <text class="s" x="604" y="108" text-anchor="middle">.NET 8 isolated</text>
+      <text class="s" x="604" y="124" text-anchor="middle">47 endpoints</text>
+
+      <rect class="box" x="748" y="36" width="188" height="62" rx="8"/>
+      <text class="t" x="842" y="62" text-anchor="middle">Table Storage</text>
+      <text class="s" x="842" y="80" text-anchor="middle">7 tables · metadata</text>
+
+      <rect class="box" x="748" y="122" width="188" height="62" rx="8"/>
+      <text class="t" x="842" y="148" text-anchor="middle">Blob Storage</text>
+      <text class="s" x="842" y="166" text-anchor="middle">bodies · media · files</text>
+
+      <rect class="box" x="26" y="292" width="196" height="66" rx="8"/>
+      <text class="t" x="124" y="318" text-anchor="middle">Entra External ID</text>
+      <text class="s" x="124" y="336" text-anchor="middle">MSAL, PKCE</text>
+
+      <rect class="box" x="620" y="292" width="220" height="66" rx="8"/>
+      <text class="t" x="730" y="318" text-anchor="middle">Grafana Cloud</text>
+      <text class="s" x="730" y="336" text-anchor="middle">OTLP endpoint</text>
+
+      <line class="ln-a" x1="222" y1="104" x2="262" y2="104" marker-end="url(#c2)"/>
+      <line class="ln-a" x1="462" y1="104" x2="502" y2="104" marker-end="url(#c2)"/>
+      <text class="l-a" x="364" y="46" text-anchor="middle">/api/*</text>
+
+      <line class="ln" x1="702" y1="84" x2="744" y2="68" marker-end="url(#c1)"/>
+      <line class="ln" x1="702" y1="124" x2="744" y2="150" marker-end="url(#c1)"/>
+
+      <line class="ln" x1="124" y1="150" x2="124" y2="288" marker-end="url(#c1)"/>
+      <text class="l" x="136" y="228" text-anchor="start">sign in</text>
+
+      <line class="ln" x1="604" y1="150" x2="700" y2="288" marker-end="url(#c1)"/>
+      <text class="l" x="616" y="232" text-anchor="start">traces, metrics, logs</text>
+
+      <path class="ln-d" d="M200 150 Q 380 300 616 316" marker-end="url(#c1)"/>
+      <text class="l" x="330" y="252" text-anchor="middle">errors + web vitals</text>
+      <text class="s" x="330" y="267" text-anchor="middle">only after cookie consent</text>
+
+      <text class="s" x="26" y="392">The SPA and the API are same-origin behind one hostname, so there is no CORS configuration to get wrong.</text>
+    </svg>
+    <figcaption>One Static Web App and one storage account. The API is deployed inside the same resource as the site rather than as a separate Function App.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================== 8. L3 REQUEST ======================= -->
+<section class="slide">
+  <p class="eyebrow">Architecture · Level 3 — one authorised request</p>
+  <h2>How an admin action is authorised</h2>
+  <figure>
+    <svg class="dg" viewBox="0 0 970 470" role="img" aria-label="Request path: the SPA sends its token in a custom header because the gateway overwrites Authorization; middleware validates the signature against the identity provider, then loads the caller's roles from the members table rather than trusting the roles in the token; the role gate runs, and the handler reads the row from Table Storage and its body from Blob Storage.">
+      <defs>
+        <marker id="d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+        </marker>
+        <marker id="d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        </marker>
+      </defs>
+
+      <rect class="box" x="26" y="52" width="196" height="76" rx="8"/>
+      <text class="t" x="124" y="78" text-anchor="middle">1 · SPA request</text>
+      <text class="s" x="124" y="97" text-anchor="middle">POST /api/content</text>
+      <text class="s" x="124" y="112" text-anchor="middle">/{id}/publish</text>
+
+      <rect class="box" x="262" y="52" width="196" height="76" rx="8"/>
+      <text class="t" x="360" y="78" text-anchor="middle">2 · SWA gateway</text>
+      <text class="s" x="360" y="97" text-anchor="middle">overwrites Authorization,</text>
+      <text class="s" x="360" y="112" text-anchor="middle">so token rides X-Slypn-Token</text>
+
+      <rect class="box" x="498" y="52" width="196" height="76" rx="8"/>
+      <text class="t" x="596" y="78" text-anchor="middle">3 · Validate token</text>
+      <text class="s" x="596" y="97" text-anchor="middle">signature, issuer, audience</text>
+      <text class="s" x="596" y="112" text-anchor="middle">2-minute clock skew</text>
+
+      <rect class="box-a" x="734" y="52" width="206" height="76" rx="8"/>
+      <text class="t" x="837" y="78" text-anchor="middle">4 · Load roles</text>
+      <text class="s" x="837" y="97" text-anchor="middle">from the members table,</text>
+      <text class="s" x="837" y="112" text-anchor="middle">not from the token</text>
+
+      <rect class="box" x="734" y="232" width="206" height="70" rx="8"/>
+      <text class="t" x="837" y="258" text-anchor="middle">5 · Role gate</text>
+      <text class="s" x="837" y="277" text-anchor="middle">RequireRole("Admin")</text>
+
+      <rect class="box" x="498" y="232" width="196" height="70" rx="8"/>
+      <text class="t" x="596" y="258" text-anchor="middle">6 · Handler</text>
+      <text class="s" x="596" y="277" text-anchor="middle">moves row between partitions</text>
+
+      <rect class="box" x="262" y="232" width="196" height="70" rx="8"/>
+      <text class="t" x="360" y="258" text-anchor="middle">7 · Response</text>
+      <text class="s" x="360" y="277" text-anchor="middle">ETag for the next write</text>
+
+      <rect class="box" x="440" y="370" width="312" height="66" rx="8"/>
+      <text class="t" x="596" y="396" text-anchor="middle">Table Storage + Blob Storage</text>
+      <text class="s" x="596" y="415" text-anchor="middle">row keyed by status · body blob keyed by id</text>
+
+      <line class="ln" x1="222" y1="90" x2="258" y2="90" marker-end="url(#d1)"/>
+      <line class="ln" x1="458" y1="90" x2="494" y2="90" marker-end="url(#d1)"/>
+      <line class="ln" x1="694" y1="90" x2="730" y2="90" marker-end="url(#d1)"/>
+      <line class="ln-a" x1="837" y1="128" x2="837" y2="228" marker-end="url(#d2)"/>
+      <line class="ln" x1="730" y1="267" x2="698" y2="267" marker-end="url(#d1)"/>
+      <line class="ln" x1="494" y1="267" x2="462" y2="267" marker-end="url(#d1)"/>
+      <line class="ln" x1="596" y1="302" x2="596" y2="366" marker-end="url(#d1)"/>
+      <line class="ln" x1="620" y1="366" x2="620" y2="306" marker-end="url(#d1)"/>
+
+      <text class="l-a" x="26" y="180">Roles are read from storage on every request, so removing</text>
+      <text class="l-a" x="26" y="196">someone's access takes effect immediately —</text>
+      <text class="l-a" x="26" y="212">it does not wait for their existing token to expire.</text>
+
+      <text class="s" x="26" y="396">On public reads the author's</text>
+      <text class="s" x="26" y="411">identifier is stripped from the</text>
+      <text class="s" x="26" y="426">response and replaced by a</text>
+      <text class="s" x="26" y="441">computed "can edit" flag.</text>
+    </svg>
+    <figcaption>The load-bearing decision is step 4. A valid token proves who someone is; it does not prove they still belong to SLYPN, so authorisation always reads current state.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================== 9. DATA MODEL ======================= -->
+<section class="slide">
+  <p class="eyebrow">Architecture · data</p>
+  <h2>Seven tables, keyed to how they're read</h2>
+  <p class="standfirst">Table Storage only sorts by partition and row key, so each partition key is chosen to make the commonest query a single-partition lookup.</p>
+  <div class="twrap">
+    <table>
+      <thead><tr><th>Table</th><th>Partition key</th><th>Body</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><code>articles</code></td><td><code>status</code></td><td>Blob</td><td>Public reads are almost all "published" — one partition serves them.</td></tr>
+        <tr><td><code>drafts</code></td><td><code>authorId</code></td><td>Blob</td><td>The only query that matters is "my drafts".</td></tr>
+        <tr><td><code>events</code></td><td><code>yearMonth</code></td><td>—</td><td>Listing is by date range; this month plus next is two partitions.</td></tr>
+        <tr><td><code>resources</code></td><td><code>category</code></td><td>—</td><td>The page filters by category, so the key matches the filter.</td></tr>
+        <tr><td><code>newsletters</code></td><td>constant</td><td>Blob</td><td>About twelve issues a year — one partition is plenty.</td></tr>
+        <tr><td><code>members</code></td><td>constant</td><td>—</td><td>Small, and read on every authorised request.</td></tr>
+        <tr><td><code>subscribers</code></td><td>constant</td><td>—</td><td>Deliberately separate from members, so subscribing can never look like an invitation.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid g3" style="margin-top:18px">
+    <div class="card"><span class="k">Why blobs</span><p>A table property caps at 64&nbsp;KB. Rich article HTML lives in a blob keyed by content id — so it never moves when the status changes.</p></div>
+    <div class="card"><span class="k">Concurrency</span><p>Every write carries the row's ETag. A stale write is refused rather than silently overwriting someone else's edit.</p></div>
+    <div class="card"><span class="k">Size today</span><p><strong style="color:var(--ink)">11 MB</strong> total across both services — 141 published items including every newsletter attachment.</p></div>
+  </div>
+</section>
+
+<!-- ============================== 10. SECURITY ======================== -->
+<section class="slide">
+  <p class="eyebrow">Security</p>
+  <h2>Controls in place</h2>
+  <div class="grid g3">
+    <div class="card">
+      <span class="k">Access</span><h3>Invite-only by construction</h3>
+      <p>A sign-up attempt calls back into the API before any account is created. An address that was never invited is refused at that point — subscribing to the newsletter is not an invitation.</p>
+    </div>
+    <div class="card">
+      <span class="k">Authorisation</span><h3>Roles from live state</h3>
+      <p>Permissions are read from the members table per request, replacing whatever the token claims. Revoking access is immediate.</p>
+    </div>
+    <div class="card">
+      <span class="k">Content</span><h3>Sanitised on the way in</h3>
+      <p>Submitted HTML is filtered to exactly the tags the editor's toolbar can produce. Inline styles are dropped; only http, https and mailto links survive.</p>
+    </div>
+    <div class="card">
+      <span class="k">Uploads</span><h3>Bounded before buffering</h3>
+      <p>Size is checked from the declared length before the body is read — 5&nbsp;MB for images, 25&nbsp;MB for newsletter files. Images must be PNG, JPEG or WebP.</p>
+    </div>
+    <div class="card">
+      <span class="k">Storage</span><h3>Nothing publicly readable</h3>
+      <p>Both blob containers are private. Media is served through short-lived signed URLs that expire after fifteen minutes.</p>
+    </div>
+    <div class="card">
+      <span class="k">Deployment</span><h3>The API refuses to start unsafe</h3>
+      <p>If the local auth bypass is ever enabled somewhere that looks like a real deployment, the host throws on startup rather than serving unauthenticated traffic.</p>
+    </div>
+  </div>
+  <p class="note">No secrets live in source control. Static analysis runs on every pull request via SonarCloud, and the repository has private security advisories enabled for coordinated disclosure.</p>
+</section>
+
+<!-- ============================== 11. INFRASTRUCTURE ================== -->
+<section class="slide">
+  <p class="eyebrow">Infrastructure</p>
+  <h2>Two resources, one file</h2>
+  <p class="standfirst">The entire production environment is declared in a single Bicep template and can be rebuilt from an empty resource group.</p>
+  <div class="grid g2" style="margin-bottom:16px">
+    <div class="card">
+      <span class="k">Declared in Bicep</span>
+      <ul class="flist" style="margin-top:10px">
+        <li><b>Static Web App</b> — Free tier, West Europe, wired to the GitHub repo</li>
+        <li><b>Storage account</b> — Standard LRS, UK South, TLS 1.2 minimum, no public blob access</li>
+        <li><b>Two blob containers</b> — <code>media</code> and <code>content</code>, both private</li>
+        <li><b>Custom domain</b> — validated by CNAME delegation, certificate issued and renewed automatically</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="k">One-time, by hand</span>
+      <ul class="flist" style="margin-top:10px">
+        <li><b>Identity tenant</b> — Entra External ID lives outside the resource group</li>
+        <li><b>Grafana Cloud stack</b> — created once, referenced by endpoint</li>
+        <li><b>DNS records</b> — must exist <em>before</em> deployment, or domain validation fails the whole thing</li>
+        <li><b>Secrets</b> — set through a scripted phase, never committed</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid g4">
+    <div class="stat"><span class="n">1</span><span class="l">resource group, <code>rg-slypn-prod</code></span></div>
+    <div class="stat"><span class="n">7</span><span class="l">tables, created by the API at startup</span></div>
+    <div class="stat"><span class="n">2</span><span class="l">regions — UK South data, West Europe edge</span></div>
+    <div class="stat accent"><span class="n">0</span><span class="l">servers to patch</span></div>
+  </div>
+  <p class="note">The Free tier has no managed identity, so the API authenticates to storage with a connection string. That is a deliberate, documented trade-off rather than an oversight — it is the price of the tier.</p>
+</section>
+
+<!-- ============================== 12. CI/CD DIAGRAM =================== -->
+<section class="slide">
+  <p class="eyebrow">Build and release</p>
+  <h2>The pipeline</h2>
+  <figure>
+    <svg class="dg" viewBox="0 0 980 600" role="img" aria-label="Pipeline diagram: on a pull request, continuous integration and a preview deployment run in parallel. On merge to main, a push alone never deploys; production deploys only after continuous integration completes successfully. Closing a pull request tears its preview down, and a nightly job reaps orphaned previews.">
+      <defs>
+        <marker id="e1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+        </marker>
+        <marker id="e2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        </marker>
+      </defs>
+
+      <!-- BAND 1 -->
+      <text class="band" x="26" y="26">ON EVERY PULL REQUEST</text>
+      <rect class="box" x="26" y="98" width="160" height="60" rx="8"/>
+      <text class="t" x="106" y="124" text-anchor="middle">PR opened</text>
+      <text class="s" x="106" y="142" text-anchor="middle">or updated</text>
+
+      <rect class="box" x="244" y="42" width="222" height="118" rx="9"/>
+      <text class="t" x="355" y="66" text-anchor="middle">Continuous integration</text>
+      <text class="s" x="258" y="90">Web — lint, unit tests, build</text>
+      <text class="s" x="258" y="108">API — build, unit tests</text>
+      <text class="s" x="258" y="126">E2E — Playwright, live API</text>
+      <text class="s" x="258" y="144">SonarCloud — static analysis</text>
+
+      <rect class="box" x="244" y="186" width="222" height="60" rx="8"/>
+      <text class="t" x="355" y="212" text-anchor="middle">Preview deploy</text>
+      <text class="s" x="355" y="230" text-anchor="middle">isolated environment per PR</text>
+
+      <rect class="box" x="524" y="186" width="240" height="60" rx="8"/>
+      <text class="t" x="644" y="212" text-anchor="middle">Shareable preview URL</text>
+      <text class="s" x="644" y="230" text-anchor="middle">sign-in wired up automatically</text>
+
+      <line class="ln" x1="186" y1="116" x2="240" y2="96" marker-end="url(#e1)"/>
+      <line class="ln" x1="186" y1="140" x2="240" y2="208" marker-end="url(#e1)"/>
+      <line class="ln" x1="466" y1="216" x2="520" y2="216" marker-end="url(#e1)"/>
+      <text class="l" x="524" y="120" text-anchor="start">both run in parallel — CI must be green to merge</text>
+
+      <!-- BAND 2 -->
+      <text class="band" x="26" y="296">ON MERGE TO MAIN</text>
+      <rect class="box" x="26" y="322" width="160" height="60" rx="8"/>
+      <text class="t" x="106" y="348" text-anchor="middle">Merge to main</text>
+      <text class="s" x="106" y="366" text-anchor="middle">push event</text>
+
+      <rect class="box" x="244" y="322" width="180" height="60" rx="8"/>
+      <text class="t" x="334" y="348" text-anchor="middle">CI runs on main</text>
+      <text class="s" x="334" y="366" text-anchor="middle">full suite again</text>
+
+      <rect class="box-a" x="482" y="322" width="180" height="60" rx="8"/>
+      <text class="t" x="572" y="348" text-anchor="middle">Did CI pass?</text>
+      <text class="s" x="572" y="366" text-anchor="middle">gate on the result</text>
+
+      <rect class="box-a" x="720" y="322" width="220" height="60" rx="8"/>
+      <text class="t" x="830" y="348" text-anchor="middle">Deploy to production</text>
+      <text class="s" x="830" y="366" text-anchor="middle">about 3–5 minutes</text>
+
+      <line class="ln" x1="186" y1="352" x2="240" y2="352" marker-end="url(#e1)"/>
+      <line class="ln" x1="424" y1="352" x2="478" y2="352" marker-end="url(#e1)"/>
+      <line class="ln-a" x1="662" y1="352" x2="716" y2="352" marker-end="url(#e2)"/>
+      <text class="l-a" x="26" y="404">A push to main on its own never deploys — a branch that was green when it was cut</text>
+      <text class="l-a" x="26" y="420">cannot ship into a main it was never tested against.</text>
+
+      <!-- BAND 3 — two independent triggers, deliberately not chained -->
+      <text class="band" x="26" y="458">CLEANUP — TWO SEPARATE TRIGGERS</text>
+      <rect class="box" x="26" y="472" width="190" height="46" rx="8"/>
+      <text class="t" x="121" y="500" text-anchor="middle">PR closed</text>
+
+      <rect class="box" x="274" y="472" width="380" height="46" rx="8"/>
+      <text class="s" x="464" y="493" text-anchor="middle">that PR's preview environment is deleted</text>
+      <text class="s" x="464" y="509" text-anchor="middle">and its sign-in redirect removed</text>
+
+      <rect class="box" x="26" y="530" width="190" height="46" rx="8"/>
+      <text class="t" x="121" y="552" text-anchor="middle">Nightly sweep</text>
+      <text class="s" x="121" y="568" text-anchor="middle">04:17 UTC</text>
+
+      <rect class="box" x="274" y="530" width="380" height="46" rx="8"/>
+      <text class="s" x="464" y="551" text-anchor="middle">reaps any preview whose PR is already gone,</text>
+      <text class="s" x="464" y="567" text-anchor="middle">so the three-environment cap never fills up</text>
+
+      <line class="ln" x1="216" y1="495" x2="270" y2="495" marker-end="url(#e1)"/>
+      <line class="ln" x1="216" y1="553" x2="270" y2="553" marker-end="url(#e1)"/>
+    </svg>
+    <figcaption>Every pull request gets a real, publicly reachable deployment with working sign-in — reviewed as a running site, not a diff.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================== 13. DEPLOYMENT ====================== -->
+<section class="slide">
+  <p class="eyebrow">Deployment</p>
+  <h2>Releasing and rolling back</h2>
+  <div class="grid g2" style="margin-bottom:18px">
+    <div class="card">
+      <span class="k">Going out</span>
+      <ul class="flist" style="margin-top:10px">
+        <li><b>Merge is the release.</b> No manual deploy step, no release branch.</li>
+        <li><b>Three to five minutes</b> from merge to live.</li>
+        <li><b>Versioned builds</b> — production carries the package version, previews carry the PR number and commit.</li>
+        <li><b>Environment-aware</b> — previews report themselves as <code>dev</code> in telemetry so their traffic never pollutes production dashboards.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="k">Coming back</span>
+      <ul class="flist" style="margin-top:10px">
+        <li><b>Revert the pull request</b> — redeploys the previous bundle in about three minutes.</li>
+        <li><b>Or restore a previous deployment</b> from the Azure portal directly.</li>
+        <li><b>Data is unaffected</b> by either. Content lives in storage, not in the deployment.</li>
+        <li><b>Infrastructure rolls back</b> by redeploying an earlier version of the Bicep file.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid g3">
+    <div class="stat"><span class="n">1</span><span class="l">production environment</span></div>
+    <div class="stat"><span class="n">3</span><span class="l">concurrent preview environments (tier cap)</span></div>
+    <div class="stat accent"><span class="n">~4 min</span><span class="l">merge to live</span></div>
+  </div>
+</section>
+
+<!-- ============================== 14. OBSERVABILITY =================== -->
+<section class="slide">
+  <p class="eyebrow">Observability</p>
+  <h2>Knowing when something breaks</h2>
+  <p class="standfirst">Both halves of the system report to the same place, using open standards rather than a proprietary agent.</p>
+  <div class="grid g2" style="margin-bottom:16px">
+    <div class="card">
+      <span class="k">From the browser</span>
+      <h3>Grafana Faro</h3>
+      <ul class="flist" style="margin-top:10px">
+        <li>JavaScript errors with readable stack traces</li>
+        <li>Core Web Vitals — loading, responsiveness, layout stability</li>
+        <li>Session counts and which screen a person was on</li>
+        <li><b>Initialised only after cookie consent</b> — decline and it never loads</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="k">From the API</span>
+      <h3>OpenTelemetry</h3>
+      <ul class="flist" style="margin-top:10px">
+        <li>Traces spanning the request and its storage calls</li>
+        <li>Request rate and latency, broken down per route</li>
+        <li>Structured logs correlated to the trace that produced them</li>
+        <li>.NET runtime health — garbage collection, heap size</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid g3">
+    <div class="stat"><span class="n">8</span><span class="l">dashboard panels covering both tiers</span></div>
+    <div class="stat"><span class="n">1</span><span class="l">alert — server errors above 5% for 5 minutes, by email</span></div>
+    <div class="stat accent"><span class="n">OTLP</span><span class="l">vendor-neutral; switching providers is a URL change</span></div>
+  </div>
+</section>
+
+<!-- ============================== 15. QUALITY ========================= -->
+<section class="slide">
+  <p class="eyebrow">Quality</p>
+  <h2>What stops a bad change</h2>
+  <div class="grid g4" style="margin-bottom:20px">
+    <div class="stat accent"><span class="n">881</span><span class="l">automated tests</span></div>
+    <div class="stat"><span class="n">432</span><span class="l">frontend unit tests</span></div>
+    <div class="stat"><span class="n">339</span><span class="l">API unit tests</span></div>
+    <div class="stat"><span class="n">110</span><span class="l">end-to-end browser tests</span></div>
+  </div>
+  <div class="grid g3">
+    <div class="card">
+      <span class="k">Coverage gate</span><h3>Enforced, not advisory</h3>
+      <p>Combined coverage below 80% fails the build with its own exit code. 80–89% is reported as satisfactory, 90% and above as good.</p>
+    </div>
+    <div class="card">
+      <span class="k">End-to-end</span><h3>Against a real API</h3>
+      <p>Browser tests run against a live Functions host and a real storage emulator — not mocks — covering sign-in guards, the full publishing workflow and every admin console.</p>
+    </div>
+    <div class="card">
+      <span class="k">Static analysis</span><h3>SonarCloud on every PR</h3>
+      <p>Both languages analysed together with the coverage reports from the test jobs, so quality and coverage are judged on the same run.</p>
+    </div>
+  </div>
+  <p class="note">Type checking runs as part of the production build rather than as a separate step, so a type error cannot reach <code>main</code> even if the tests pass.</p>
+</section>
+
+<!-- ============================== 16. COSTS ============================ -->
+<section class="slide">
+  <p class="eyebrow">Running costs · what we actually pay</p>
+  <h2>Today: nothing</h2>
+  <p class="standfirst">
+    Azure's own consumption records for the last 32 days list five active meters for SLYPN —
+    blob storage, table storage, bandwidth, functions and identity — at
+    <strong style="color:var(--ok)">£0.00</strong> pretax. Every component sits inside a free allowance.
+  </p>
+
+  <h3 style="margin:6px 0 14px;color:var(--muted);font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase">Measured usage against each free allowance</h3>
+
+  <div style="max-width:760px">
+    <div class="meter">
+      <div class="meter-top"><span>Static Web Apps bandwidth</span><span class="cap">60 MB of 100 GB · 0.06%</span></div>
+      <div class="meter-track"><div class="meter-bar" style="width:1.5%"></div></div>
+    </div>
+    <div class="meter">
+      <div class="meter-top"><span>Storage capacity</span><span class="cap">11 MB · billed at pennies per GB</span></div>
+      <div class="meter-track"><div class="meter-bar" style="width:1.5%"></div></div>
+    </div>
+    <div class="meter">
+      <div class="meter-top"><span>Identity — monthly active users</span><span class="cap">tens of 50,000 · &lt;0.1%</span></div>
+      <div class="meter-track"><div class="meter-bar" style="width:1.5%"></div></div>
+    </div>
+    <div class="meter">
+      <div class="meter-top"><span>Grafana Cloud sessions</span><span class="cap">0 of 50,000 · site not yet promoted</span></div>
+      <div class="meter-track"><div class="meter-bar" style="width:1.5%"></div></div>
+    </div>
+    <div class="meter">
+      <div class="meter-top"><span>GitHub Actions minutes</span><span class="cap">unlimited — public repository</span></div>
+      <div class="meter-track"><div class="meter-bar" style="width:100%"></div></div>
+    </div>
+  </div>
+
+  <p class="note">
+    Storage transactions over the same 30 days: <strong>55,677</strong>, of which the majority are automated test
+    and deployment traffic rather than visitors. <strong>There is no live visitor telemetry yet</strong> — the site is
+    deployed and serving, but has not been promoted, so every figure on the next slide beyond "today" is a projection.
+  </p>
+</section>
+
+<!-- ============================== 17. COST SCENARIOS ================== -->
+<section class="slide">
+  <p class="eyebrow">Running costs · what growth would cost</p>
+  <h2>Where the free tiers actually run out</h2>
+  <p class="standfirst" style="margin-bottom:20px">
+    A first-time visitor downloads <strong>354 KB</strong> — measured live, compressed, including the sign-in
+    and monitoring libraries. Returning visitors download almost nothing. That number sets the ceiling.
+  </p>
+  <div class="twrap">
+    <table>
+      <caption>Bandwidth assumes every visit is a first visit, which overstates real usage.</caption>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th class="num">New visits / month</th>
+          <th class="num">Bandwidth</th>
+          <th class="num">% of free cap</th>
+          <th>Status</th>
+          <th class="num">Est. cost / month</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Today</td><td class="num">&lt;100</td><td class="num">0.04 GB</td><td class="num">0.04%</td><td><span class="pill pill-ok">Free</span></td><td class="num">£0.00</td></tr>
+        <tr><td>Local community, steady</td><td class="num">2,000</td><td class="num">0.7 GB</td><td class="num">0.7%</td><td><span class="pill pill-ok">Free</span></td><td class="num">£0.00</td></tr>
+        <tr><td>Regional reach</td><td class="num">20,000</td><td class="num">6.8 GB</td><td class="num">6.8%</td><td><span class="pill pill-ok">Free</span></td><td class="num">£0.00</td></tr>
+        <tr><td>Press or campaign spike</td><td class="num">100,000</td><td class="num">34 GB</td><td class="num">34%</td><td><span class="pill pill-warn">Watch</span></td><td class="num">£0 Azure</td></tr>
+        <tr><td>Sustained national</td><td class="num">300,000</td><td class="num">101 GB</td><td class="num">101%</td><td><span class="pill pill-over">Over</span></td><td class="num">≈ £7–25</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card">
+      <span class="k">Breaks first</span>
+      <h3>Monitoring, not Azure</h3>
+      <p>Grafana Cloud's 50,000 free sessions a month is reached at roughly half the traffic that troubles the Azure bandwidth cap — and it degrades to lost telemetry, not a broken site.</p>
+    </div>
+    <div class="card">
+      <span class="k">Breaks second</span>
+      <h3>Bandwidth, at ~290,000 visits</h3>
+      <p>100 GB divided by 354 KB. Beyond that, the Standard tier is about <strong style="color:var(--ink)">£7 per month</strong> plus roughly 16p per additional GB — and buys an availability guarantee too.</p>
+    </div>
+    <div class="card">
+      <span class="k">Never the issue</span>
+      <h3>Storage and identity</h3>
+      <p>A hundredfold increase in content is around 1 GB, which costs pennies. Members are invited individually — 50,000 free monthly users will not be approached.</p>
+    </div>
+  </div>
+  <p class="note">
+    <strong>Basis:</strong> volumes are measured from Azure Monitor and the live site; the £0.00 is from Azure's consumption
+    records. Costs beyond the free tiers are <strong>approximate UK South list prices as of September 2026, converted from
+    US dollars — indicative, not a quote</strong>. Confirm against the Azure pricing calculator before budgeting.
+    Realistic demand for a South London community group sits roughly two orders of magnitude below the first ceiling.
+  </p>
+</section>
+
+<!-- ============================== 18. CLOSE ============================ -->
+<section class="slide">
+  <p class="eyebrow">Where it stands</p>
+  <h2>Built, deployed, and running for free</h2>
+  <div class="grid g2" style="margin-bottom:20px">
+    <div class="card">
+      <span class="k">Done</span>
+      <ul class="flist" style="margin-top:10px">
+        <li>Public site live on its custom domain with managed TLS</li>
+        <li>Invite-only sign-in via email, Google or Facebook</li>
+        <li>Full authoring and approval workflow in the browser</li>
+        <li>141 items of real content published</li>
+        <li>881 tests, enforced coverage, static analysis on every change</li>
+        <li>Dashboards and alerting wired to both tiers</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="k">Next</span>
+      <ul class="flist" style="margin-top:10px">
+        <li>Promote the site and start gathering real visitor telemetry</li>
+        <li>Work through the remaining hardening backlog</li>
+        <li>Decide a rotation cadence for the storage credential</li>
+        <li>Revisit the tier only if traffic ever approaches the ceilings</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid g4">
+    <div class="stat accent"><span class="n">£0.00</span><span class="l">billed to date</span></div>
+    <div class="stat"><span class="n">~290k</span><span class="l">monthly visits before any cost</span></div>
+    <div class="stat"><span class="n">~4 min</span><span class="l">from merge to live</span></div>
+    <div class="stat"><span class="n">0</span><span class="l">servers to maintain</span></div>
+  </div>
+  <p class="note">Source, infrastructure and this deck all live in <code>github.com/sinclapa/slypn</code>.</p>
+</section>
+
+</main>
+
+<div class="hint">← → or space to move · P to print</div>
+<nav class="chrome" aria-label="Slide navigation">
+  <button id="prev" title="Previous slide (←)" aria-label="Previous slide">‹</button>
+  <button id="next" title="Next slide (→)" aria-label="Next slide">›</button>
+  <span class="counter" id="counter" aria-live="polite">1 / 1</span>
+</nav>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var counter = document.getElementById('counter');
+  var fill = document.getElementById('stemFill');
+  var node = document.getElementById('stemNode');
+  var i = 0;
+
+  function clamp(n) { return Math.max(0, Math.min(slides.length - 1, n)); }
+
+  function render() {
+    slides.forEach(function (s, n) { s.hidden = n !== i; });
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+
+    // Grow the stem in proportion to progress through the deck.
+    var span = Math.max(1, slides.length - 1);
+    var pct = i / span;
+    var track = Math.max(0, window.innerHeight - 140);
+    fill.style.height = (pct * track) + 'px';
+    node.style.top = (96 + pct * track - 4) + 'px';
+
+    if (location.hash !== '#' + (i + 1)) {
+      history.replaceState(null, '', '#' + (i + 1));
+    }
+    window.scrollTo(0, 0);
+  }
+
+  function go(n) { i = clamp(n); render(); }
+
+  document.getElementById('next').addEventListener('click', function () { go(i + 1); });
+  document.getElementById('prev').addEventListener('click', function () { go(i - 1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight': case 'PageDown': case ' ': go(i + 1); e.preventDefault(); break;
+      case 'ArrowLeft':  case 'PageUp':          go(i - 1); e.preventDefault(); break;
+      case 'Home': go(0); e.preventDefault(); break;
+      case 'End':  go(slides.length - 1); e.preventDefault(); break;
+      case 'p': case 'P': window.print(); e.preventDefault(); break;
+    }
+  });
+
+  window.addEventListener('resize', render);
+
+  // Deep link support: #7 opens slide 7.
+  var start = parseInt((location.hash || '').slice(1), 10);
+  go(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+
+</body>
+</html>
