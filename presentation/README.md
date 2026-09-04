@@ -34,5 +34,13 @@ The figures in the deck were measured on 2026-09-04, not estimated:
 - **Screenshots** — captured from the live site at 390px and 1300px wide, then
   palette-optimised. Retake them if the home page changes.
 
+## Third-party marks
+
+The technology logos on the closing slide are inlined SVG paths from
+[Simple Icons](https://simpleicons.org) (CC0), except Azure and Playwright, which
+come from [Devicon](https://devicon.dev) (MIT). They are rendered monochrome and
+used to identify the technologies — nominative use. Each remains the trademark of
+its owner, and no endorsement or affiliation is implied.
+
 Cost projections beyond the free tiers are approximate list prices and are labelled as such
 in the deck. If you revise the numbers, update the basis note on the costs slide too.
