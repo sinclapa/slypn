@@ -76,17 +76,28 @@ body{
   position:absolute;
   left:28px;top:50%;
   transform:translateY(-50%);
-  white-space:nowrap;
-  max-width:44vw;overflow:hidden;text-overflow:ellipsis;
+  display:flex;flex-direction:column;gap:3px;
+  align-items:flex-start;
+  max-width:46vw;
   background:var(--navy-800);
   border:1px solid var(--rule);
-  color:var(--ink);
-  font-family:var(--font-body);font-size:11.5px;line-height:1.2;
-  padding:6px 10px;border-radius:7px;
+  padding:7px 11px;border-radius:8px;
   box-shadow:0 6px 18px rgba(0,0,0,.45);
   opacity:0;visibility:hidden;
   transition:opacity .12s ease;
   pointer-events:none;
+}
+/* Each line stays on one line; the tooltip as a whole may be two. */
+.stem-tip > span{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stem-tip-eyebrow{
+  font-family:var(--font-mono);
+  font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--sky);
+}
+.stem-tip-title{
+  font-family:var(--font-body);
+  font-size:12.5px;line-height:1.25;
+  color:var(--ink);
 }
 .stem-mark:hover .stem-tip,
 .stem-mark:focus-visible .stem-tip{opacity:1;visibility:visible}
@@ -1518,18 +1529,29 @@ var slypnNet = (function () {
   // A dot on the rail per slide, labelled with that slide's heading, so the
   // speaker can see where they are going and jump straight there.
   var marks = slides.map(function (slide, n) {
-    var heading = slide.querySelector('h1, h2');
-    var title = heading ? heading.textContent.replace(/\s+/g, ' ').trim() : 'Slide ' + (n + 1);
-    var num = (n + 1 < 10 ? '0' : '') + (n + 1);
+    var clean = function (el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : ''; };
+    var title = clean(slide.querySelector('h1, h2')) || 'Slide ' + (n + 1);
+    var eyebrow = clean(slide.querySelector('.eyebrow'));
 
     var button = document.createElement('button');
     button.type = 'button';
     button.className = 'stem-mark';
-    button.setAttribute('aria-label', 'Slide ' + (n + 1) + ': ' + title);
+    button.setAttribute('aria-label',
+      'Slide ' + (n + 1) + ': ' + (eyebrow ? eyebrow + ' — ' : '') + title);
 
+    // The section label above the heading, mirroring how the slide reads.
     var tip = document.createElement('span');
     tip.className = 'stem-tip';
-    tip.textContent = num + ' · ' + title;
+    if (eyebrow) {
+      var brow = document.createElement('span');
+      brow.className = 'stem-tip-eyebrow';
+      brow.textContent = eyebrow;
+      tip.appendChild(brow);
+    }
+    var name = document.createElement('span');
+    name.className = 'stem-tip-title';
+    name.textContent = title;
+    tip.appendChild(name);
     button.appendChild(tip);
 
     button.addEventListener('click', function () { go(n); });
