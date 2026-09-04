@@ -46,7 +46,50 @@ body{
 .stem-line{position:absolute;left:16px;top:96px;bottom:44px;width:2px;background:var(--rule)}
 .stem-fill{position:absolute;left:16px;top:96px;width:2px;background:var(--sky);height:0;transition:height .35s cubic-bezier(.4,0,.2,1)}
 .stem-bud{position:absolute;left:8px;top:56px;width:18px;height:26px;color:var(--sky)}
-.stem-node{position:absolute;left:12px;width:10px;height:10px;border-radius:50%;background:var(--navy-900);border:2px solid var(--sky);transition:top .35s cubic-bezier(.4,0,.2,1)}
+/* Ring around the current slide's dot — transparent so the dot shows inside. */
+.stem-node{position:absolute;left:11px;width:12px;height:12px;border-radius:50%;background:transparent;border:2px solid var(--sky);transition:top .35s cubic-bezier(.4,0,.2,1)}
+
+/* One dot per slide: hover or focus names it, click jumps to it. */
+.stem-marks{position:absolute;inset:0}
+.stem-mark{
+  position:absolute;
+  left:6px;                       /* 22px button centred on the 2px track at x=17 */
+  width:22px;height:22px;
+  transform:translateY(-50%);
+  padding:0;border:0;background:none;
+  cursor:pointer;
+  pointer-events:auto;            /* .stem itself is pointer-events:none */
+  display:flex;align-items:center;justify-content:center;
+}
+.stem-mark::before{
+  content:"";
+  width:6px;height:6px;border-radius:50%;
+  background:var(--muted);opacity:.45;
+  transition:transform .15s,background .15s,opacity .15s;
+}
+.stem-mark:hover::before,
+.stem-mark:focus-visible::before{background:var(--sky);opacity:1;transform:scale(1.6)}
+.stem-mark[aria-current="true"]::before{background:var(--sky);opacity:1}
+.stem-mark:focus-visible{outline:2px solid var(--sky);outline-offset:1px;border-radius:50%}
+
+.stem-tip{
+  position:absolute;
+  left:28px;top:50%;
+  transform:translateY(-50%);
+  white-space:nowrap;
+  max-width:44vw;overflow:hidden;text-overflow:ellipsis;
+  background:var(--navy-800);
+  border:1px solid var(--rule);
+  color:var(--ink);
+  font-family:var(--font-body);font-size:11.5px;line-height:1.2;
+  padding:6px 10px;border-radius:7px;
+  box-shadow:0 6px 18px rgba(0,0,0,.45);
+  opacity:0;visibility:hidden;
+  transition:opacity .12s ease;
+  pointer-events:none;
+}
+.stem-mark:hover .stem-tip,
+.stem-mark:focus-visible .stem-tip{opacity:1;visibility:visible}
 
 /* ---------- slide stage ---------------------------------------------- */
 .deck{position:relative}
@@ -371,15 +414,16 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 </head>
 <body>
 
-<div class="stem" aria-hidden="true">
-  <svg class="stem-bud" viewBox="0 0 18 26" fill="none">
+<div class="stem">
+  <svg class="stem-bud" viewBox="0 0 18 26" fill="none" aria-hidden="true">
     <path d="M9 25V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
     <path d="M9 13c-4 0-6.5-3-6.5-7C2.5 3 5 1.5 9 1.5S15.5 3 15.5 6c0 4-2.5 7-6.5 7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
     <path d="M9 13V4M5.4 12c0-4 .7-6.6 1.5-8M12.6 12c0-4-.7-6.6-1.5-8" stroke="currentColor" stroke-width="1.1" stroke-opacity=".55"/>
   </svg>
-  <div class="stem-line"></div>
-  <div class="stem-fill" id="stemFill"></div>
-  <div class="stem-node" id="stemNode"></div>
+  <div class="stem-line" aria-hidden="true"></div>
+  <div class="stem-fill" id="stemFill" aria-hidden="true"></div>
+  <div class="stem-node" id="stemNode" aria-hidden="true"></div>
+  <nav class="stem-marks" id="stemMarks" aria-label="Slides"></nav>
 </div>
 
 <main class="deck" id="deck">
@@ -1211,7 +1255,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 <!-- ============================== 18. CLOSE ============================ -->
 <section class="slide">
   <p class="eyebrow">Where it stands</p>
-  <h2>Built, deployed, and running for free</h2>
+  <h2>Built, deployed, and running for pennies</h2>
   <div class="grid g2" style="margin-bottom:20px">
     <div class="card">
       <span class="k">Done</span>
@@ -1471,6 +1515,28 @@ var slypnNet = (function () {
 
   function clamp(n) { return Math.max(0, Math.min(slides.length - 1, n)); }
 
+  // A dot on the rail per slide, labelled with that slide's heading, so the
+  // speaker can see where they are going and jump straight there.
+  var marks = slides.map(function (slide, n) {
+    var heading = slide.querySelector('h1, h2');
+    var title = heading ? heading.textContent.replace(/\s+/g, ' ').trim() : 'Slide ' + (n + 1);
+    var num = (n + 1 < 10 ? '0' : '') + (n + 1);
+
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'stem-mark';
+    button.setAttribute('aria-label', 'Slide ' + (n + 1) + ': ' + title);
+
+    var tip = document.createElement('span');
+    tip.className = 'stem-tip';
+    tip.textContent = num + ' · ' + title;
+    button.appendChild(tip);
+
+    button.addEventListener('click', function () { go(n); });
+    document.getElementById('stemMarks').appendChild(button);
+    return button;
+  });
+
   // `arrived` is true when the slide has just changed, false when we are only
   // relaying out (a resize). The entrance replays on arrival only — replaying
   // it on every render made the deck look like it had reloaded.
@@ -1489,12 +1555,17 @@ var slypnNet = (function () {
     }
     if (arrived) slypnNet.setActive(isHero ? current : null);
 
-    // Grow the stem in proportion to progress through the deck.
+    // Grow the stem in proportion to progress through the deck, and lay the
+    // per-slide dots out along the same track.
     var span = Math.max(1, slides.length - 1);
     var pct = i / span;
     var track = Math.max(0, window.innerHeight - 140);
     fill.style.height = (pct * track) + 'px';
-    node.style.top = (96 + pct * track - 4) + 'px';
+    node.style.top = (96 + pct * track - 6) + 'px';   // -6 centres the 12px ring
+    marks.forEach(function (button, n) {
+      button.style.top = (96 + (n / span) * track) + 'px';
+      button.setAttribute('aria-current', n === i ? 'true' : 'false');
+    });
 
     if (location.hash !== '#' + (i + 1)) {
       history.replaceState(null, '', '#' + (i + 1));
