@@ -1471,21 +1471,23 @@ var slypnNet = (function () {
 
   function clamp(n) { return Math.max(0, Math.min(slides.length - 1, n)); }
 
-  function render() {
+  // `arrived` is true when the slide has just changed, false when we are only
+  // relaying out (a resize). The entrance replays on arrival only — replaying
+  // it on every render made the deck look like it had reloaded.
+  function render(arrived) {
     slides.forEach(function (s, n) { s.hidden = n !== i; });
     counter.textContent = (i + 1) + ' / ' + slides.length;
 
-    // Replay the title slide's entrance whenever it becomes current. Toggling
-    // display alone does not reliably restart a CSS animation, so the class is
-    // removed, a reflow forced, and the class re-added.
     var current = slides[i];
     var isHero = current.classList.contains('hero-slide');
-    if (isHero) {
+    if (isHero && arrived) {
+      // Toggling display alone does not reliably restart a CSS animation, so
+      // the class is removed, a reflow forced, and the class re-added.
       current.classList.remove('animate');
       void current.offsetWidth;
       current.classList.add('animate');
     }
-    slypnNet.setActive(isHero ? current : null);
+    if (arrived) slypnNet.setActive(isHero ? current : null);
 
     // Grow the stem in proportion to progress through the deck.
     var span = Math.max(1, slides.length - 1);
@@ -1500,7 +1502,18 @@ var slypnNet = (function () {
     window.scrollTo(0, 0);
   }
 
-  function go(n) { i = clamp(n); render(); }
+  var shown = false;
+
+  function go(n) {
+    var next = clamp(n);
+    // Pressing on past the last slide (or back from the first) clamps to where
+    // we already are. Bail out rather than re-render, or the hero entrance
+    // restarts and it reads as a reload.
+    if (shown && next === i) return;
+    i = next;
+    shown = true;
+    render(true);
+  }
 
   document.getElementById('next').addEventListener('click', function () { go(i + 1); });
   document.getElementById('prev').addEventListener('click', function () { go(i - 1); });
@@ -1516,7 +1529,8 @@ var slypnNet = (function () {
     }
   });
 
-  window.addEventListener('resize', render);
+  // Relay out only — the constellation resizes itself via its own listener.
+  window.addEventListener('resize', function () { render(false); });
 
   // Deep link support: #7 opens slide 7.
   var start = parseInt((location.hash || '').slice(1), 10);
