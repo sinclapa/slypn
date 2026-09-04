@@ -211,6 +211,33 @@ h3{
 }
 .flist li b{color:var(--ink);font-weight:600}
 
+/* ---------- device screenshots ---------------------------------------- */
+.shots{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}
+.phones{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.shot{
+  border:1px solid var(--rule);
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--navy-800);
+}
+.shot img{display:block;width:100%;height:auto}
+/* A hint of browser chrome, so the two form factors read at a glance. */
+.shot--browser .bar{
+  display:flex;align-items:center;gap:5px;
+  padding:7px 10px;
+  border-bottom:1px solid var(--rule);
+}
+.shot--browser .bar i{width:8px;height:8px;border-radius:50%;background:var(--rule);display:block}
+.shot--phone{border-radius:18px;border-width:2px}
+.shot-cap{
+  font-family:var(--font-mono);
+  font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);
+  padding:7px 10px;
+  border-top:1px solid var(--rule);
+  text-align:center;
+}
+
 /* ---------- tables ---------------------------------------------------- */
 .twrap{overflow-x:auto;margin:0;border:1px solid var(--rule);border-radius:10px;background:var(--navy-800)}
 table{border-collapse:collapse;width:100%;min-width:640px;font-size:.85rem}
@@ -430,9 +457,53 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   </div>
 </section>
 
-<!-- ============================== 4. WORKFLOW DIAGRAM ================= -->
+<!-- ============================== 4. DEVICES =========================== -->
 <section class="slide">
   <p class="eyebrow">Key features · 03</p>
+  <h2>Mobile and desktop, one codebase</h2>
+  <p class="standfirst">
+    There is no separate mobile app and no <code>m.</code> subdomain — the same URL adapts to the screen
+    it lands on. Most of the community reaches the site from a phone.
+  </p>
+
+  <div class="shots">
+    <figure class="shot shot--browser">
+      <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
+      <img src="img/home-desktop.png" alt="The SLYPN home page on a desktop browser: a horizontal navigation bar and a two-column hero with the heading beside the logo.">
+      <figcaption class="shot-cap">Desktop — full nav, two-column hero</figcaption>
+    </figure>
+
+    <div class="phones">
+      <figure class="shot shot--phone">
+        <img src="img/home-mobile.png" alt="The same home page on a phone: the navigation collapsed to a hamburger button and the hero stacked into a single column above the logo.">
+        <figcaption class="shot-cap">Phone — stacked</figcaption>
+      </figure>
+      <figure class="shot shot--phone">
+        <img src="img/home-mobile-nav.png" alt="The phone home page with the navigation drawer open, overlaying the page content rather than pushing it aside.">
+        <figcaption class="shot-cap">Drawer open</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="grid g3" style="margin-top:18px">
+    <div class="card">
+      <span class="k">Layout</span>
+      <p><strong style="color:var(--ink)">77 responsive rules</strong> across 21 components. Columns collapse, the hero stacks, and the logo moves below the text rather than shrinking to nothing.</p>
+    </div>
+    <div class="card">
+      <span class="k">Navigation</span>
+      <p>Two independent drawers — pages and account. They <strong style="color:var(--ink)">overlay</strong> the page rather than pushing it, and close on <code>Escape</code> or a tap outside. Each toggle reports <code>aria-expanded</code>.</p>
+    </div>
+    <div class="card">
+      <span class="k">Staying put</span>
+      <p>Images declare their dimensions, so nothing jumps while loading. Events and Articles keep filters and scroll position on the way back from a detail page.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== 5. WORKFLOW DIAGRAM ================= -->
+<section class="slide">
+  <p class="eyebrow">Key features · 04</p>
   <h2>The editorial workflow</h2>
   <p class="standfirst">Publishing is a state machine, and each transition names who is allowed to trigger it.</p>
   <figure>
