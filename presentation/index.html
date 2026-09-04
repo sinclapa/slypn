@@ -400,7 +400,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   <p class="standfirst rise rise-4" style="max-width:56ch">
     Built as a full production system on Azure: a Vue single-page app, a .NET&nbsp;8
     serverless API, invite-only identity, an in-house editorial workflow, and
-    end-to-end observability. Running cost to date: <strong style="color:var(--ok)">£0.00</strong>.
+    end-to-end observability. Running cost: <strong style="color:var(--ok)">18p a month</strong>.
   </p>
   <div class="grid g4" style="margin-top:12px;max-width:860px">
     <div class="stat"><span class="n">3</span><span class="l">months, May–Aug 2026</span></div>
@@ -1111,11 +1111,12 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 <!-- ============================== 16. COSTS ============================ -->
 <section class="slide">
   <p class="eyebrow">Running costs · what we actually pay</p>
-  <h2>Today: nothing</h2>
+  <h2>Today: 18p a month</h2>
   <p class="standfirst">
-    Azure's own consumption records for the last 32 days list five active meters for SLYPN —
-    blob storage, table storage, bandwidth, functions and identity — at
-    <strong style="color:var(--ok)">£0.00</strong> pretax. Every component sits inside a free allowance.
+    Azure Cost Management, for the 30 days to 4 September 2026:
+    <strong style="color:var(--ok)">£0.176</strong> across both SLYPN resource groups —
+    <strong>£0.12</strong> for the identity tenant and <strong>£0.06</strong> for hosting and storage.
+    That is roughly <strong>£2.15 a year</strong>. Everything else sits inside a free allowance.
   </p>
 
   <h3 style="margin:6px 0 14px;color:var(--muted);font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase">Measured usage against each free allowance</h3>
@@ -1130,7 +1131,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
       <div class="meter-track"><div class="meter-bar" style="width:1.5%"></div></div>
     </div>
     <div class="meter">
-      <div class="meter-top"><span>Identity — monthly active users</span><span class="cap">tens of 50,000 · &lt;0.1%</span></div>
+      <div class="meter-top"><span>Identity — monthly active users</span><span class="cap">tens of 50,000 · yet 12p of the 18p</span></div>
       <div class="meter-track"><div class="meter-bar" style="width:1.5%"></div></div>
     </div>
     <div class="meter">
@@ -1147,6 +1148,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
     Storage transactions over the same 30 days: <strong>55,677</strong>, of which the majority are automated test
     and deployment traffic rather than visitors. <strong>There is no live visitor telemetry yet</strong> — the site is
     deployed and serving, but has not been promoted, so every figure on the next slide beyond "today" is a projection.
+    The subscription is Pay-As-You-Go with no spending limit, so nothing here is being absorbed by credit.
   </p>
 </section>
 
@@ -1160,48 +1162,49 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   </p>
   <div class="twrap">
     <table>
-      <caption>Bandwidth assumes every visit is a first visit, which overstates real usage.</caption>
+      <caption>Bandwidth assumes every visit is a first visit, which overstates real usage. Grafana column is the cost of <em>keeping</em> frontend telemetry.</caption>
       <thead>
         <tr>
           <th>Scenario</th>
           <th class="num">New visits / month</th>
-          <th class="num">Bandwidth</th>
-          <th class="num">% of free cap</th>
+          <th class="num">Bandwidth of 100 GB</th>
+          <th class="num">Azure</th>
+          <th class="num">Grafana Cloud</th>
           <th>Status</th>
-          <th class="num">Est. cost / month</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td>Today</td><td class="num">&lt;100</td><td class="num">0.04 GB</td><td class="num">0.04%</td><td><span class="pill pill-ok">Free</span></td><td class="num">£0.00</td></tr>
-        <tr><td>Local community, steady</td><td class="num">2,000</td><td class="num">0.7 GB</td><td class="num">0.7%</td><td><span class="pill pill-ok">Free</span></td><td class="num">£0.00</td></tr>
-        <tr><td>Regional reach</td><td class="num">20,000</td><td class="num">6.8 GB</td><td class="num">6.8%</td><td><span class="pill pill-ok">Free</span></td><td class="num">£0.00</td></tr>
-        <tr><td>Press or campaign spike</td><td class="num">100,000</td><td class="num">34 GB</td><td class="num">34%</td><td><span class="pill pill-warn">Watch</span></td><td class="num">£0 Azure</td></tr>
-        <tr><td>Sustained national</td><td class="num">300,000</td><td class="num">101 GB</td><td class="num">101%</td><td><span class="pill pill-over">Over</span></td><td class="num">≈ £7–25</td></tr>
+        <tr><td>Today <span class="pill pill-ok">measured</span></td><td class="num">&lt;100</td><td class="num">0.04 GB</td><td class="num">£0.18</td><td class="num">£0</td><td><span class="pill pill-ok">Free</span></td></tr>
+        <tr><td>Local community, steady</td><td class="num">2,000</td><td class="num">0.7 GB</td><td class="num">≈ £0.18</td><td class="num">£0</td><td><span class="pill pill-ok">Free</span></td></tr>
+        <tr><td>Regional reach</td><td class="num">20,000</td><td class="num">6.8 GB</td><td class="num">≈ £0.20</td><td class="num">£0</td><td><span class="pill pill-ok">Free</span></td></tr>
+        <tr><td>Press or campaign spike</td><td class="num">100,000</td><td class="num">34 GB</td><td class="num">≈ £0.30</td><td class="num">≈ £45</td><td><span class="pill pill-warn">Watch</span></td></tr>
+        <tr><td>Sustained national</td><td class="num">300,000</td><td class="num">101 GB</td><td class="num">≈ £7–25</td><td class="num">≈ £165</td><td><span class="pill pill-over">Over</span></td></tr>
       </tbody>
     </table>
   </div>
   <div class="grid g3" style="margin-top:14px">
     <div class="card">
-      <span class="k">Breaks first</span>
+      <span class="k">Breaks first — and hardest</span>
       <h3>Monitoring, not Azure</h3>
-      <p>Grafana Cloud's 50,000 free sessions a month is reached at roughly half the traffic that troubles the Azure bandwidth cap — and it degrades to lost telemetry, not a broken site.</p>
+      <p>Grafana's free 50,000 sessions run out at roughly a sixth of the traffic that troubles Azure. Past it, Pro is <strong style="color:var(--ink)">$19/month</strong> including 50k, then <strong style="color:var(--ink)">$0.75 per 1,000</strong> — about £45/month at 100k sessions. Staying free instead simply stops collecting.</p>
     </div>
     <div class="card">
       <span class="k">Breaks second</span>
       <h3>Bandwidth, at ~290,000 visits</h3>
-      <p>100 GB divided by 354 KB. Beyond that, the Standard tier is about <strong style="color:var(--ink)">£7 per month</strong> plus roughly 16p per additional GB — and buys an availability guarantee too.</p>
+      <p>100 GB divided by 354 KB. Beyond that the Standard tier is about <strong style="color:var(--ink)">£7 per month</strong> plus roughly 16p per additional GB — and buys an availability guarantee too.</p>
     </div>
     <div class="card">
       <span class="k">Never the issue</span>
       <h3>Storage and identity</h3>
-      <p>A hundredfold increase in content is around 1 GB, which costs pennies. Members are invited individually — 50,000 free monthly users will not be approached.</p>
+      <p>A hundredfold increase in content is around 1 GB, which costs pennies. Members are invited individually, so the 50,000 free monthly users will not be approached — though identity is already the larger half of today's 18p.</p>
     </div>
   </div>
   <p class="note">
-    <strong>Basis:</strong> volumes are measured from Azure Monitor and the live site; the £0.00 is from Azure's consumption
-    records. Costs beyond the free tiers are <strong>approximate UK South list prices as of September 2026, converted from
-    US dollars — indicative, not a quote</strong>. Confirm against the Azure pricing calculator before budgeting.
-    Realistic demand for a South London community group sits roughly two orders of magnitude below the first ceiling.
+    <strong>Basis:</strong> the £0.18 is Azure Cost Management actuals for the 30 days to 4 Sep 2026; volumes are from
+    Azure Monitor and the live site; Grafana prices are from grafana.com/pricing. Everything beyond "today" is a
+    <strong>projection at list prices, converted from US dollars — indicative, not a quote</strong>. Confirm against the
+    Azure pricing calculator before budgeting. Realistic demand for a South London community group sits roughly two
+    orders of magnitude below the first ceiling.
   </p>
 </section>
 
@@ -1232,7 +1235,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
     </div>
   </div>
   <div class="grid g4">
-    <div class="stat accent"><span class="n">£0.00</span><span class="l">billed to date</span></div>
+    <div class="stat accent"><span class="n">18p</span><span class="l">a month, measured — about £2 a year</span></div>
     <div class="stat"><span class="n">~290k</span><span class="l">monthly visits before any cost</span></div>
     <div class="stat"><span class="n">~4 min</span><span class="l">from merge to live</span></div>
     <div class="stat"><span class="n">0</span><span class="l">servers to maintain</span></div>
@@ -1254,7 +1257,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   </p>
   <p class="standfirst rise rise-4" style="max-width:54ch">
     Built for a community of working-age people living with Parkinson's in South London,
-    and running on infrastructure that costs the group nothing.
+    and running on infrastructure that costs about £2 a year.
   </p>
   <div class="grid g3" style="margin-top:12px;max-width:700px">
     <div class="stat"><span class="n" style="font-size:1rem;font-family:var(--font-mono);font-weight:500">The site</span><span class="l">slypn.cookingcode.com</span></div>

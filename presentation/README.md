@@ -27,7 +27,10 @@ Slides are deep-linkable: `index.html#12` opens slide 12.
 The figures in the deck were measured on 2026-09-04, not estimated:
 
 - **Usage** — Azure Monitor metrics on the storage account (capacity, transactions, egress).
-- **Cost** — `az consumption usage list` over the preceding 32 days.
+- **Cost** — the Azure **Cost Management** query API, grouped by resource group,
+  for the 30 days to 2026-09-04. Do **not** use `az consumption usage list` on this
+  subscription: it returns records whose `pretaxCost` is the string `"None"`, which
+  is easily mistaken for a measured zero.
 - **Page weight** — the live site's assets, fetched with compression on.
 - **Content volumes** — the public API.
 - **Code and tests** — counted from the repository.
