@@ -38,9 +38,11 @@ The figures in the deck were measured on 2026-09-04, not estimated:
 
 The technology logos on the closing slide are inlined SVG paths from
 [Simple Icons](https://simpleicons.org) (CC0), except Azure and Playwright, which
-come from [Devicon](https://devicon.dev) (MIT). They are rendered monochrome and
-used to identify the technologies — nominative use. Each remains the trademark of
-its owner, and no endorsement or affiliation is implied.
+come from [Devicon](https://devicon.dev) (MIT). Each is shown in its own brand
+colour, on a light tile — without one, .NET's purple and OpenTelemetry's black
+would disappear into the deck's navy ground. They identify the technologies used;
+each remains the trademark of its owner, and no endorsement or affiliation is
+implied.
 
 Cost projections beyond the free tiers are approximate list prices and are labelled as such
 in the deck. If you revise the numbers, update the basis note on the costs slide too.
