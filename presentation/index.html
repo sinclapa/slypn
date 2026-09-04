@@ -51,6 +51,7 @@ body{
 /* ---------- slide stage ---------------------------------------------- */
 .deck{position:relative}
 .slide{
+  position:relative;
   min-height:100vh;
   display:flex;
   flex-direction:column;
@@ -60,6 +61,58 @@ body{
   margin:0 auto;
 }
 .slide[hidden]{display:none}
+
+/* ---------- title slide -----------------------------------------------
+   No illustration: the motion is a slow ambient wash behind the words plus
+   a staggered entrance. Both are deliberately restrained — this is a title
+   card, not a splash screen. */
+.title-art{
+  position:absolute;
+  inset:0;
+  overflow:hidden;
+  pointer-events:none;
+  z-index:0;
+}
+.bloom{
+  position:absolute;
+  right:-12%;top:16%;
+  width:64%;aspect-ratio:1;
+  background:radial-gradient(circle,rgba(30,144,255,.17) 0%,rgba(30,144,255,.05) 46%,transparent 70%);
+  animation:bloomBreathe 22s ease-in-out infinite;
+}
+/* Drifting node-link constellation — SLYPN is a network, so the title card
+   draws one. Masked so it never competes with the text on the left. */
+#netCanvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  display:block;
+  -webkit-mask-image:linear-gradient(96deg,transparent 33%,rgba(0,0,0,.45) 57%,#000 80%);
+  mask-image:linear-gradient(96deg,transparent 33%,rgba(0,0,0,.45) 57%,#000 80%);
+}
+
+/* Must exclude .title-art — it is absolutely positioned, and this rule
+   would otherwise override that at equal specificity and drop it back
+   into the flex flow, stretching the slide past the viewport. */
+.title-slide > :not(.title-art){position:relative;z-index:1}
+
+/* The entrance runs only under .animate, which render() re-applies every time
+   slide 1 becomes current — toggling display alone does not reliably restart
+   a CSS animation, so the replay is driven explicitly. */
+.title-slide.animate .rise{animation:riseIn .82s cubic-bezier(.22,.8,.3,1) both}
+.title-slide.animate .rise-1{animation-delay:.05s}
+.title-slide.animate .rise-2{animation-delay:.16s}
+.title-slide.animate .rise-3{animation-delay:.3s}
+.title-slide.animate .rise-4{animation-delay:.42s}
+.title-slide.animate .stat{animation:riseIn .7s cubic-bezier(.22,.8,.3,1) both}
+.title-slide.animate .stat:nth-child(1){animation-delay:.56s}
+.title-slide.animate .stat:nth-child(2){animation-delay:.64s}
+.title-slide.animate .stat:nth-child(3){animation-delay:.72s}
+.title-slide.animate .stat:nth-child(4){animation-delay:.80s}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes bloomBreathe{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
+
+@media (max-width:1080px){.title-art{display:none}}
 
 .eyebrow{
   font-family:var(--font-mono);
@@ -244,14 +297,18 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 @media (prefers-reduced-motion:reduce){
   .stem-fill,.stem-node{transition:none}
   *{scroll-behavior:auto}
+  /* Land on the finished state rather than animating into it. */
+  .title-slide.animate .rise,.title-slide.animate .stat{animation:none;opacity:1;transform:none}
+  .bloom{animation:none;opacity:.7}
 }
 
 /* ---------- print / PDF export ---------------------------------------- */
 @media print{
   :root{--navy-900:#fff;--navy-800:#f6f8fb;--ink:#0C1929;--muted:#4a5f75;--rule:#c9d6e4}
   body{background:#fff;color:#0C1929}
-  .stem,.chrome,.hint{display:none !important}
+  .stem,.chrome,.hint,.title-art{display:none !important}
   .slide{display:flex !important;min-height:auto;page-break-after:always;padding:28px 32px;max-width:none}
+  .title-slide.animate .rise,.title-slide.animate .stat{animation:none !important;opacity:1 !important;transform:none !important}
   .slide:last-child{page-break-after:auto}
   .dg{max-height:none}
   h1{font-size:2.2rem}h2{font-size:1.5rem}
@@ -274,14 +331,19 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 <main class="deck" id="deck">
 
 <!-- ============================== 1. TITLE ============================ -->
-<section class="slide">
-  <p class="eyebrow">Technical review · September 2026</p>
-  <h1>SLYPN</h1>
-  <p class="standfirst" style="font-size:clamp(1.05rem,2vw,1.4rem);color:var(--ink);max-width:56ch;margin-bottom:14px">
+<section class="slide title-slide">
+  <div class="title-art" aria-hidden="true">
+    <div class="bloom"></div>
+    <canvas id="netCanvas"></canvas>
+  </div>
+
+  <p class="eyebrow rise rise-1">Technical review · September 2026</p>
+  <h1 class="rise rise-2">SLYPN</h1>
+  <p class="standfirst rise rise-3" style="font-size:clamp(1.05rem,2vw,1.4rem);color:var(--ink);max-width:52ch;margin-bottom:14px">
     The South London Younger Parkinson's Network website — a community site
     for working-age people living with Parkinson's.
   </p>
-  <p class="standfirst">
+  <p class="standfirst rise rise-4" style="max-width:56ch">
     Built as a full production system on Azure: a Vue single-page app, a .NET&nbsp;8
     serverless API, invite-only identity, an in-house editorial workflow, and
     end-to-end observability. Running cost to date: <strong style="color:var(--ok)">£0.00</strong>.
@@ -1083,6 +1145,134 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 </nav>
 
 <script>
+/* ---------------------------------------------------------------------
+   Title-card constellation. Nodes drift slowly and link to their nearest
+   neighbours; a few larger hubs are drawn as hollow hexagons. Geometry
+   rather than dots, so it reads as a structure instead of a particle field.
+   The loop only runs while slide 1 is on screen.
+   --------------------------------------------------------------------- */
+var slypnNet = (function () {
+  var canvas = document.getElementById('netCanvas');
+  if (!canvas || !canvas.getContext) return { setActive: function () {} };
+
+  var ctx = canvas.getContext('2d');
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var LINK = 132;            // px within which two nodes are joined
+  var nodes = [];
+  var w = 0, h = 0, raf = 0, active = false;
+
+  function size() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var r = canvas.getBoundingClientRect();
+    w = r.width; h = r.height;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function build() {
+    var target = Math.max(20, Math.min(78, Math.round((w * h) / 15000)));
+    nodes = [];
+    for (var n = 0; n < target; n++) {
+      nodes.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.16,
+        vy: (Math.random() - 0.5) * 0.16,
+        hub: Math.random() < 0.16,
+        // Hubs turn slowly so the hexagons aren't all aligned.
+        a: Math.random() * Math.PI,
+        va: (Math.random() - 0.5) * 0.0035
+      });
+    }
+  }
+
+  function poly(x, y, r, sides, rot) {
+    ctx.beginPath();
+    for (var s = 0; s < sides; s++) {
+      var t = rot + (s * 2 * Math.PI) / sides;
+      var px = x + Math.cos(t) * r, py = y + Math.sin(t) * r;
+      if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+
+    // Links first, so nodes sit on top of them.
+    ctx.lineWidth = 1;
+    for (var i = 0; i < nodes.length; i++) {
+      for (var j = i + 1; j < nodes.length; j++) {
+        var dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= LINK) continue;
+        ctx.strokeStyle = 'rgba(30,144,255,' + ((1 - d / LINK) * 0.30).toFixed(3) + ')';
+        ctx.beginPath();
+        ctx.moveTo(nodes[i].x, nodes[i].y);
+        ctx.lineTo(nodes[j].x, nodes[j].y);
+        ctx.stroke();
+      }
+    }
+
+    for (var k = 0; k < nodes.length; k++) {
+      var p = nodes[k];
+      if (p.hub) {
+        ctx.strokeStyle = 'rgba(30,144,255,.55)';
+        ctx.lineWidth = 1.3;
+        poly(p.x, p.y, 7, 6, p.a);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = 'rgba(120,190,255,.5)';
+        poly(p.x, p.y, 2.6, 4, p.a);   // small diamond
+        ctx.fill();
+      }
+    }
+  }
+
+  function step() {
+    for (var k = 0; k < nodes.length; k++) {
+      var p = nodes[k];
+      p.x += p.vx; p.y += p.vy; p.a += p.va;
+      if (p.x < 0 || p.x > w) { p.vx *= -1; p.x = Math.max(0, Math.min(w, p.x)); }
+      if (p.y < 0 || p.y > h) { p.vy *= -1; p.y = Math.max(0, Math.min(h, p.y)); }
+    }
+    draw();
+    raf = requestAnimationFrame(step);
+  }
+
+  function start() {
+    if (raf || !w || !h) return;
+    if (reduced) { draw(); return; }     // static frame, no motion
+    raf = requestAnimationFrame(step);
+  }
+  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+
+  function reset() {
+    size();
+    if (!w || !h) return;
+    build();
+    draw();
+  }
+
+  window.addEventListener('resize', function () {
+    if (!active) return;
+    stop(); reset(); start();
+  });
+
+  return {
+    setActive: function (on) {
+      active = on;
+      if (on) {
+        // The slide has only just been unhidden, so measure on the next frame.
+        requestAnimationFrame(function () { reset(); start(); });
+      } else {
+        stop();
+      }
+    }
+  };
+})();
+
 (function () {
   var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
   var counter = document.getElementById('counter');
@@ -1095,6 +1285,18 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   function render() {
     slides.forEach(function (s, n) { s.hidden = n !== i; });
     counter.textContent = (i + 1) + ' / ' + slides.length;
+
+    // Replay the title slide's entrance whenever it becomes current. Toggling
+    // display alone does not reliably restart a CSS animation, so the class is
+    // removed, a reflow forced, and the class re-added.
+    var current = slides[i];
+    var isTitle = current.classList.contains('title-slide');
+    if (isTitle) {
+      current.classList.remove('animate');
+      void current.offsetWidth;
+      current.classList.add('animate');
+    }
+    slypnNet.setActive(isTitle);
 
     // Grow the stem in proportion to progress through the deck.
     var span = Math.max(1, slides.length - 1);
