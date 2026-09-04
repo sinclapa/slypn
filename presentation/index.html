@@ -464,7 +464,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   // light gets a flash of the dark deck on every load, because :root is dark.
   try {
     var t = localStorage.getItem('slypn-deck-theme');
-    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
   } catch (e) { /* private window or storage blocked — keep the dark default */ }
 </script>
 </head>
@@ -1452,6 +1452,14 @@ var slypnNet = (function () {
   // constellation follows the theme. Held as bare "R,G,B" so each mark can
   // compose its own alpha.
   var lineRgb = '30,144,255', nodeRgb = '120,190,255';
+
+  // Node placement is purely decorative, but Math.random() is flagged as a
+  // weak PRNG by static analysis. Taking the bytes from crypto costs nothing
+  // here and keeps the finding out of the report. getRandomValues needs no
+  // secure context, so this works over file:// too.
+  var randomPool = new Uint32Array(1);
+  function rnd() { return crypto.getRandomValues(randomPool)[0] / 4294967296; }
+
   function readPalette() {
     var css = getComputedStyle(document.documentElement);
     lineRgb = css.getPropertyValue('--net-rgb').trim() || lineRgb;
@@ -1477,14 +1485,14 @@ var slypnNet = (function () {
       nodes = [];
       for (var n = 0; n < target; n++) {
         nodes.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.16,
-          vy: (Math.random() - 0.5) * 0.16,
-          hub: Math.random() < 0.16,
+          x: rnd() * w,
+          y: rnd() * h,
+          vx: (rnd() - 0.5) * 0.16,
+          vy: (rnd() - 0.5) * 0.16,
+          hub: rnd() < 0.16,
           // Hubs turn slowly so the hexagons aren't all aligned.
-          a: Math.random() * Math.PI,
-          va: (Math.random() - 0.5) * 0.0035
+          a: rnd() * Math.PI,
+          va: (rnd() - 0.5) * 0.0035
         });
       }
     }
@@ -1507,7 +1515,7 @@ var slypnNet = (function () {
       for (var i = 0; i < nodes.length; i++) {
         for (var j = i + 1; j < nodes.length; j++) {
           var dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
-          var d = Math.sqrt(dx * dx + dy * dy);
+          var d = Math.hypot(dx, dy);
           if (d >= LINK) continue;
           ctx.strokeStyle = 'rgba(' + lineRgb + ',' + ((1 - d / LINK) * 0.30).toFixed(3) + ')';
           ctx.beginPath();
@@ -1517,8 +1525,7 @@ var slypnNet = (function () {
         }
       }
 
-      for (var k = 0; k < nodes.length; k++) {
-        var p = nodes[k];
+      for (const p of nodes) {
         if (p.hub) {
           ctx.strokeStyle = 'rgba(' + lineRgb + ',.55)';
           ctx.lineWidth = 1.3;
@@ -1533,8 +1540,7 @@ var slypnNet = (function () {
     }
 
     function step() {
-      for (var k = 0; k < nodes.length; k++) {
-        var p = nodes[k];
+      for (const p of nodes) {
         p.x += p.vx; p.y += p.vy; p.a += p.va;
         if (p.x < 0 || p.x > w) { p.vx *= -1; p.x = Math.max(0, Math.min(w, p.x)); }
         if (p.y < 0 || p.y > h) { p.vy *= -1; p.y = Math.max(0, Math.min(h, p.y)); }
@@ -1560,8 +1566,8 @@ var slypnNet = (function () {
   }
 
   var canvases = document.querySelectorAll('.net-canvas');
-  for (var c = 0; c < canvases.length; c++) {
-    if (canvases[c].getContext) fields.push(makeField(canvases[c]));
+  for (const canvas of canvases) {
+    if (canvas.getContext) fields.push(makeField(canvas));
   }
 
   var live = null;
@@ -1571,9 +1577,9 @@ var slypnNet = (function () {
     // Runs the field belonging to `slide`, if it has one, and stops the rest.
     setActive: function (slide) {
       live = null;
-      for (var i = 0; i < fields.length; i++) {
-        if (slide && slide.contains(fields[i].canvas)) live = fields[i];
-        else fields[i].stop();
+      for (const field of fields) {
+        if (slide && slide.contains(field.canvas)) live = field;
+        else field.stop();
       }
       if (!live) return;
       // The slide has only just been unhidden, so measure on the next frame.
@@ -1600,8 +1606,9 @@ var slypnNet = (function () {
 
   // A dot on the rail per slide, labelled with that slide's heading, so the
   // speaker can see where they are going and jump straight there.
+  function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : ''; }
+
   var marks = slides.map(function (slide, n) {
-    var clean = function (el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : ''; };
     var title = clean(slide.querySelector('h1, h2')) || 'Slide ' + (n + 1);
     var eyebrow = clean(slide.querySelector('.eyebrow'));
 
@@ -1644,7 +1651,7 @@ var slypnNet = (function () {
       // Toggling display alone does not reliably restart a CSS animation, so
       // the class is removed, a reflow forced, and the class re-added.
       current.classList.remove('animate');
-      void current.offsetWidth;
+      current.getBoundingClientRect();   // force reflow so the removal lands
       current.classList.add('animate');
     }
     if (arrived) slypnNet.setActive(isHero ? current : null);
@@ -1690,8 +1697,7 @@ var slypnNet = (function () {
 
   function applyTheme(name) {
     var root = document.documentElement;
-    if (name === 'light') root.setAttribute('data-theme', 'light');
-    else root.setAttribute('data-theme', 'dark');
+    root.dataset.theme = name === 'light' ? 'light' : 'dark';
     themeBtn.setAttribute('aria-label',
       name === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
     // Repaint rather than rebuild, so the constellation keeps its positions.
@@ -1700,7 +1706,7 @@ var slypnNet = (function () {
   }
 
   function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
   }
   function toggleTheme() { applyTheme(currentTheme() === 'light' ? 'dark' : 'light'); }
 
@@ -1724,8 +1730,8 @@ var slypnNet = (function () {
   window.addEventListener('resize', function () { render(false); });
 
   // Deep link support: #7 opens slide 7.
-  var start = parseInt((location.hash || '').slice(1), 10);
-  go(isNaN(start) ? 0 : start - 1);
+  var start = Number.parseInt((location.hash || '').slice(1), 10);
+  go(Number.isNaN(start) ? 0 : start - 1);
 })();
 </script>
 
