@@ -23,9 +23,38 @@
   --ok:#3DD68C;
   --warn:#FFB454;
   --over:#FF6B6B;
+  --shadow:0 6px 18px rgba(0,0,0,.45);
+  /* Bare R,G,B so the canvas can compose its own alphas against them. */
+  --net-rgb:30,144,255;
+  --net-node-rgb:120,190,255;
+  --bloom-a:.17;
   --font-display:'Montserrat','Segoe UI',system-ui,sans-serif;
   --font-body:'Inter','Segoe UI',system-ui,sans-serif;
   --font-mono:'JetBrains Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+}
+
+/* Light theme — opt-in only. The deck stays dark by default for everyone, so
+   prefers-color-scheme is deliberately not consulted; a viewer's explicit
+   choice is what stamps data-theme. Ground is a soft blue-grey rather than
+   white, with cards lifting to white on top of it.
+   The accent darkens to #1266C7: the dark theme's #1E90FF only reaches ~3:1
+   on this ground, and it carries small text (eyebrows, diagram labels). */
+:root[data-theme="light"]{
+  --navy-900:#F5F8FC;      /* page ground */
+  --navy-800:#FFFFFF;      /* raised surfaces — cards, tables, tooltips */
+  --navy-700:#DCE6F2;
+  --sky:#1266C7;
+  --sky-soft:rgba(18,102,199,.10);
+  --ink:#0C1929;
+  --muted:#4A5F75;
+  --rule:rgba(12,25,41,.14);
+  --ok:#0E7A45;
+  --warn:#8A5200;
+  --over:#C0392B;
+  --shadow:0 6px 18px rgba(12,25,41,.14);
+  --net-rgb:18,102,199;
+  --net-node-rgb:26,86,148;
+  --bloom-a:.10;
 }
 
 *{box-sizing:border-box}
@@ -82,7 +111,7 @@ body{
   background:var(--navy-800);
   border:1px solid var(--rule);
   padding:7px 11px;border-radius:8px;
-  box-shadow:0 6px 18px rgba(0,0,0,.45);
+  box-shadow:var(--shadow);
   opacity:0;visibility:hidden;
   transition:opacity .12s ease;
   pointer-events:none;
@@ -131,7 +160,7 @@ body{
   position:absolute;
   right:-12%;top:16%;
   width:64%;aspect-ratio:1;
-  background:radial-gradient(circle,rgba(30,144,255,.17) 0%,rgba(30,144,255,.05) 46%,transparent 70%);
+  background:radial-gradient(circle,rgba(var(--net-rgb),var(--bloom-a)) 0%,rgba(var(--net-rgb),calc(var(--bloom-a) * .3)) 46%,transparent 70%);
   animation:bloomBreathe 22s ease-in-out infinite;
 }
 /* Drifting node-link constellation — SLYPN is a network, so the title card
@@ -360,6 +389,8 @@ code{color:var(--ink);background:rgba(143,169,196,.13);padding:1px 5px;border-ra
 /* ---------- diagrams -------------------------------------------------- */
 figure{margin:0}
 .dg{width:100%;height:auto;max-height:62vh;color:var(--ink);display:block}
+.dg marker path{fill:var(--muted);fill-opacity:.75}
+.dg marker.mk-a path{fill:var(--sky);fill-opacity:1}
 .dg .box{fill:var(--navy-800);stroke:var(--muted);stroke-opacity:.4;stroke-width:1.2}
 .dg .box-a{fill:var(--sky-soft);stroke:var(--sky);stroke-width:1.4}
 .dg .box-d{fill:none;stroke:var(--muted);stroke-opacity:.4;stroke-width:1.2;stroke-dasharray:5 4}
@@ -385,6 +416,12 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   border-radius:7px;width:32px;height:30px;cursor:pointer;line-height:1;
 }
 .chrome button:hover{border-color:var(--sky);color:var(--sky)}
+/* Theme button shows the theme you would switch TO: moon while light, sun while dark. */
+#theme{display:inline-flex;align-items:center;justify-content:center}
+#theme svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
+#theme .icon-moon{fill:currentColor;stroke:none}
+:root[data-theme="light"] #theme .icon-sun{display:none}
+:root:not([data-theme="light"]) #theme .icon-moon{display:none}
 .chrome button:focus-visible,.stem a:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
 .counter{font-variant-numeric:tabular-nums;min-width:56px;text-align:right}
 .hint{
@@ -412,7 +449,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 
 /* ---------- print / PDF export ---------------------------------------- */
 @media print{
-  :root{--navy-900:#fff;--navy-800:#f6f8fb;--ink:#0C1929;--muted:#4a5f75;--rule:#c9d6e4}
+  :root,:root[data-theme]{--navy-900:#fff;--navy-800:#f6f8fb;--ink:#0C1929;--muted:#4a5f75;--rule:#c9d6e4;--shadow:none}
   body{background:#fff;color:#0C1929}
   .stem,.chrome,.hint,.title-art{display:none !important}
   .slide{display:flex !important;min-height:auto;page-break-after:always;padding:28px 32px;max-width:none}
@@ -422,6 +459,14 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   h1{font-size:2.2rem}h2{font-size:1.5rem}
 }
 </style>
+<script>
+  // Stamp the saved theme before first paint. Without this, anyone who chose
+  // light gets a flash of the dark deck on every load, because :root is dark.
+  try {
+    var t = localStorage.getItem('slypn-deck-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* private window or storage blocked — keep the dark default */ }
+</script>
 </head>
 <body>
 
@@ -592,10 +637,10 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
     <svg class="dg" viewBox="0 0 900 420" role="img" aria-label="State machine: a draft is submitted for review, an admin publishes it or returns it with feedback, the author may withdraw it, and published items can be edited into a new revision or flagged for deletion pending admin approval.">
       <defs>
         <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
-        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        <marker id="a2" class="mk-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
       </defs>
 
@@ -685,7 +730,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
     <svg class="dg" viewBox="0 0 940 420" role="img" aria-label="Context diagram: visitors and members use the SLYPN site, which delegates sign-in to Entra External ID, sends telemetry to Grafana Cloud, and is built and deployed by GitHub Actions.">
       <defs>
         <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
       </defs>
 
@@ -748,10 +793,10 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
     <svg class="dg" viewBox="0 0 960 410" role="img" aria-label="Container diagram: the Vue single-page app is served by Azure Static Web Apps, which routes API calls to managed .NET 8 Functions; those read metadata from Table Storage and bodies and media from Blob Storage. The browser signs in against Entra External ID; browser and API both send telemetry to Grafana Cloud.">
       <defs>
         <marker id="c1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
-        <marker id="c2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        <marker id="c2" class="mk-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
       </defs>
 
@@ -817,10 +862,10 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
     <svg class="dg" viewBox="0 0 970 470" role="img" aria-label="Request path: the SPA sends its token in a custom header because the gateway overwrites Authorization; middleware validates the signature against the identity provider, then loads the caller's roles from the members table rather than trusting the roles in the token; the role gate runs, and the handler reads the row from Table Storage and its body from Blob Storage.">
       <defs>
         <marker id="d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
-        <marker id="d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        <marker id="d2" class="mk-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
       </defs>
 
@@ -990,10 +1035,10 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
     <svg class="dg" viewBox="0 0 980 600" role="img" aria-label="Pipeline diagram: on a pull request, continuous integration and a preview deployment run in parallel. On merge to main, a push alone never deploys; production deploys only after continuous integration completes successfully. Closing a pull request tears its preview down, and a nightly job reaps orphaned previews.">
       <defs>
         <marker id="e1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#8FA9C4" fill-opacity=".75"/>
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
-        <marker id="e2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0 0 10 5 0 10z" fill="#1E90FF"/>
+        <marker id="e2" class="mk-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z"/>
         </marker>
       </defs>
 
@@ -1375,8 +1420,17 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
 
 </main>
 
-<div class="hint">← → or space to move · P to print</div>
+<div class="hint">← → or space to move · T theme · P print</div>
 <nav class="chrome" aria-label="Slide navigation">
+  <button id="theme" title="Switch theme (T)" aria-label="Switch to light theme">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path class="icon-moon" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>
+      <g class="icon-sun">
+        <circle cx="12" cy="12" r="4.2"/>
+        <path d="M12 2.4v2.6M12 19v2.6M2.4 12h2.6M19 12h2.6M5.2 5.2l1.9 1.9M16.9 16.9l1.9 1.9M18.8 5.2l-1.9 1.9M7.1 16.9l-1.9 1.9"/>
+      </g>
+    </svg>
+  </button>
   <button id="prev" title="Previous slide (←)" aria-label="Previous slide">‹</button>
   <button id="next" title="Next slide (→)" aria-label="Next slide">›</button>
   <span class="counter" id="counter" aria-live="polite">1 / 1</span>
@@ -1393,6 +1447,17 @@ var slypnNet = (function () {
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var LINK = 132;                  // px within which two nodes are joined
   var fields = [];                 // one per canvas — opening and closing slides
+
+  // Colours come from the palette rather than being baked in, so the
+  // constellation follows the theme. Held as bare "R,G,B" so each mark can
+  // compose its own alpha.
+  var lineRgb = '30,144,255', nodeRgb = '120,190,255';
+  function readPalette() {
+    var css = getComputedStyle(document.documentElement);
+    lineRgb = css.getPropertyValue('--net-rgb').trim() || lineRgb;
+    nodeRgb = css.getPropertyValue('--net-node-rgb').trim() || nodeRgb;
+  }
+  readPalette();
 
   function makeField(canvas) {
     var ctx = canvas.getContext('2d');
@@ -1444,7 +1509,7 @@ var slypnNet = (function () {
           var dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
           var d = Math.sqrt(dx * dx + dy * dy);
           if (d >= LINK) continue;
-          ctx.strokeStyle = 'rgba(30,144,255,' + ((1 - d / LINK) * 0.30).toFixed(3) + ')';
+          ctx.strokeStyle = 'rgba(' + lineRgb + ',' + ((1 - d / LINK) * 0.30).toFixed(3) + ')';
           ctx.beginPath();
           ctx.moveTo(nodes[i].x, nodes[i].y);
           ctx.lineTo(nodes[j].x, nodes[j].y);
@@ -1455,12 +1520,12 @@ var slypnNet = (function () {
       for (var k = 0; k < nodes.length; k++) {
         var p = nodes[k];
         if (p.hub) {
-          ctx.strokeStyle = 'rgba(30,144,255,.55)';
+          ctx.strokeStyle = 'rgba(' + lineRgb + ',.55)';
           ctx.lineWidth = 1.3;
           poly(p.x, p.y, 7, 6, p.a);
           ctx.stroke();
         } else {
-          ctx.fillStyle = 'rgba(120,190,255,.5)';
+          ctx.fillStyle = 'rgba(' + nodeRgb + ',.5)';
           poly(p.x, p.y, 2.6, 4, p.a);   // small diamond
           ctx.fill();
         }
@@ -1489,7 +1554,8 @@ var slypnNet = (function () {
         draw();
         if (!reduced) raf = requestAnimationFrame(step);   // else: one static frame
       },
-      resize: function () { if (raf || reduced) this.restart(); }
+      resize: function () { if (raf || reduced) this.restart(); },
+      repaint: function () { draw(); }
     };
   }
 
@@ -1513,6 +1579,12 @@ var slypnNet = (function () {
       // The slide has only just been unhidden, so measure on the next frame.
       var f = live;
       requestAnimationFrame(function () { f.restart(); });
+    },
+    // Re-read the palette and repaint in place — no rebuild, so the nodes
+    // keep their positions when the theme changes mid-slide.
+    recolour: function () {
+      readPalette();
+      if (live) live.repaint();
     }
   };
 })();
@@ -1611,6 +1683,31 @@ var slypnNet = (function () {
   document.getElementById('next').addEventListener('click', function () { go(i + 1); });
   document.getElementById('prev').addEventListener('click', function () { go(i - 1); });
 
+  // ---- theme -----------------------------------------------------------
+  // The head script has already stamped any saved choice, so read the live
+  // attribute rather than assuming the default.
+  var themeBtn = document.getElementById('theme');
+
+  function applyTheme(name) {
+    var root = document.documentElement;
+    if (name === 'light') root.setAttribute('data-theme', 'light');
+    else root.setAttribute('data-theme', 'dark');
+    themeBtn.setAttribute('aria-label',
+      name === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
+    // Repaint rather than rebuild, so the constellation keeps its positions.
+    slypnNet.recolour();
+    try { localStorage.setItem('slypn-deck-theme', name); } catch (e) { /* storage blocked */ }
+  }
+
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+  function toggleTheme() { applyTheme(currentTheme() === 'light' ? 'dark' : 'light'); }
+
+  themeBtn.addEventListener('click', toggleTheme);
+  // Sets the label to match whatever the head script stamped.
+  applyTheme(currentTheme());
+
   document.addEventListener('keydown', function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     switch (e.key) {
@@ -1619,6 +1716,7 @@ var slypnNet = (function () {
       case 'Home': go(0); e.preventDefault(); break;
       case 'End':  go(slides.length - 1); e.preventDefault(); break;
       case 'p': case 'P': window.print(); e.preventDefault(); break;
+      case 't': case 'T': toggleTheme(); e.preventDefault(); break;
     }
   });
 

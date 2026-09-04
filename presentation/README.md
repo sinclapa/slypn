@@ -18,7 +18,13 @@ that touches this folder.
 | `→` `space` `PageDown` | Next slide |
 | `←` `PageUp` | Previous slide |
 | `Home` / `End` | First / last slide |
+| `T` | Switch between the dark and light themes |
 | `P` | Print — lays every slide out for PDF export |
+
+The deck opens **dark** for everyone regardless of the operating system's colour
+setting, since that is the design it was built in. Switching to light is remembered
+per browser in `localStorage` under `slypn-deck-theme`. Printing is always light on
+white, whichever theme is on screen.
 
 Slides are deep-linkable: `index.html#12` opens slide 12.
 
