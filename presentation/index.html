@@ -887,10 +887,17 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:14px;max-width:80ch}
   <div class="grid g4">
     <div class="stat"><span class="n">1</span><span class="l">resource group, <code>rg-slypn-prod</code></span></div>
     <div class="stat"><span class="n">7</span><span class="l">tables, created by the API at startup</span></div>
-    <div class="stat"><span class="n">2</span><span class="l">regions — UK South data, West Europe edge</span></div>
+    <div class="stat"><span class="n">2</span><span class="l">regions — data in UK South, compute in West Europe</span></div>
     <div class="stat accent"><span class="n">0</span><span class="l">servers to patch</span></div>
   </div>
-  <p class="note">The Free tier has no managed identity, so the API authenticates to storage with a connection string. That is a deliberate, documented trade-off rather than an oversight — it is the price of the tier.</p>
+  <p class="note">
+    <strong>Why two regions?</strong> Azure offers Static Web Apps in only five regions and UK South is not one of
+    them, so the app sits in West Europe — the nearest available. Storage stays in UK South, so member and
+    subscriber data rests in the UK. The static site itself is served from Azure's global CDN either way.
+    <br><br>
+    The Free tier has no managed identity, so the API authenticates to storage with a connection string.
+    That is a deliberate, documented trade-off rather than an oversight — it is the price of the tier.
+  </p>
 </section>
 
 <!-- ============================== 12. CI/CD DIAGRAM =================== -->
